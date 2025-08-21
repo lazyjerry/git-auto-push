@@ -498,6 +498,59 @@ push_to_remote() {
     fi
 }
 
+# 配置變數
+DEFAULT_OPTION=1  # 預設選項：1=完整流程, 2=add+commit, 3=僅add
+
+# 顯示操作選單
+show_operation_menu() {
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "請選擇要執行的 Git 操作:" >&2
+    echo "==================================================" >&2
+    printf "\033[1;32m1.\033[0m 🚀 完整流程 (add → commit → push)\n" >&2
+    printf "\033[1;33m2.\033[0m 📝 本地提交 (add → commit)\n" >&2
+    printf "\033[1;34m3.\033[0m 📦 僅添加檔案 (add)\n" >&2
+    echo "==================================================" >&2
+    printf "請輸入選項 [1-3] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
+}
+
+# 獲取用戶選擇的操作
+get_operation_choice() {
+    while true; do
+        show_operation_menu
+        read -r choice
+        choice=$(echo "$choice" | xargs)  # 去除前後空白
+        
+        # 如果用戶直接按 Enter，使用預設選項
+        if [ -z "$choice" ]; then
+            choice=$DEFAULT_OPTION
+        fi
+        
+        # 驗證輸入是否有效
+        case "$choice" in
+            1)
+                info_msg "✅ 已選擇：完整流程 (add → commit → push)" >&2
+                echo "$choice"
+                return 0
+                ;;
+            2)
+                info_msg "✅ 已選擇：本地提交 (add → commit)" >&2
+                echo "$choice"
+                return 0
+                ;;
+            3)
+                info_msg "✅ 已選擇：僅添加檔案 (add)" >&2
+                echo "$choice"
+                return 0
+                ;;
+            *)
+                warning_msg "無效選項：$choice，請輸入 1、2 或 3" >&2
+                echo >&2
+                ;;
+        esac
+    done
+}
+
 # 主函數 - Git 工作流程的完整執行流程
 main() {
     # 顯示工具標題
@@ -527,6 +580,33 @@ main() {
         exit 1
     fi
     
+    # 步驟 3.5: 獲取用戶選擇的操作模式
+    local operation_choice
+    if ! operation_choice=$(get_operation_choice); then
+        exit 1
+    fi
+    
+    # 根據選擇執行對應的操作
+    case "$operation_choice" in
+        1)
+            # 完整流程：add → commit → push
+            execute_full_workflow
+            ;;
+        2)
+            # 本地提交：add → commit
+            execute_local_commit
+            ;;
+        3)
+            # 僅添加檔案：add（已經完成）
+            execute_add_only
+            ;;
+    esac
+}
+
+# 執行完整工作流程 (add → commit → push)
+execute_full_workflow() {
+    info_msg "🚀 執行完整 Git 工作流程..." >&2
+    
     # 步驟 4: 獲取用戶輸入的 commit message
     local message
     if ! message=$(get_commit_message); then
@@ -535,7 +615,7 @@ main() {
     
     # 步驟 5: 確認是否要提交
     if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。"
+        warning_msg "已取消提交。" >&2
         exit 0
     fi
     
@@ -550,10 +630,51 @@ main() {
     fi
     
     # 完成提示
-    echo
-    echo "=================================================="
-    success_msg "所有操作完成！"
-    echo "=================================================="
+    echo >&2
+    echo "==================================================" >&2
+    success_msg "🎉 完整工作流程執行完成！" >&2
+    echo "==================================================" >&2
+}
+
+# 執行本地提交 (add → commit)
+execute_local_commit() {
+    info_msg "📝 執行本地 Git 提交..." >&2
+    
+    # 步驟 4: 獲取用戶輸入的 commit message
+    local message
+    if ! message=$(get_commit_message); then
+        exit 1
+    fi
+    
+    # 步驟 5: 確認是否要提交
+    if ! confirm_commit "$message"; then
+        warning_msg "已取消提交。" >&2
+        exit 0
+    fi
+    
+    # 步驟 6: 提交變更到本地倉庫
+    if ! commit_changes "$message"; then
+        exit 1
+    fi
+    
+    # 完成提示
+    echo >&2
+    echo "==================================================" >&2
+    success_msg "📋 本地提交完成！" >&2
+    info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1" >&2
+    echo "==================================================" >&2
+}
+
+# 執行僅添加檔案 (add)
+execute_add_only() {
+    info_msg "📦 僅執行檔案添加操作..." >&2
+    
+    # 完成提示（add 操作已在主流程中完成）
+    echo >&2
+    echo "==================================================" >&2
+    success_msg "📁 檔案添加完成！" >&2
+    info_msg "💡 提示：檔案已添加到暫存區，如需提交請使用 'git commit' 或重新運行腳本選擇選項 2" >&2
+    echo "==================================================" >&2
 }
 
 # 當腳本直接執行時，調用主函數開始 Git 工作流程

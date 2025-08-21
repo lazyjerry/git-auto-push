@@ -296,10 +296,10 @@ generate_auto_commit_message() {
     local ai_tool_used=""
     
     # 定義 AI 工具清單，按優先順序排列
+    # 笑死，如果平常沒在用 gemini 你可以一天用 1000 次 commit
     local ai_tools=(
         "gemini"
         "codex"
-        
         "claude"
     )
     
@@ -338,7 +338,8 @@ generate_auto_commit_message() {
         generated_message=$(clean_ai_message "$generated_message")
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            info_msg "使用 $ai_tool_used 生成的 commit message: $generated_message" >&2
+            info_msg "✅ 使用 $ai_tool_used 生成的 commit message:" >&2
+            printf "\033[1;32m%s\033[0m\n" "🔖 $generated_message" >&2
             echo "$generated_message"
             return 0
         else
@@ -374,7 +375,8 @@ get_commit_message() {
     
     if auto_message=$(generate_auto_commit_message); then
         echo >&2
-        info_msg "AI 生成的 commit message: $auto_message" >&2
+        printf "\033[1;36m%s\033[0m\n" "🤖 AI 生成的 commit message:" >&2
+        printf "\033[1;32m%s\033[0m\n" "🔖 $auto_message" >&2
         printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
         read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
@@ -400,7 +402,8 @@ get_commit_message() {
             # 重新嘗試 AI 生成
             if auto_message=$(generate_auto_commit_message); then
                 echo >&2
-                info_msg "AI 重新生成的 commit message: $auto_message" >&2
+                printf "\033[1;36m%s\033[0m\n" "🔄 AI 重新生成的 commit message:" >&2
+                printf "\033[1;32m%s\033[0m\n" "🔖 $auto_message" >&2
                 printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
                 read -r confirm
                 confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)

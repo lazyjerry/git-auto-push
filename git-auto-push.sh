@@ -86,8 +86,8 @@ generate_auto_commit_message() {
     
     # 定義 AI 工具清單，按優先順序排列
     local ai_tools=(
-        "gemini:--"
         "codex:exec"
+        "gemini:--"
         "claude:--"
     )
     
@@ -111,11 +111,7 @@ generate_auto_commit_message() {
                     ;;
                 "claude")
                     # Claude CLI 支援多種可能的命令格式
-                    generated_message=$(claude -p "$prompt" 2>/dev/null)
-                    ;;
-                *)
-                    # 預設使用基本格式
-                    generated_message=$("$tool_name" "$prompt" 2>/dev/null)
+                    generated_message=$(git diff --cached | claude -p "$prompt" 2>/dev/null)
                     ;;
             esac
             

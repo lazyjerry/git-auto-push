@@ -1,6 +1,10 @@
 # Git Auto Push 自動推送工具
 
-一個功能強大(?)的 Git 工作流程自動化工具，提供完整的從變更檢測到遠端推送的一站式解決方案。
+一個功能強大的 Git 工作流程自動化工具，提供完整的從變更檢測到遠端推送的一站式解決方案。
+
+## 💡 靈感來源
+
+此工具的靈感來自於 [@ihower](https://www.threads.com/@ihower) 在 Threads 上分享的 [Claude Code 自動化 Git 工作流程](https://www.threads.com/@ihower/post/DNnLBb6xDKF)。由於筆者沒有 Claude Code 的使用權限，因此開發了這個支援多種 AI CLI 工具（Codex CLI、Gemini CLI、Claude CLI）的替代方案，讓更多開發者能夠享受 AI 輔助的 Git 自動化體驗。
 
 ## 📸 Screenshots
 
@@ -271,7 +275,6 @@ local ai_tools=(
 - **Shell**: bash, zsh, 或其他 POSIX 兼容 shell
 - **Git**: 已安裝並配置的 Git
 - **網路**: 推送到遠端倉庫時需要網路連接
-- **AI 工具**（可選）: codex, gemini, claude 等 CLI 工具
 - **AI 工具**（可選）: codex, gemini, claude 等 CLI 工具
 
 ## 💡 使用範例

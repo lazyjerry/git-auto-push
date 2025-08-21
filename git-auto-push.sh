@@ -568,7 +568,6 @@ main() {
     
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
-        exit 0
     fi
     
     # 顯示檢測到的變更

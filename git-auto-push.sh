@@ -15,6 +15,11 @@
 # 5. 支援 AI 工具自動生成 commit message (codex, gemini, claude)
 # 6. 完整的錯誤處理和信號中斷處理
 #
+# 使用方法：
+#   ./git-auto-push.sh        # 互動式選擇模式
+#   ./git-auto-push.sh --auto # 直接執行全自動模式
+#   ./git-auto-push.sh -a     # 全自動模式的簡短參數
+#
 # 作者: A Bit of Vibe Jerry
 # 版本: 1.3
 #
@@ -720,6 +725,13 @@ main() {
     # 設置中斷信號處理
     trap global_cleanup INT TERM
     
+    # 檢查命令行參數
+    local auto_mode=false
+    if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
+        auto_mode=true
+        info_msg "🤖 命令行啟用全自動模式" >&2
+    fi
+    
     # 顯示工具標題
     info_msg "Git 自動添加推送到遠端倉庫工具"
     echo "=================================================="
@@ -735,6 +747,7 @@ main() {
     
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
+        exit 0
     fi
     
     # 顯示檢測到的變更
@@ -746,7 +759,14 @@ main() {
         exit 1
     fi
     
-    # 步驟 3.5: 獲取用戶選擇的操作模式
+    # 步驟 3.5: 如果是自動模式，直接執行全自動工作流程
+    if [ "$auto_mode" = true ]; then
+        execute_auto_workflow
+        trap - INT TERM
+        return
+    fi
+    
+    # 否則獲取用戶選擇的操作模式
     local operation_choice
     if ! operation_choice=$(get_operation_choice); then
         exit 1

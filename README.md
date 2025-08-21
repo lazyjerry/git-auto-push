@@ -1,30 +1,30 @@
 # Git Auto Push 自動推送工具
 
-一個功能強大的 Git 工作流程自動化工具，提供完整的從變更檢測到遠端推送的一站式解決方案。
+一個功能強大(?)的 Git 工作流程自動化工具，提供完整的從變更檢測到遠端推送的一站式解決方案。
 
 ## 📸 Screenshots
 
 ### 主要介面操作流程
 
-![操作選單界面](screenshots/main-menu.png)
+![操作選單界面](./screenshots/main-menu.png)
 _主要操作選單，提供四種不同的 Git 工作流程模式_
 
 ### AI 智能生成 Commit Message
 
-![AI 生成 Commit Message](screenshots/ai-commit-generation.png)
+![AI 生成 Commit Message](./screenshots/ai-commit-generation.png)
 _AI 工具自動分析程式碼變更並生成合適的 commit message_
 
 ### 完整工作流程執行
 
-![完整流程執行](screenshots/full-workflow.png)
+![完整流程執行](./screenshots/full-workflow.png)
 _從檢測變更到推送遠端的完整自動化流程_
 
 ### 全自動模式
 
-![全自動模式](screenshots/auto-mode.png)
+![全自動模式](./screenshots/auto-mode.png)
 _一鍵執行的全自動模式，完全無需人工介入_
 
-> 📖 **使用指南**：完整的全自動模式設定和使用說明，請參閱 [AUTO_MODE_GUIDE.md](AUTO_MODE_GUIDE.md)
+> 📖 **使用指南**：完整的全自動模式設定和使用說明，請參閱 [AUTO_MODE_GUIDE.md](./AUTO_MODE_GUIDE.md)
 
 ## ✨ 主要功能
 

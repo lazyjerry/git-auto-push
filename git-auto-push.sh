@@ -76,6 +76,103 @@ add_all_files() {
     fi
 }
 
+# 清理 AI 生成的訊息
+clean_ai_message() {
+    local message="$1"
+    
+    # 移除前後空白、換行符號
+    message=$(echo "$message" | xargs)
+    
+    # 移除開頭和結尾的引號
+    message=$(echo "$message" | sed 's/^["\'"'"'`]//;s/["\'"'"'`]$//')
+    
+    # 移除常見的 AI 前綴
+    message=$(echo "$message" | sed 's/^[Cc]ommit [Mm]essage: *//;s/^[Tt]itle: *//;s/^[標題]: *//')
+    
+    # 移除多餘的空白
+    message=$(echo "$message" | sed 's/  */ /g' | xargs)
+    
+    echo "$message"
+}
+
+# 執行 codex 命令並處理輸出
+run_codex_command() {
+    local prompt="$1"
+    local timeout=30
+    
+    info_msg "正在調用 codex（超時: ${timeout}秒）..." >&2
+    
+    # 使用 timeout 命令限制執行時間
+    local output
+    if command -v timeout >/dev/null 2>&1; then
+        output=$(timeout "$timeout" codex exec "$prompt" 2>/dev/null)
+    else
+        output=$(codex exec "$prompt" 2>/dev/null)
+    fi
+    
+    local exit_code=$?
+    
+    if [ $exit_code -ne 0 ]; then
+        warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+        return 1
+    fi
+    
+    # 過濾 codex 的系統輸出，只保留實際的回應內容
+    local filtered_output
+    filtered_output=$(echo "$output" | grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$)" | tail -n 1)
+    
+    if [ -z "$filtered_output" ]; then
+        warning_msg "codex 沒有返回有效內容" >&2
+        return 1
+    fi
+    
+    echo "$filtered_output"
+    return 0
+}
+
+# 執行基於 stdin 的 AI 命令
+run_stdin_ai_command() {
+    local tool_name="$1"
+    local prompt="$2"
+    local timeout=30
+    
+    info_msg "正在調用 $tool_name（超時: ${timeout}秒）..." >&2
+    
+    # 獲取 git diff 內容
+    local diff_content
+    diff_content=$(git diff --cached 2>/dev/null)
+    
+    if [ -z "$diff_content" ]; then
+        warning_msg "沒有暫存區變更可供 $tool_name 分析" >&2
+        return 1
+    fi
+    
+    local output
+    local exit_code
+    
+    # 使用 timeout 執行命令
+    if command -v timeout >/dev/null 2>&1; then
+        output=$(echo "$diff_content" | timeout "$timeout" "$tool_name" -p "$prompt" 2>/dev/null)
+        exit_code=$?
+    else
+        output=$(echo "$diff_content" | "$tool_name" -p "$prompt" 2>/dev/null)
+        exit_code=$?
+    fi
+    
+    if [ $exit_code -ne 0 ]; then
+        warning_msg "$tool_name 執行失敗（退出碼: $exit_code）" >&2
+        return 1
+    fi
+    
+    if [ -z "$output" ]; then
+        warning_msg "$tool_name 沒有返回內容" >&2
+        return 1
+    fi
+    
+    echo "$output"
+    return 0
+}
+
 # 使用 AI 工具自動生成 commit message
 generate_auto_commit_message() {
     info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
@@ -86,54 +183,57 @@ generate_auto_commit_message() {
     
     # 定義 AI 工具清單，按優先順序排列
     local ai_tools=(
-        "codex:exec"
-        "gemini:--"
-        "claude:--"
+        "codex"
+        "gemini"
+        "claude"
     )
     
     # 依序檢查每個 AI 工具
-    for tool_config in "${ai_tools[@]}"; do
-        local tool_name="${tool_config%%:*}"
-        local tool_args="${tool_config#*:}"
-        
-        if command -v "$tool_name" >/dev/null 2>&1; then
-            info_msg "找到 AI 工具: $tool_name" >&2
-            ai_tool_used="$tool_name"
-            
-            # 根據不同工具使用不同的命令格式
-            case "$tool_name" in
-                "codex")
-                    generated_message=$(codex exec "$prompt" 2>/dev/null | grep -v "^\[" | grep -v "^workdir:" | grep -v "^model:" | grep -v "^provider:" | grep -v "^approval:" | grep -v "^sandbox:" | grep -v "^reasoning" | grep -v "^tokens used:" | grep -v "^--------" | grep -v "User instructions:" | grep -v "codex$" | tail -1)
-                    ;;
-                "gemini")
-                    # Google Gemini CLI 需要從 stdin 讀取 git diff 資訊
-                    generated_message=$(git diff --cached | gemini -p "$prompt" 2>/dev/null)
-                    ;;
-                "claude")
-                    # Claude CLI 支援多種可能的命令格式
-                    generated_message=$(git diff --cached | claude -p "$prompt" 2>/dev/null)
-                    ;;
-            esac
-            
-            # 檢查是否成功生成訊息
-            if [ $? -eq 0 ] && [ -n "$generated_message" ]; then
-                # 清理生成的訊息
-                generated_message=$(echo "$generated_message" | xargs | sed 's/^["\'"'"']//;s/["\'"'"']$//')
-                
-                if [ -n "$generated_message" ]; then
-                    info_msg "使用 $ai_tool_used 生成的 commit message: $generated_message" >&2
-                    echo "$generated_message"
-                    return 0
-                fi
-            fi
-            
-            warning_msg "$tool_name 執行失敗或未生成有效的 commit message，嘗試下一個工具..." >&2
+    for tool_name in "${ai_tools[@]}"; do
+        if ! command -v "$tool_name" >/dev/null 2>&1; then
+            info_msg "AI 工具 $tool_name 未安裝，跳過..." >&2
+            continue
         fi
+        
+        info_msg "嘗試使用 AI 工具: $tool_name" >&2
+        ai_tool_used="$tool_name"
+        
+        # 根據不同工具使用不同的調用方式
+        case "$tool_name" in
+            "codex")
+                if generated_message=$(run_codex_command "$prompt"); then
+                    break
+                fi
+                ;;
+            "gemini"|"claude")
+                if generated_message=$(run_stdin_ai_command "$tool_name" "$prompt"); then
+                    break
+                fi
+                ;;
+        esac
+        
+        warning_msg "$tool_name 執行失敗，嘗試下一個工具..." >&2
+        generated_message=""
+        ai_tool_used=""
     done
     
+    # 檢查是否成功生成訊息
+    if [ -n "$generated_message" ] && [ -n "$ai_tool_used" ]; then
+        # 清理生成的訊息
+        generated_message=$(clean_ai_message "$generated_message")
+        
+        if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
+            info_msg "使用 $ai_tool_used 生成的 commit message: $generated_message" >&2
+            echo "$generated_message"
+            return 0
+        else
+            warning_msg "AI 生成的訊息太短或無效: '$generated_message'" >&2
+        fi
+    fi
+    
     # 如果所有 AI 工具都不可用或失敗
-    warning_msg "未找到可用的 AI CLI 工具或所有工具都執行失敗" >&2
-    info_msg "已檢查的工具: ${ai_tools[*]%%:*}" >&2
+    warning_msg "所有 AI 工具都執行失敗或未生成有效的 commit message" >&2
+    info_msg "已嘗試的工具: ${ai_tools[*]}" >&2
     return 1
 }
 

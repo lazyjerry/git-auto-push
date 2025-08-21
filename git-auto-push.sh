@@ -108,6 +108,16 @@ show_loading() {
     # 隱藏游標
     printf "\033[?25l" >&2
     
+    # 設置 loading 清理函數
+    loading_cleanup() {
+        # 清除 loading 行並顯示游標
+        printf "\r\033[K\033[?25h" >&2
+        exit 0
+    }
+    
+    # 設置中斷信號處理
+    trap loading_cleanup INT TERM
+    
     while kill -0 "$pid" 2>/dev/null; do
         local current_time=$(date +%s)
         local elapsed=$((current_time - start_time))
@@ -121,6 +131,9 @@ show_loading() {
     
     # 清除 loading 行並顯示游標
     printf "\r\033[K\033[?25h" >&2
+    
+    # 清理信號處理
+    trap - INT TERM
 }
 
 # 執行帶有 loading 動畫的命令
@@ -130,6 +143,34 @@ run_command_with_loading() {
     local timeout="$3"
     local temp_file
     temp_file=$(mktemp)
+    
+    # 設置信號處理函數
+    cleanup_and_exit() {
+        # 停止 loading 動畫
+        if [ -n "$loading_pid" ]; then
+            kill "$loading_pid" 2>/dev/null
+            wait "$loading_pid" 2>/dev/null
+        fi
+        
+        # 終止命令進程
+        if [ -n "$cmd_pid" ]; then
+            kill -TERM "$cmd_pid" 2>/dev/null
+            sleep 0.5
+            kill -KILL "$cmd_pid" 2>/dev/null
+            wait "$cmd_pid" 2>/dev/null
+        fi
+        
+        # 清理臨時檔案
+        rm -f "$temp_file" "${temp_file}.exit_code"
+        
+        # 顯示游標並清理終端
+        printf "\r\033[K\033[?25h" >&2
+        warning_msg "操作已被用戶中斷" >&2
+        exit 130  # SIGINT 的標準退出碼
+    }
+    
+    # 設置中斷信號處理
+    trap cleanup_and_exit INT TERM
     
     # 在背景執行命令並將結果寫入臨時檔案
     (
@@ -156,15 +197,21 @@ run_command_with_loading() {
     
     # 如果命令仍在運行，則超時殺死它
     if kill -0 "$cmd_pid" 2>/dev/null; then
-        kill "$cmd_pid" 2>/dev/null
+        kill -TERM "$cmd_pid" 2>/dev/null
+        sleep 1
+        kill -KILL "$cmd_pid" 2>/dev/null
         wait "$cmd_pid" 2>/dev/null
         warning_msg "命令執行超時" >&2
         rm -f "$temp_file" "${temp_file}.exit_code"
+        trap - INT TERM  # 清理信號處理
         return 124  # timeout 的標準退出碼
     fi
     
     # 等待背景程序完成
     wait "$cmd_pid" 2>/dev/null
+    
+    # 清理信號處理
+    trap - INT TERM
     
     # 讀取結果
     local output
@@ -553,6 +600,16 @@ get_operation_choice() {
 
 # 主函數 - Git 工作流程的完整執行流程
 main() {
+    # 設置全局信號處理
+    global_cleanup() {
+        printf "\r\033[K\033[?25h" >&2  # 清理終端並顯示游標
+        warning_msg "程序被用戶中斷，正在清理..." >&2
+        exit 130  # SIGINT 的標準退出碼
+    }
+    
+    # 設置中斷信號處理
+    trap global_cleanup INT TERM
+    
     # 顯示工具標題
     info_msg "Git 自動添加推送到遠端倉庫工具"
     echo "=================================================="
@@ -600,6 +657,9 @@ main() {
             execute_add_only
             ;;
     esac
+    
+    # 清理全局信號處理
+    trap - INT TERM
 }
 
 # 執行完整工作流程 (add → commit → push)

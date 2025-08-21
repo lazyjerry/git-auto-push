@@ -724,6 +724,8 @@ main() {
     
     # 設置中斷信號處理
     trap global_cleanup INT TERM
+
+    warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。" >&2
     
     # 檢查命令行參數
     local auto_mode=false

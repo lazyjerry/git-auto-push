@@ -18,11 +18,6 @@ _主要操作選單，提供四種不同的 Git 工作流程模式_
 ![AI 生成 Commit Message](./screenshots/ai-commit-generation.png)
 _AI 工具自動分析程式碼變更並生成合適的 commit message_
 
-### 完整工作流程執行
-
-![完整流程執行](./screenshots/full-workflow.png)
-_從檢測變更到推送遠端的完整自動化流程_
-
 ### 全自動模式
 
 ![全自動模式](./screenshots/auto-mode.png)

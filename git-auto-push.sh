@@ -106,24 +106,12 @@ generate_auto_commit_message() {
                     generated_message=$(codex exec "$prompt" 2>/dev/null | grep -v "^\[" | grep -v "^workdir:" | grep -v "^model:" | grep -v "^provider:" | grep -v "^approval:" | grep -v "^sandbox:" | grep -v "^reasoning" | grep -v "^tokens used:" | grep -v "^--------" | grep -v "User instructions:" | grep -v "codex$" | tail -1)
                     ;;
                 "gemini")
-                    # Google Gemini CLI 支援多種可能的命令格式
-                    if command -v gemini >/dev/null 2>&1; then
-                        generated_message=$(gemini "$prompt" 2>/dev/null)
-                    elif command -v gcloud >/dev/null 2>&1; then
-                        generated_message=$(gcloud ai generative-models generate-text --model=gemini-pro --prompt="$prompt" --format="value(candidates[0].content)" 2>/dev/null)
-                    else
-                        generated_message=$(google-generativeai "$prompt" 2>/dev/null)
-                    fi
+                    # Google Gemini CLI 需要從 stdin 讀取 git diff 資訊
+                    generated_message=$(git diff --cached | gemini -p "$prompt" 2>/dev/null)
                     ;;
                 "claude")
                     # Claude CLI 支援多種可能的命令格式
-                    if command -v claude >/dev/null 2>&1; then
-                        generated_message=$(claude "$prompt" 2>/dev/null)
-                    elif command -v anthropic >/dev/null 2>&1; then
-                        generated_message=$(anthropic "$prompt" 2>/dev/null)
-                    else
-                        generated_message=$(claude-cli "$prompt" 2>/dev/null)
-                    fi
+                    generated_message=$(claude -p "$prompt" 2>/dev/null)
                     ;;
                 *)
                     # 預設使用基本格式

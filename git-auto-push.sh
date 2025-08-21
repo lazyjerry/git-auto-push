@@ -750,7 +750,7 @@ main() {
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
         
-        printf "是否要將本地提交推送到遠端倉庫？(Y/n): " >&2
+        printf "是否嘗試將本地提交推送到遠端倉庫？(Y/n): " >&2
         read -r push_confirm
         push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         

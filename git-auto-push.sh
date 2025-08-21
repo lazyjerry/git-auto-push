@@ -155,10 +155,10 @@ generate_auto_commit_message() {
 
 # 獲取用戶輸入的 commit message
 get_commit_message() {
-    echo
-    echo "=================================================="
-    info_msg "請輸入 commit message (直接按 Enter 可使用 AI 自動生成):"
-    echo "=================================================="
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "請輸入 commit message (直接按 Enter 可使用 AI 自動生成):" >&2
+    echo "==================================================" >&2
     
     read -r message
     message=$(echo "$message" | xargs)  # 去除前後空白
@@ -170,13 +170,14 @@ get_commit_message() {
     fi
     
     # 如果用戶未輸入內容，直接使用 AI 自動生成
-    echo
-    info_msg "未輸入 commit message，正在使用 AI 自動生成..."
+    echo >&2
+    info_msg "未輸入 commit message，正在使用 AI 自動生成..." >&2
     
     if auto_message=$(generate_auto_commit_message); then
-        echo
-        info_msg "AI 生成的 commit message: $auto_message"
-        read -r -p "是否使用此訊息？(y/n，直接按 Enter 表示同意): " confirm
+        echo >&2
+        info_msg "AI 生成的 commit message: $auto_message" >&2
+        printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
+        read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         
         # 如果用戶直接按 Enter 或輸入確認，使用 AI 生成的訊息
@@ -188,20 +189,21 @@ get_commit_message() {
     
     # 如果 AI 生成失敗或用戶拒絕使用，提供手動輸入選項
     while true; do
-        echo
-        info_msg "請手動輸入 commit message (或輸入 'q' 取消操作，輸入 'ai' 重新嘗試 AI 生成):"
+        echo >&2
+        info_msg "請手動輸入 commit message (或輸入 'q' 取消操作，輸入 'ai' 重新嘗試 AI 生成):" >&2
         read -r manual_message
         manual_message=$(echo "$manual_message" | xargs)
         
         if [ "$manual_message" = "q" ] || [ "$manual_message" = "Q" ]; then
-            warning_msg "已取消操作"
+            warning_msg "已取消操作" >&2
             return 1
         elif [ "$manual_message" = "ai" ] || [ "$manual_message" = "AI" ]; then
             # 重新嘗試 AI 生成
             if auto_message=$(generate_auto_commit_message); then
-                echo
-                info_msg "AI 重新生成的 commit message: $auto_message"
-                read -r -p "是否使用此訊息？(y/n，直接按 Enter 表示同意): " confirm
+                echo >&2
+                info_msg "AI 重新生成的 commit message: $auto_message" >&2
+                printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
+                read -r confirm
                 confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
                 
                 if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
@@ -209,13 +211,13 @@ get_commit_message() {
                     return 0
                 fi
             else
-                warning_msg "AI 生成仍然失敗，請手動輸入"
+                warning_msg "AI 生成仍然失敗，請手動輸入" >&2
             fi
         elif [ -n "$manual_message" ]; then
             echo "$manual_message"
             return 0
         else
-            warning_msg "請輸入有效的 commit message，或輸入 'q' 取消，'ai' 重新嘗試 AI 生成"
+            warning_msg "請輸入有效的 commit message，或輸入 'q' 取消，'ai' 重新嘗試 AI 生成" >&2
         fi
     done
 }

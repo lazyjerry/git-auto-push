@@ -95,24 +95,125 @@ clean_ai_message() {
     echo "$message"
 }
 
+# 顯示 loading 動畫效果
+show_loading() {
+    local message="$1"
+    local timeout="$2"
+    local pid="$3"
+    
+    local spinner="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    local i=0
+    local start_time=$(date +%s)
+    
+    # 隱藏游標
+    printf "\033[?25l" >&2
+    
+    while kill -0 "$pid" 2>/dev/null; do
+        local current_time=$(date +%s)
+        local elapsed=$((current_time - start_time))
+        
+        # 顯示旋轉動畫和進度
+        printf "\r\033[0;34m%s %s (%d/%d秒)\033[0m" "${spinner:$i:1}" "$message" "$elapsed" "$timeout" >&2
+        
+        i=$(( (i + 1) % ${#spinner} ))
+        sleep 0.1
+    done
+    
+    # 清除 loading 行並顯示游標
+    printf "\r\033[K\033[?25h" >&2
+}
+
+# 執行帶有 loading 動畫的命令
+run_command_with_loading() {
+    local command="$1"
+    local loading_message="$2"
+    local timeout="$3"
+    local temp_file
+    temp_file=$(mktemp)
+    
+    # 在背景執行命令並將結果寫入臨時檔案
+    (
+        eval "$command" > "$temp_file" 2>&1
+        echo $? > "${temp_file}.exit_code"
+    ) &
+    
+    local cmd_pid=$!
+    
+    # 顯示 loading 動畫
+    show_loading "$loading_message" "$timeout" "$cmd_pid" &
+    local loading_pid=$!
+    
+    # 等待命令完成或超時
+    local count=0
+    while [ $count -lt $((timeout * 10)) ] && kill -0 "$cmd_pid" 2>/dev/null; do
+        sleep 0.1
+        count=$((count + 1))
+    done
+    
+    # 停止 loading 動畫
+    kill "$loading_pid" 2>/dev/null
+    wait "$loading_pid" 2>/dev/null
+    
+    # 如果命令仍在運行，則超時殺死它
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+        kill "$cmd_pid" 2>/dev/null
+        wait "$cmd_pid" 2>/dev/null
+        warning_msg "命令執行超時" >&2
+        rm -f "$temp_file" "${temp_file}.exit_code"
+        return 124  # timeout 的標準退出碼
+    fi
+    
+    # 等待背景程序完成
+    wait "$cmd_pid" 2>/dev/null
+    
+    # 讀取結果
+    local output
+    local exit_code
+    
+    if [ -f "$temp_file" ]; then
+        output=$(cat "$temp_file" 2>/dev/null)
+    fi
+    
+    if [ -f "${temp_file}.exit_code" ]; then
+        exit_code=$(cat "${temp_file}.exit_code" 2>/dev/null)
+    else
+        exit_code=1
+    fi
+    
+    # 清理臨時檔案
+    rm -f "$temp_file" "${temp_file}.exit_code"
+    
+    # 輸出結果
+    if [ -n "$output" ]; then
+        echo "$output"
+    fi
+    
+    return "$exit_code"
+}
+
 # 執行 codex 命令並處理輸出
 run_codex_command() {
     local prompt="$1"
     local timeout=30
     
-    info_msg "正在調用 codex（超時: ${timeout}秒）..." >&2
+    info_msg "正在調用 codex..." >&2
     
-    # 使用 timeout 命令限制執行時間
+    # 使用帶 loading 的命令執行
     local output
+    local exit_code
+    
     if command -v timeout >/dev/null 2>&1; then
-        output=$(timeout "$timeout" codex exec "$prompt" 2>/dev/null)
+        output=$(run_command_with_loading "timeout $timeout codex exec '$prompt' 2>/dev/null" "正在等待 codex 回應" "$timeout")
+        exit_code=$?
     else
-        output=$(codex exec "$prompt" 2>/dev/null)
+        output=$(run_command_with_loading "codex exec '$prompt' 2>/dev/null" "正在等待 codex 回應" "$timeout")
+        exit_code=$?
     fi
     
-    local exit_code=$?
-    
-    if [ $exit_code -ne 0 ]; then
+    if [ $exit_code -eq 124 ]; then
+        warning_msg "codex 執行超時" >&2
+        return 1
+    elif [ $exit_code -ne 0 ]; then
         warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
         return 1
     fi
@@ -126,6 +227,7 @@ run_codex_command() {
         return 1
     fi
     
+    success_msg "codex 回應完成" >&2
     echo "$filtered_output"
     return 0
 }
@@ -136,7 +238,7 @@ run_stdin_ai_command() {
     local prompt="$2"
     local timeout=30
     
-    info_msg "正在調用 $tool_name（超時: ${timeout}秒）..." >&2
+    info_msg "正在調用 $tool_name..." >&2
     
     # 獲取 git diff 內容
     local diff_content
@@ -150,16 +252,27 @@ run_stdin_ai_command() {
     local output
     local exit_code
     
-    # 使用 timeout 執行命令
+    # 創建臨時檔案存儲 diff 內容
+    local temp_diff
+    temp_diff=$(mktemp)
+    echo "$diff_content" > "$temp_diff"
+    
+    # 使用帶 loading 的命令執行
     if command -v timeout >/dev/null 2>&1; then
-        output=$(echo "$diff_content" | timeout "$timeout" "$tool_name" -p "$prompt" 2>/dev/null)
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(echo "$diff_content" | "$tool_name" -p "$prompt" 2>/dev/null)
+        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
-    if [ $exit_code -ne 0 ]; then
+    # 清理臨時檔案
+    rm -f "$temp_diff"
+    
+    if [ $exit_code -eq 124 ]; then
+        warning_msg "$tool_name 執行超時" >&2
+        return 1
+    elif [ $exit_code -ne 0 ]; then
         warning_msg "$tool_name 執行失敗（退出碼: $exit_code）" >&2
         return 1
     fi
@@ -169,6 +282,7 @@ run_stdin_ai_command() {
         return 1
     fi
     
+    success_msg "$tool_name 回應完成" >&2
     echo "$output"
     return 0
 }

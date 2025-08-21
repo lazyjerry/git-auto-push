@@ -241,9 +241,15 @@ run_command_with_loading() {
 # 執行 codex 命令並處理輸出
 run_codex_command() {
     local prompt="$1"
-    local timeout=30
+    local timeout=45  # 增加超時時間到 45 秒
     
     info_msg "正在調用 codex..." >&2
+    
+    # 首先檢查 codex 是否可用
+    if ! command -v codex >/dev/null 2>&1; then
+        warning_msg "codex 工具未安裝" >&2
+        return 1
+    fi
     
     # 使用帶 loading 的命令執行
     local output
@@ -258,7 +264,7 @@ run_codex_command() {
     fi
     
     if [ $exit_code -eq 124 ]; then
-        warning_msg "codex 執行超時" >&2
+        warning_msg "codex 執行超時（${timeout}秒）" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
         warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
@@ -283,9 +289,18 @@ run_codex_command() {
 run_stdin_ai_command() {
     local tool_name="$1"
     local prompt="$2"
-    local timeout=30
+    local timeout=45  # 增加超時時間到 45 秒
     
     info_msg "正在調用 $tool_name..." >&2
+    
+    # 首先檢查工具是否可用
+    if ! command -v "$tool_name" >/dev/null 2>&1; then
+        warning_msg "$tool_name 工具未安裝" >&2
+        return 1
+    fi
+    
+    # 檢查認證狀態
+    # FIXED 不要檢查，因為可能需要用戶手動登入或是有發送頻率限制。
     
     # 獲取 git diff 內容
     local diff_content
@@ -317,7 +332,7 @@ run_stdin_ai_command() {
     rm -f "$temp_diff"
     
     if [ $exit_code -eq 124 ]; then
-        warning_msg "$tool_name 執行超時" >&2
+        warning_msg "$tool_name 執行超時（${timeout}秒）" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
         warning_msg "$tool_name 執行失敗（退出碼: $exit_code）" >&2
@@ -343,12 +358,14 @@ generate_auto_commit_message() {
     local ai_tool_used=""
     
     # 定義 AI 工具清單，按優先順序排列
-    # 笑死，如果平常沒在用 gemini 你可以一天用 1000 次 commit
+    # 根據實際可用性調整順序：codex > gemini > claude
     local ai_tools=(
-        "gemini"
-        "codex"
-        "claude"
+        "codex"     # 優先使用 codex，因為它工作正常
+        "gemini"    # gemini 可能有網路或認證問題
+        "claude"    # claude 需要登入認證
     )
+
+     
     
     # 依序檢查每個 AI 工具
     for tool_name in "${ai_tools[@]}"; do
@@ -356,8 +373,35 @@ generate_auto_commit_message() {
             info_msg "AI 工具 $tool_name 未安裝，跳過..." >&2
             continue
         fi
+
+        # 提示用戶即將使用 AI 工具，並提供狀態提醒
+        echo >&2
+        info_msg "🤖 即將嘗試使用 AI 工具: $tool_name" >&2
         
-        info_msg "嘗試使用 AI 工具: $tool_name" >&2
+        # 根據不同工具提供特定的狀態提醒
+        case "$tool_name" in
+            "gemini")
+                warning_msg "💡 提醒: Gemini 可能需要網路連線，如遇到頻率限制請稍後再試" >&2
+                ;;
+            "claude")
+                warning_msg "💡 提醒: Claude 需要登入認證，如未登入請執行 'claude /login'" >&2
+                ;;
+            "codex")
+                info_msg "💡 提醒: Codex 通常較為穩定，如有問題請檢查網路連線" >&2
+                ;;
+        esac
+        
+        printf "繼續使用 $tool_name 嗎？(y/n，直接按 Enter 表示同意): " >&2
+        read -r ai_confirm
+        ai_confirm=$(echo "$ai_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        # 如果用戶拒絕使用此工具，跳過到下一個
+        if [[ "$ai_confirm" =~ ^(n|no|否|取消)$ ]]; then
+            info_msg "⏭️  跳過 $tool_name，嘗試下一個工具..." >&2
+            continue
+        fi
+        
+        info_msg "🔄 正在使用 AI 工具: $tool_name" >&2
         ai_tool_used="$tool_name"
         
         # 根據不同工具使用不同的調用方式

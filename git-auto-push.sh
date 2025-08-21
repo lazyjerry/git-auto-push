@@ -86,9 +86,9 @@ generate_auto_commit_message() {
     
     # 定義 AI 工具清單，按優先順序排列
     local ai_tools=(
-        "codex:-p"
+        "codex:exec"
         "gemini:--"
-        "claude:-p"
+        "claude:--"
     )
     
     # 依序檢查每個 AI 工具
@@ -100,10 +100,10 @@ generate_auto_commit_message() {
             info_msg "找到 AI 工具: $tool_name" >&2
             ai_tool_used="$tool_name"
             
-            # 根據不同工具使用不同的命令格式
+                        # 根據不同工具使用不同的命令格式
             case "$tool_name" in
                 "codex")
-                    generated_message=$(codex -p "$prompt" 2>/dev/null)
+                    generated_message=$(codex exec "$prompt" 2>/dev/null | grep -v "^\[" | grep -v "^workdir:" | grep -v "^model:" | grep -v "^provider:" | grep -v "^approval:" | grep -v "^sandbox:" | grep -v "^reasoning" | grep -v "^tokens used:" | grep -v "^--------" | grep -v "User instructions:" | grep -v "codex$" | tail -1)
                     ;;
                 "gemini")
                     # Google Gemini CLI 支援多種可能的命令格式
@@ -226,25 +226,29 @@ get_commit_message() {
 confirm_commit() {
     local message="$1"
     
-    echo
-    echo "=================================================="
-    info_msg "確認提交資訊:"
-    echo "Commit Message: $message"
-    echo "=================================================="
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "確認提交資訊:" >&2
+    echo "Commit Message: $message" >&2
+    echo "==================================================" >&2
     
     # 持續詢問直到獲得有效回應
     while true; do
-        read -r -p "是否確認提交？(y/n): " confirm
+        printf "是否確認提交？(y/n，直接按 Enter 表示同意): " >&2
+        read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         
+        # 如果用戶直接按 Enter，預設為同意
+        if [ -z "$confirm" ]; then
+            return 0
         # 支援多種確認方式：英文 (y, yes) 和中文 (是, 確認)
-        if [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
+        elif [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
             return 0
         # 支援多種取消方式：英文 (n, no) 和中文 (否, 取消)
         elif [[ "$confirm" =~ ^(n|no|否|取消)$ ]]; then
             return 1
         else
-            warning_msg "請輸入 y 或 n"
+            warning_msg "請輸入 y 或 n（或直接按 Enter 表示同意）" >&2
         fi
     done
 }

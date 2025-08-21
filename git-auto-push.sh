@@ -100,7 +100,7 @@ generate_auto_commit_message() {
             info_msg "找到 AI 工具: $tool_name" >&2
             ai_tool_used="$tool_name"
             
-                        # 根據不同工具使用不同的命令格式
+            # 根據不同工具使用不同的命令格式
             case "$tool_name" in
                 "codex")
                     generated_message=$(codex exec "$prompt" 2>/dev/null | grep -v "^\[" | grep -v "^workdir:" | grep -v "^model:" | grep -v "^provider:" | grep -v "^approval:" | grep -v "^sandbox:" | grep -v "^reasoning" | grep -v "^tokens used:" | grep -v "^--------" | grep -v "User instructions:" | grep -v "codex$" | tail -1)
@@ -209,6 +209,9 @@ get_commit_message() {
 # 確認是否要提交變更
 confirm_commit() {
     local message="$1"
+    
+    # 清空輸入緩衝區，避免前一個 read 的 Enter 鍵影響此次輸入
+    read -r -t 0.1 dummy 2>/dev/null || true
     
     echo >&2
     echo "==================================================" >&2

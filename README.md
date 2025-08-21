@@ -379,3 +379,4 @@ gh auth login
 測試用 commit 修改
 測試 AI 提示功能
 測試工具選擇功能
+測試全自動模式

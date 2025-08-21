@@ -7,13 +7,16 @@
 # 1. 檢查當前目錄是否為 Git 倉庫
 # 2. 顯示所有變更的檔案狀態
 # 3. 自動添加所有變更到暫存區
-# 4. 互動式輸入 commit message
-# 5. 確認提交資訊
-# 6. 提交變更到本地倉庫
-# 7. 推送到遠端倉庫
+# 4. 提供多種操作模式：
+#    - 完整流程：互動式輸入 commit message → 提交 → 推送
+#    - 本地提交：互動式輸入 commit message → 僅提交到本地
+#    - 僅添加檔案：只執行 git add
+#    - 全自動模式：AI 生成 commit message → 自動提交 → 自動推送
+# 5. 支援 AI 工具自動生成 commit message (codex, gemini, claude)
+# 6. 完整的錯誤處理和信號中斷處理
 #
 # 作者: A Bit of Vibe Jerry
-# 版本: 1.2
+# 版本: 1.3
 #
 
 # 錯誤處理函數
@@ -349,6 +352,73 @@ run_stdin_ai_command() {
     return 0
 }
 
+# 全自動生成 commit message（不需要用戶交互）
+generate_auto_commit_message_silent() {
+    info_msg "🤖 全自動模式：正在使用 AI 工具分析變更並生成 commit message..." >&2
+    
+    local prompt="請分析暫存區的 git 變更內容，並生成一個簡潔的中文 commit 訊息標題。只需回應標題，不要額外說明。"
+    local generated_message
+    local ai_tool_used=""
+    
+    # 定義 AI 工具清單，按優先順序排列
+    local ai_tools=(
+        "codex"     # 優先使用 codex，因為它工作正常
+        "gemini"    # gemini 可能有網路或認證問題
+        "claude"    # claude 需要登入認證
+    )
+    
+    # 依序檢查每個 AI 工具
+    for tool_name in "${ai_tools[@]}"; do
+        if ! command -v "$tool_name" >/dev/null 2>&1; then
+            info_msg "🔄 AI 工具 $tool_name 未安裝，嘗試下一個..." >&2
+            continue
+        fi
+
+        info_msg "🔄 自動使用 AI 工具: $tool_name" >&2
+        ai_tool_used="$tool_name"
+        
+        # 根據不同工具使用不同的調用方式
+        case "$tool_name" in
+            "codex")
+                if generated_message=$(run_codex_command "$prompt"); then
+                    break
+                fi
+                ;;
+            "gemini"|"claude")
+                if generated_message=$(run_stdin_ai_command "$tool_name" "$prompt"); then
+                    break
+                fi
+                ;;
+        esac
+        
+        warning_msg "❌ $tool_name 執行失敗，嘗試下一個工具..." >&2
+        generated_message=""
+        ai_tool_used=""
+    done
+    
+    # 檢查是否成功生成訊息
+    if [ -n "$generated_message" ] && [ -n "$ai_tool_used" ]; then
+        # 清理生成的訊息
+        generated_message=$(clean_ai_message "$generated_message")
+        
+        if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
+            info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:" >&2
+            printf "\033[1;32m%s\033[0m\n" "🔖 $generated_message" >&2
+            echo "$generated_message"
+            return 0
+        else
+            warning_msg "⚠️  AI 生成的訊息太短或無效: '$generated_message'" >&2
+        fi
+    fi
+    
+    # 如果所有 AI 工具都不可用或失敗，使用預設訊息
+    warning_msg "⚠️  所有 AI 工具都執行失敗，使用預設 commit message" >&2
+    local default_message="自動提交：更新專案檔案"
+    info_msg "🔖 使用預設訊息: $default_message" >&2
+    echo "$default_message"
+    return 0
+}
+
 # 使用 AI 工具自動生成 commit message
 generate_auto_commit_message() {
     info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
@@ -381,25 +451,15 @@ generate_auto_commit_message() {
         # 根據不同工具提供特定的狀態提醒
         case "$tool_name" in
             "gemini")
-                warning_msg "💡 提醒: Gemini 可能需要網路連線，如遇到頻率限制請稍後再試" >&2
+                warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試" >&2
                 ;;
             "claude")
-                warning_msg "💡 提醒: Claude 需要登入認證，如未登入請執行 'claude /login'" >&2
+                warning_msg "💡 提醒: Claude 需要登入付費帳號登入或 API 參數設定，如未登入請執行 'claude /login'" >&2
                 ;;
             "codex")
-                info_msg "💡 提醒: Codex 通常較為穩定，如有問題請檢查網路連線" >&2
+                info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定" >&2
                 ;;
         esac
-        
-        printf "繼續使用 $tool_name 嗎？(y/n，直接按 Enter 表示同意): " >&2
-        read -r ai_confirm
-        ai_confirm=$(echo "$ai_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
-        
-        # 如果用戶拒絕使用此工具，跳過到下一個
-        if [[ "$ai_confirm" =~ ^(n|no|否|取消)$ ]]; then
-            info_msg "⏭️  跳過 $tool_name，嘗試下一個工具..." >&2
-            continue
-        fi
         
         info_msg "🔄 正在使用 AI 工具: $tool_name" >&2
         ai_tool_used="$tool_name"
@@ -601,8 +661,9 @@ show_operation_menu() {
     printf "\033[1;32m1.\033[0m 🚀 完整流程 (add → commit → push)\n" >&2
     printf "\033[1;33m2.\033[0m 📝 本地提交 (add → commit)\n" >&2
     printf "\033[1;34m3.\033[0m 📦 僅添加檔案 (add)\n" >&2
+    printf "\033[1;35m4.\033[0m 🤖 全自動模式 (add → AI commit → push)\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-3] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
+    printf "請輸入選項 [1-4] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
 
 # 獲取用戶選擇的操作
@@ -617,7 +678,7 @@ get_operation_choice() {
             choice=$DEFAULT_OPTION
         fi
         
-        # 驗證輸入是否有效
+                # 驗證輸入是否有效
         case "$choice" in
             1)
                 info_msg "✅ 已選擇：完整流程 (add → commit → push)" >&2
@@ -634,8 +695,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            4)
+                info_msg "✅ 已選擇：全自動模式 (add → AI commit → push)" >&2
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2 或 3" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3 或 4" >&2
                 echo >&2
                 ;;
         esac
@@ -699,6 +765,10 @@ main() {
         3)
             # 僅添加檔案：add（已經完成）
             execute_add_only
+            ;;
+        4)
+            # 全自動模式：add → AI commit → push
+            execute_auto_workflow
             ;;
     esac
     
@@ -777,6 +847,48 @@ execute_add_only() {
     echo "==================================================" >&2
     success_msg "📁 檔案添加完成！" >&2
     info_msg "💡 提示：檔案已添加到暫存區，如需提交請使用 'git commit' 或重新運行腳本選擇選項 2" >&2
+    echo "==================================================" >&2
+}
+
+# 執行全自動工作流程 (add → AI commit → push)
+execute_auto_workflow() {
+    info_msg "🤖 執行全自動 Git 工作流程..." >&2
+    info_msg "💡 提示：全自動模式將使用 AI 生成 commit message 並自動完成所有步驟" >&2
+    
+    # 步驟 4: 使用 AI 自動生成 commit message（無需用戶確認）
+    local message
+    if ! message=$(generate_auto_commit_message_silent); then
+        # 如果 AI 生成失敗，使用預設訊息
+        message="自動提交：更新專案檔案"
+        warning_msg "⚠️  使用預設 commit message: $message" >&2
+    fi
+    
+    # 顯示將要使用的 commit message
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "🤖 全自動提交資訊:" >&2
+    printf "\033[1;36m%s\033[0m\n" "📝 Commit Message: $message" >&2
+    echo "==================================================" >&2
+    
+    # 步驟 5: 自動提交（無需用戶確認）
+    if ! commit_changes "$message"; then
+        exit 1
+    fi
+    
+    # 步驟 6: 自動推送到遠端倉庫
+    if ! push_to_remote; then
+        exit 1
+    fi
+    
+    # 完成提示
+    echo >&2
+    echo "==================================================" >&2
+    success_msg "🎉 全自動工作流程執行完成！" >&2
+    info_msg "📊 執行摘要：" >&2
+    info_msg "   ✅ 檔案已添加到暫存區" >&2
+    info_msg "   ✅ 使用 AI 生成 commit message" >&2
+    info_msg "   ✅ 變更已提交到本地倉庫" >&2
+    info_msg "   ✅ 變更已推送到遠端倉庫" >&2
     echo "==================================================" >&2
 }
 

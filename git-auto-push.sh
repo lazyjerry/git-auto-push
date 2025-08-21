@@ -86,8 +86,8 @@ generate_auto_commit_message() {
     
     # 定義 AI 工具清單，按優先順序排列
     local ai_tools=(
-        "codex:exec"
         "gemini:--"
+        "codex:exec"
         "claude:--"
     )
     

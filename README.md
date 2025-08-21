@@ -47,7 +47,7 @@
 
 ### 快速開始
 
-1. **下載腳本**：
+1. **下載腳本到 git 專案根目錄**：
 
 ```bash
 wget https://raw.githubusercontent.com/lazyjerry/git-auto-push/master/git-auto-push.sh

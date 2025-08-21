@@ -750,44 +750,20 @@ main() {
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
         
-        # 檢查是否有未推送的本地提交
-        local unpushed_commits
-        unpushed_commits=$(git log origin/HEAD..HEAD --oneline 2>/dev/null | wc -l)
-        unpushed_commits=$(echo "$unpushed_commits" | xargs)  # 去除前後空白
+        printf "是否要將本地提交推送到遠端倉庫？(y/n，直接按 Enter 表示同意): " >&2
+        read -r push_confirm
+        push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         
-        if [ "$unpushed_commits" -gt 0 ]; then
-            echo >&2
-            info_msg "檢測到 $unpushed_commits 個未推送的本地提交。" >&2
-            
-            # 如果是自動模式，直接推送
-            if [ "$auto_mode" = true ]; then
-                info_msg "🤖 全自動模式：自動推送未提交的變更..." >&2
-                if push_to_remote; then
-                    success_msg "🎉 自動推送完成！" >&2
-                else
-                    warning_msg "❌ 推送失敗" >&2
-                    exit 1
-                fi
-                exit 0
-            fi
-            
-            # 互動模式：詢問用戶是否要推送
-            echo >&2
-            printf "是否要將本地提交推送到遠端倉庫？(y/n，直接按 Enter 表示同意): " >&2
-            read -r push_confirm
-            push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
-            
-            # 如果用戶確認推送（預設為是）
-            if [ -z "$push_confirm" ] || [[ "$push_confirm" =~ ^(y|yes|是|確認)$ ]]; then
-                if push_to_remote; then
-                    success_msg "🎉 推送完成！" >&2
-                else
-                    warning_msg "❌ 推送失敗" >&2
-                    exit 1
-                fi
+        # 如果用戶確認推送（預設為是）
+        if [ -z "$push_confirm" ] || [[ "$push_confirm" =~ ^(y|yes|是|確認)$ ]]; then
+            if push_to_remote; then
+                success_msg "🎉 推送完成！" >&2
             else
-                info_msg "已取消推送操作。" >&2
+                warning_msg "❌ 推送失敗" >&2
+                exit 1
             fi
+        else
+            info_msg "已取消推送操作。" >&2
         fi
         
         exit 0

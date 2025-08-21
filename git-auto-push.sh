@@ -533,7 +533,7 @@ get_commit_message() {
         echo >&2
         printf "\033[1;36m%s\033[0m\n" "🤖 AI 生成的 commit message:" >&2
         printf "\033[1;32m%s\033[0m\n" "🔖 $auto_message" >&2
-        printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
+        printf "是否使用此訊息？(Y/n): " >&2
         read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         
@@ -595,7 +595,7 @@ confirm_commit() {
     
     # 持續詢問直到獲得有效回應
     while true; do
-        printf "是否確認提交？(y/n，直接按 Enter 表示同意): " >&2
+        printf "是否確認提交？(Y/n): " >&2
         read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         
@@ -750,7 +750,7 @@ main() {
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
         
-        printf "是否要將本地提交推送到遠端倉庫？(y/n，直接按 Enter 表示同意): " >&2
+        printf "是否要將本地提交推送到遠端倉庫？(Y/n): " >&2
         read -r push_confirm
         push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
         

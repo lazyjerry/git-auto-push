@@ -4,7 +4,7 @@
 
 ## 💡 靈感來源
 
-此工具的靈感來自於 [@ihower](https://www.threads.com/@ihower) 在 Threads 上分享的 [Claude Code 自動化 Git 工作流程](https://www.threads.com/@ihower/post/DNnLBb6xDKF)。由於筆者沒有 Claude Code 的使用權限，因此開發了這個支援多種 AI CLI 工具（Codex CLI、Gemini CLI、Claude CLI）的替代方案，讓更多開發者能夠享受 AI 輔助的 Git 自動化體驗。
+此工具的靈感來自於 [@ihower](https://www.threads.com/@ihower) 在 Threads 上分享的 [Claude Code 自動化 Git 工作流程](https://www.threads.com/@ihower/post/DNnLBb6xDKF)。由於 Jerry 沒有訂閱 Claude Code 付費版，因此開發了這個支援多種 AI CLI 工具（Codex CLI、Gemini CLI、Claude CLI）的替代方案，讓更多開發者能夠享受 AI 輔助的 Git 自動化體驗。
 
 ## 📸 Screenshots
 

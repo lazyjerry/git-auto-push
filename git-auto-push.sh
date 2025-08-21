@@ -45,6 +45,22 @@ info_msg() {
     printf "\033[0;34m%s\033[0m\n" "$1"
 }
 
+# 隨機感謝訊息函數
+show_random_thanks() {
+    local messages=(
+        "讓我們感謝 Jerry，他心情不太好。"
+        "讓我們感謝 Jerry，他最近可能有點窮。"
+        "讓我們感謝 Jerry，他看了《幼女戰記》才會有這個無聊的結尾語。"
+    )
+    
+    # 使用當前時間的秒數作為隨機種子
+    local random_index=$(( $(date +%s) % ${#messages[@]} ))
+    local selected_message="${messages[$random_index]}"
+    
+    echo >&2
+    printf "\033[1;35m💝 %s\033[0m\n" "$selected_message" >&2
+}
+
 # 執行命令並檢查結果
 run_command() {
     local cmd="$1"
@@ -846,6 +862,9 @@ execute_full_workflow() {
     echo "==================================================" >&2
     success_msg "🎉 完整工作流程執行完成！" >&2
     echo "==================================================" >&2
+    
+    # 顯示隨機感謝訊息
+    show_random_thanks
 }
 
 # 執行本地提交 (add → commit)
@@ -875,6 +894,9 @@ execute_local_commit() {
     success_msg "📋 本地提交完成！" >&2
     info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1" >&2
     echo "==================================================" >&2
+    
+    # 顯示隨機感謝訊息
+    show_random_thanks
 }
 
 # 執行僅添加檔案 (add)
@@ -887,6 +909,9 @@ execute_add_only() {
     success_msg "📁 檔案添加完成！" >&2
     info_msg "💡 提示：檔案已添加到暫存區，如需提交請使用 'git commit' 或重新運行腳本選擇選項 2" >&2
     echo "==================================================" >&2
+    
+    # 顯示隨機感謝訊息
+    show_random_thanks
 }
 
 # 執行全自動工作流程 (add → AI commit → push)
@@ -929,6 +954,9 @@ execute_auto_workflow() {
     info_msg "   ✅ 變更已提交到本地倉庫" >&2
     info_msg "   ✅ 變更已推送到遠端倉庫" >&2
     echo "==================================================" >&2
+    
+    # 顯示隨機感謝訊息
+    show_random_thanks
 }
 
 # 當腳本直接執行時，調用主函數開始 Git 工作流程

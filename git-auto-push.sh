@@ -683,8 +683,9 @@ show_operation_menu() {
     printf "\033[1;33m2.\033[0m 📝 本地提交 (add → commit)\n" >&2
     printf "\033[1;34m3.\033[0m 📦 僅添加檔案 (add)\n" >&2
     printf "\033[1;35m4.\033[0m 🤖 全自動模式 (add → AI commit → push)\n" >&2
+    printf "\033[1;36m5.\033[0m 💾 僅提交 (commit)\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-4] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
+    printf "請輸入選項 [1-5] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
 
 # 獲取用戶選擇的操作
@@ -721,8 +722,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            5)
+                info_msg "✅ 已選擇：僅提交 (commit)" >&2
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3 或 4" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3、4 或 5" >&2
                 echo >&2
                 ;;
         esac
@@ -825,6 +831,10 @@ main() {
             # 全自動模式：add → AI commit → push
             execute_auto_workflow
             ;;
+        5)
+            # 僅提交：commit
+            execute_commit_only
+            ;;
     esac
     
     # 清理全局信號處理
@@ -908,6 +918,51 @@ execute_add_only() {
     echo "==================================================" >&2
     success_msg "📁 檔案添加完成！" >&2
     info_msg "💡 提示：檔案已添加到暫存區，如需提交請使用 'git commit' 或重新運行腳本選擇選項 2" >&2
+    echo "==================================================" >&2
+    
+    # 顯示隨機感謝訊息
+    show_random_thanks
+}
+
+# 執行僅提交功能 (commit)
+execute_commit_only() {
+    info_msg "💾 執行僅提交操作..." >&2
+    
+    # 步驟 1: 檢查是否有已暫存的變更需要提交
+    local staged_changes
+    staged_changes=$(git diff --cached --name-only 2>/dev/null)
+    
+    if [ -z "$staged_changes" ]; then
+        warning_msg "沒有已暫存的變更可提交。請先使用 'git add' 添加檔案，或選擇其他選項。" >&2
+        exit 0
+    fi
+    
+    # 顯示已暫存的變更
+    info_msg "已暫存的變更:" >&2
+    git diff --cached --name-only >&2
+    
+    # 步驟 2: 獲取用戶輸入的 commit message
+    local message
+    if ! message=$(get_commit_message); then
+        exit 1
+    fi
+    
+    # 步驟 3: 確認是否要提交
+    if ! confirm_commit "$message"; then
+        warning_msg "已取消提交。" >&2
+        exit 0
+    fi
+    
+    # 步驟 4: 提交變更到本地倉庫
+    if ! commit_changes "$message"; then
+        exit 1
+    fi
+    
+    # 完成提示
+    echo >&2
+    echo "==================================================" >&2
+    success_msg "💾 提交完成！" >&2
+    info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1" >&2
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息

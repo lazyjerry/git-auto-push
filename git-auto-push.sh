@@ -20,7 +20,7 @@
 #   ./git-auto-push.sh --auto # 直接執行全自動模式
 #   ./git-auto-push.sh -a     # 全自動模式的簡短參數
 #
-# 作者: A Bit of Vibe Jerry
+# 作者: Lazy Jerry
 # 版本: 1.3
 #
 

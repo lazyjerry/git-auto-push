@@ -14,6 +14,7 @@
 #    - 全自動模式：AI 生成 commit message → 自動提交 → 自動推送
 # 5. 支援 AI 工具自動生成 commit message (codex, gemini, claude)
 # 6. 完整的錯誤處理和信號中斷處理
+# 7. 支援不同工作流程模式：完整、本地提交、僅添加、僅提交、全自動
 #
 # 使用方法：
 #   ./git-auto-push.sh        # 互動式選擇模式
@@ -50,7 +51,9 @@ show_random_thanks() {
     local messages=(
         "讓我們感謝 Jerry，他心情不太好。"
         "讓我們感謝 Jerry，他最近可能有點窮。"
-        "讓我們感謝 Jerry，他看了《幼女戰記》才會有這個無聊的結尾語。"
+        "讓我們感謝 Jerry，他需要一些鼓勵。請去打星星 https://github.com/lazyjerry/git-auto-push"
+        "讓我們感謝 Jerry，他可能在思考一些深奧的問題。"
+        "讓我們感謝 Jerry，遮些奇怪的結語，可能是他看了《幼女戰記》才會有這個無聊的結尾語。"
     )
     
     # 使用當前時間的秒數作為隨機種子

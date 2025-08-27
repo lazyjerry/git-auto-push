@@ -1,15 +1,180 @@
 # Git Auto-Push 工具
 
-**智能化的 Git 工作流程自動化工具**，提供多 AI 工具鏈整合與四種操作模式，讓 Git 提交更聰明、更省時。
+基於人工智慧的 Git 工作流程自動化工具，提供多重 AI 工具鏈整合與四種操作模式，簡化程式碼提交流程。
 
 ## 專案簡介
 
-Git Auto-Push 工具透過 AI 自動生成 commit message，簡化 Git 工作流程。主要特色包括：
+Git Auto-Push 工具透過整合多種 AI 工具自動生成 commit message，大幅簡化 Git 工作流程。主要特色包括：
 
-- 🤖 **智能 Commit Message 生成**：整合 Codex、Gemini、Claude 三種 AI 工具
-- 🚀 **四種操作模式**：從完全手動到全自動，滿足不同使用場景
-- ⚡ **45 秒超時機制**：避免 AI 工具卡死，自動降級處理
-- 🎨 **彩色終端介面**：直觀的視覺回饋與 Loading 動畫
+- **智慧型 Commit Message 生成**：整合 Codex、Gemini、Claude 三種 AI 工具
+- **彈性操作模式**：從完全手動到全自動，滿足不同開發場景
+- **可靠的超時機制**：45 秒超時保護，避免 AI 工具無回應
+- **直覺化終端介面**：彩色輸出與載入動畫提供清晰回饋
+
+## 系統結構
+
+```
+git-auto-push.sh          # 主腳本 (966 行)
+├── AI 工具整合           # run_*_command() 函數群
+│   ├── Codex 支援        # 直接執行模式
+│   ├── Gemini 支援       # stdin 管道模式
+│   └── Claude 支援       # stdin 管道模式
+├── 載入動畫系統          # show_loading() + 背景進程
+├── 信號處理機制          # 多層級 trap cleanup
+└── 四種操作模式          # execute_*_workflow() 函數
+
+相關文件/
+├── AUTO_MODE_GUIDE.md   # 全自動模式專用說明
+├── screenshots/         # 介面截圖
+├── Tools/              # 工具設定檔案
+│   └── readme-prompt.yaml
+└── LICENSE             # MIT 授權條款
+```
+
+## 安裝與啟動
+
+**前置需求：**
+
+- Git 已安裝並設定完成
+- 至少一個 AI CLI 工具：`codex`、`gemini`、或 `claude`
+
+**下載與安裝：**
+
+```bash
+# 下載腳本並設定執行權限
+curl -O https://raw.githubusercontent.com/lazyjerry/git-auto-push/master/git-auto-push.sh
+chmod +x git-auto-push.sh
+```
+
+**基本使用：**
+
+```bash
+./git-auto-push.sh           # 互動模式
+./git-auto-push.sh --auto    # 全自動模式
+./git-auto-push.sh -a        # 全自動模式（短參數）
+```
+
+## 使用方法
+
+### 常用指令
+
+```bash
+# 互動式選擇操作模式
+./git-auto-push.sh
+
+# 全自動模式（適合 CI/CD）
+./git-auto-push.sh --auto
+
+# 檢查腳本權限
+chmod +x git-auto-push.sh
+
+# 全域安裝（選用）
+sudo cp git-auto-push.sh /usr/local/bin/git-auto-push
+```
+
+### 四種操作模式
+
+| 模式       | 指令                          | 流程                   | 適用場景     |
+| ---------- | ----------------------------- | ---------------------- | ------------ |
+| 完整流程   | `./git-auto-push.sh` (選擇 1) | add → commit → push    | 日常開發工作 |
+| 本地提交   | `./git-auto-push.sh` (選擇 2) | add → commit           | 離線開發環境 |
+| 僅添加檔案 | `./git-auto-push.sh` (選擇 3) | add                    | 暫存檔案變更 |
+| 全自動模式 | `./git-auto-push.sh --auto`   | add → AI commit → push | CI/CD 自動化 |
+
+### AI 工具鏈優先級
+
+1. **Codex**（優先）- 最穩定的程式碼分析工具
+2. **Gemini** - 可能遇到 API 頻率限制
+3. **Claude** - 需要付費帳號或 API 設定
+4. **預設訊息** - 所有 AI 工具失敗時的保底方案
+
+## 使用情境
+
+### 日常開發工作流程
+
+```bash
+# 修改檔案後執行腳本
+./git-auto-push.sh
+# 選擇模式 1（完整流程）
+# 按 Enter 讓 AI 生成 commit message
+# 確認後自動推送至遠端倉庫
+```
+
+### 快速提交小幅變更
+
+```bash
+# 一鍵完成：分析變更 → AI 生成訊息 → 提交 → 推送
+./git-auto-push.sh --auto
+```
+
+### CI/CD 自動化整合
+
+```bash
+#!/bin/bash
+# 在自動化腳本中使用
+cd /path/to/project
+./git-auto-push.sh -a  # 完全無人值守操作
+```
+
+### 離線開發場景
+
+```bash
+# 僅本地提交，稍後手動推送
+./git-auto-push.sh  # 選擇模式 2
+```
+
+## 錯誤排除
+
+### 常見問題及解決方案
+
+**「不是 Git 倉庫」錯誤**
+
+```bash
+# 初始化 Git 倉庫
+git init
+# 或切換到正確的專案目錄
+cd /path/to/your/git/project
+```
+
+**AI 工具無回應或超時**
+
+- 檢查網路連線狀態
+- 工具會在 45 秒後自動使用預設訊息
+- 確認 AI 工具已正確安裝與認證
+
+**遠端推送失敗**
+
+```bash
+# 設定遠端倉庫
+git remote add origin https://github.com/user/repo.git
+# 檢查遠端設定
+git remote -v
+```
+
+**執行權限錯誤**
+
+```bash
+# 設定執行權限
+chmod +x git-auto-push.sh
+```
+
+**AI 工具認證問題**
+
+```bash
+# Claude 登入
+claude /login
+
+# 檢查工具版本與可用性
+codex --version
+gemini --version
+claude --version
+```
+
+## 授權條款
+
+本專案採用 MIT 授權條款 - 詳見 [LICENSE](LICENSE) 文件。
+
+Copyright (c) 2025 A Bit of Vibe Jerry
 
 ## 系統結構
 
@@ -161,7 +326,7 @@ claude --version
 
 本專案採用 MIT 授權條款 - 詳見 [LICENSE](LICENSE) 文件。
 
-Copyright (c) 2025 A Bit of Vibe Jerry
+Copyright (c) 2025 Lazy Jerry
 
 ## 授權條款
 
@@ -324,7 +489,7 @@ screenshots/          # UI 展示圖片
 
 ---
 
-作者: **A Bit of Vibe Jerry** ([@lazyjerry](https://github.com/lazyjerry))  
+作者: **Lazy Jerry** ([@lazyjerry](https://github.com/lazyjerry))  
 授權: **MIT License** - 查看 [LICENSE](LICENSE)
 
 ⭐️ 如果這個工具對您有幫助，請給個 Star 支持！

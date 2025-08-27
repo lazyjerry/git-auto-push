@@ -17,7 +17,7 @@ design:
             - 專案根目錄的 package 與組建檔（例如 package.json、pyproject.toml、go.mod、Cargo.toml、pom.xml、build.gradle、Makefile、Dockerfile、docker-compose.*、Taskfile.yml、nx.json、turbo.json 等）
             - CI/CD 與工具設定（例如 .github/workflows/**、.gitlab-ci.yml、.prettierrc*、.eslintrc*、tsconfig*.json、ruff.toml、mypy.ini、.golangci.yml 等）
 
-            README.md 章節結構（輸出 20–50 行為宜）
+            README.md 章節結構
             1. 專案簡介（Project Overview）：一句話價值主張 + 主要亮點功能列表。
             2. 系統結構（System Architecture）：高層級元件、資料流、主要目錄與模組（可用 tree 格式）。
             3. 安裝與啟動（Installation & Getting Started）：
@@ -38,10 +38,12 @@ design:
             - 只寫專案真實做法；引用實際檔案與目錄（相對路徑）。
             - 每個命令給出「可直接複製」的一行版本。
             - 範例依實際檔案與工具生成，不要泛用。
+            - 避免使用 emoji 語氣需正式專業。
+            - 使用台灣繁體中文，語句通順無誤，避免簡體中文或中國用語。
 
             驗收核對清單（Done 定義）
-            - README 中的安裝、啟動、使用方法可在本機完整執行。
+            - README 中的安裝、啟動、使用方法是驗證過可行的。
             - 所有引用檔案與路徑正確無誤。
             - 若 README 已存在，智慧合併：保留有效段落，更新過時內容。
-            - 總長度控制在 20–50 行，避免冗長；更詳細內容可連結至 docs/**。
+            - 避免冗長儘量不要重複描述；更詳細內容可連結至 docs/**。
             - LICENSE 條款已確認存在，若無則自動建立 MIT License。

@@ -7,8 +7,10 @@ Git 工作流程自動化工具，提供 AI 驅動的 commit message 生成和�
 ### 核心組件
 
 ```
-git-auto-push.sh          # 主腳本（1024 行）
+git-auto-push.sh          # 主腳本（1046 行）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
+│   ├── 智慧錯誤檢測      # 認證過期、網路錯誤自動識別
+│   └── 友善錯誤提示      # 提供具體解決方案
 ├── 互動式選單系統        # 5 種操作模式
 ├── Loading 動畫系統      # 背景進程管理
 ├── 信號處理機制          # 多層級 trap cleanup
@@ -20,6 +22,7 @@ git-auto-push.sh          # 主腳本（1024 行）
 ```
 ├── git-auto-push.sh      # 主執行檔
 ├── LICENSE              # MIT 授權條款
+├── README.md            # 專案說明文件
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
@@ -118,6 +121,30 @@ git-auto-push --auto
 ./git-auto-push.sh  # 選擇選項 5
 ```
 
+## 特色功能
+
+### 智慧 AI 錯誤檢測（最新更新）
+
+工具現在具備智慧錯誤檢測機制，能自動識別和處理常見的 AI 工具問題：
+
+**認證錯誤自動檢測**
+
+- 自動檢測 `401 Unauthorized` 錯誤
+- 識別 `token_expired` 狀況
+- 提供具體的修復命令（如 `codex auth login`）
+
+**網路錯誤智慧處理**
+
+- 檢測 `stream error` 連接問題
+- 識別網路超時和連接異常
+- 提供友善的解決建議
+
+**用戶體驗改善**
+
+- 彩色格式化的錯誤訊息
+- 即時停止無效重試
+- 提供具體操作步驟而非技術錯誤碼
+
 ## 錯誤排除
 
 ### 常見問題及解決方案
@@ -133,6 +160,25 @@ git init  # 或移動到正確的 Git 倉庫目錄
 
 - 檢查是否有檔案變更：`git status`
 - 或選擇推送現有提交到遠端
+
+**Codex 認證錯誤（新增）**
+
+```bash
+❌ codex 認證錯誤: 認證令牌已過期
+💡 請執行以下命令重新登入 codex:
+   codex auth login
+```
+
+當出現 `401 Unauthorized` 或 `token_expired` 錯誤時，執行上述命令重新認證。
+
+**Codex 網路錯誤（新增）**
+
+```bash
+❌ codex 網路錯誤: stream error: unexpected status
+💡 請檢查網路連接或稍後重試
+```
+
+網路連接問題時會自動檢測並提供解決建議。
 
 **AI 工具無法使用**
 

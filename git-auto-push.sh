@@ -283,18 +283,40 @@ run_codex_command() {
     local exit_code
     
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec '$prompt' 2>/dev/null" "正在等待 codex 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec '$prompt'" "正在等待 codex 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec '$prompt' 2>/dev/null" "正在等待 codex 回應" "$timeout")
+        output=$(run_command_with_loading "codex exec '$prompt'" "正在等待 codex 回應" "$timeout")
         exit_code=$?
+    fi
+    
+    # 檢查認證相關錯誤 (從完整輸出中檢查)
+    if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]] || [[ "$output" == *"authentication token is expired"* ]]; then
+        printf "\033[0;31m❌ codex 認證錯誤: 認證令牌已過期\033[0m\n" >&2
+        printf "\033[1;33m💡 請執行以下命令重新登入 codex:\033[0m\n" >&2
+        printf "\033[0;36m   codex auth login\033[0m\n" >&2
+        return 1
+    fi
+    
+    # 檢查其他網路或串流錯誤
+    if [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+        printf "\033[0;31m❌ codex 網路錯誤: %s\033[0m\n" "$(echo "$output" | grep -E "(stream error|connection|network)" | head -n 1)" >&2
+        printf "\033[1;33m💡 請檢查網路連接或稍後重試\033[0m\n" >&2
+        return 1
     fi
     
     if [ $exit_code -eq 124 ]; then
         warning_msg "codex 執行超時（${timeout}秒）" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+        # 檢查輸出中是否包含錯誤訊息
+        local error_line
+        error_line=$(echo "$output" | grep -E "(error|Error|ERROR)" | head -n 1)
+        if [ -n "$error_line" ]; then
+            printf "\033[0;31mcodex 執行失敗: %s\033[0m\n" "$error_line" >&2
+        else
+            warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+        fi
         return 1
     fi
     

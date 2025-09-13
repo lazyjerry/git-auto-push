@@ -21,7 +21,7 @@
 
 ```
 ├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1045 行）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（1335 行）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（1402 行）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤檢測      # 認證過期、網路錯誤自動識別
 │   ├── 友善錯誤提示      # 提供具體解決方案
@@ -38,6 +38,7 @@
 ```
 ├── git-auto-push.sh      # 傳統 Git 自動化工具
 ├── git-auto-pr.sh        # GitHub Flow PR 自動化工具
+├── AGENTS.md            # 專案開發指引與規範
 ├── LICENSE              # MIT 授權條款
 ├── README.md            # 專案說明文件
 ├── .github/             # GitHub 相關配置
@@ -92,9 +93,20 @@ gh auth login  # 選擇 GitHub.com → HTTPS → Browser 登入
 
 安裝任一或多個 AI CLI 工具以啟用智慧生成功能：
 
-- `codex` - GitHub Copilot CLI
-- `gemini` - Google Gemini CLI
-- `claude` - Anthropic Claude CLI
+```bash
+# GitHub Copilot CLI (推薦)
+npm install -g @openai/codex@latest
+# 或使用官方安裝方式
+gh extension install github/gh-copilot
+
+# Google Gemini CLI (需要 API Key)
+# 請參考 Google AI Studio 設定
+
+# Anthropic Claude CLI (需要 API Key)
+# 請參考 Anthropic Console 設定
+```
+
+**注意**：AI 工具需要相應的 API 金鑰或訂閱。如未安裝，工具仍可正常使用，僅會跳過 AI 輔助功能。
 
 ## 使用方法
 
@@ -272,12 +284,14 @@ git checkout main && git pull
 - 支援 codex、gemini、claude 三種 AI CLI 工具
 - 自動容錯機制：當一個 AI 工具失效時自動嘗試下一個
 - 智慧輸出清理：過濾 AI 工具的元數據和技術雜訊
+- **提示優化**：精簡 70%+ 提示長度，提升處理速度和準確性
 
 **智慧內容生成**
 
 - commit 訊息：分析 git diff 自動生成符合 Conventional Commits 規範的訊息
 - 分支名稱：根據 issue 編號和功能描述生成 GitHub Flow 標準分支名
 - PR 內容：基於分支變更歷史生成專業的 PR 標題和描述
+- **即時驗證**：自動檢測分支名稱有效性並處理特殊字符
 
 ### 企業級錯誤處理
 
@@ -285,6 +299,7 @@ git checkout main && git pull
 
 - 自動檢測 `401 Unauthorized` 和 `token_expired` 認證錯誤
 - 檢測 `stream error`、網路超時等連接問題
+- **GitHub 政策合規**：自動檢測 PR 自我批准限制並提供替代方案
 - 提供具體的修復命令和操作步驟
 
 **用戶體驗優化**
@@ -307,6 +322,7 @@ git checkout main && git pull
 - 端到端 PR 流程自動化
 - 主分支自動檢測（main/master）
 - 分支狀態智慧驗證
+- **PR 審查管理**：自動檢測用戶身份避免自我批准，提供團隊審查或直接合併選項
 
 ## 錯誤排除
 
@@ -351,6 +367,19 @@ git init  # 或移動到正確的 Git 倉庫目錄
 ```
 
 確保在功能分支上操作，並已推送到 GitHub。
+
+**PR 審查權限錯誤**
+
+```bash
+❌ Can not approve your own pull request
+⚠️  無法批准自己的 Pull Request
+```
+
+GitHub 安全政策不允許開發者批准自己的 PR。解決方案：
+
+- 請其他團隊成員使用此工具進行審查
+- 如有權限可選擇直接合併
+- 或使用評論功能進行自我記錄
 
 **主分支自動檢測**
 

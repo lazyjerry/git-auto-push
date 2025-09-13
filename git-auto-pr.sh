@@ -456,21 +456,7 @@ generate_branch_name_with_ai() {
     local issue_key="$1"
     local description_hint="$2"
     
-    local prompt="Generate a valid Git branch name following GitHub Flow conventions.
-
-Issue: $issue_key
-Description: $description_hint
-
-STRICT REQUIREMENTS:
-- Format: feature/issue-123-brief-description
-- Use ONLY: lowercase letters (a-z), numbers (0-9), hyphens (-)
-- NO spaces, NO colons (:), NO Chinese characters, NO special symbols
-- Start with 'feature/' followed by alphanumeric characters
-- End with alphanumeric character (not hyphen)
-- Maximum 40 characters total
-- Example: feature/jira-456-add-user-auth
-
-Return ONLY the branch name - no explanations, no quotes, no extra text."
+    local prompt="Generate branch name: feature/$issue_key-description. Issue: $issue_key, Description: $description_hint. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
     
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
     
@@ -525,18 +511,7 @@ generate_commit_message_with_ai() {
     # 截斷過長的 diff 內容並簡化 prompt
     local short_diff
     short_diff=$(echo "$diff_content" | head -20 | tr '\n' ' ')
-    local prompt="分析以下 Git 變更，生成一個符合 Conventional Commits 規範的中文 commit 訊息：
-
-變更內容：$short_diff
-
-要求：
-- 使用前綴：feat/fix/docs/style/refactor/test/chore
-- 訊息簡潔明確，50字以內
-- 使用繁體中文描述
-- 格式：<類型>: <簡短描述>
-- 例如：feat: 新增用戶認證功能
-
-只回應 commit 訊息，不要其他內容。"
+    local prompt="根據以下變更生成簡潔的中文 commit 訊息（格式：feat/fix/docs: 描述）：$short_diff"
     
     info_msg "🤖 使用 AI 生成 commit message..." >&2
     
@@ -592,34 +567,8 @@ generate_pr_content_with_ai() {
     local file_changes
     file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null)
     
-    # 簡化並清理 prompt，避免特殊字符問題
-    local prompt="為 Pull Request 生成專業的標題和內容。
-
-專案資訊：
-- Issue: $issue_key
-- 分支: $branch_name
-- 提交記錄: $commits
-- 檔案變更: $file_changes
-
-輸出要求：
-- 使用繁體中文
-- 標題：簡潔明確，描述主要功能（25字以內）
-- 內容：功能說明、主要變更、測試資訊
-- 使用 Markdown 格式
-- 嚴格格式：<標題>|||<內容>（用三個豎線分隔，不可有其他文字）
-
-範例輸出：
-feat: 新增用戶認證功能|||## 功能描述
-新增完整的用戶登入認證系統
-
-## 主要變更
-- 實作 JWT 令牌驗證
-- 新增登入/註冊 API
-- 加強安全性驗證
-
-## 測試說明
-- 單元測試覆蓋率 90%
-- 已通過所有 CI 檢查"
+    # 簡化 prompt
+    local prompt="生成PR標題和內容，格式：標題|||內容。Issue: $issue_key, 分支: $branch_name, 變更: $commits $file_changes。使用繁體中文，標題25字內，內容包含功能說明和主要變更。"
     
     info_msg "🤖 使用 AI 生成 PR 內容..." >&2
     

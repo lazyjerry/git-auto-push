@@ -965,7 +965,7 @@ execute_create_pr() {
         issue_key="${BASH_REMATCH[1]}"
         info_msg "從分支名稱提取 issue key: $issue_key"
     else
-        printf "請輸入 issue key (例: ISSUE-123, JIRA-456, 或直接按 Enter 跳過): " >&2
+        printf "請輸入 issue key (例: ISSUE-123, JIRA-456, 或直接按 Enter 自動判斷): " >&2
         read -r issue_key
         issue_key=$(echo "$issue_key" | xargs)
     fi

@@ -598,8 +598,9 @@ show_operation_menu() {
     printf "\033[1;35m3.\033[0m � 建立 Pull Request\n" >&2
     printf "\033[1;32m4.\033[0m � 完整 PR 流程 (建立分支 → 開發 → 提交 → PR)\n" >&2
     printf "\033[1;36m5.\033[0m 🤖 全自動 PR 模式\n" >&2
+    printf "\033[1;31m6.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-5]: " >&2
+    printf "請輸入選項 [1-6]: " >&2
 }
 
 # 獲取用戶選擇的操作
@@ -642,8 +643,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            6)
+                info_msg "✅ 已選擇：審查與合併 PR (專案擁有者)" >&2
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4 或 5" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6" >&2
                 echo >&2
                 ;;
         esac
@@ -722,6 +728,9 @@ main() {
                 ;;
             5)
                 execute_auto_pr_workflow
+                ;;
+            6)
+                execute_review_and_merge
                 ;;
         esac
     fi
@@ -1135,6 +1144,189 @@ execute_auto_pr_workflow() {
     fi
     
     success_msg "🎉 全自動 PR 流程執行完成！"
+}
+
+# 審查與合併 PR (專案擁有者功能)
+execute_review_and_merge() {
+    info_msg "👑 專案擁有者審查與合併 PR 流程..."
+    
+    # 檢查是否有待審查的 PR
+    info_msg "🔍 檢查待審查的 Pull Request..."
+    local pr_list
+    pr_list=$(gh pr list --limit 10 2>/dev/null)
+    
+    if [ -z "$pr_list" ]; then
+        warning_msg "目前沒有待審查的 Pull Request"
+        return 1
+    fi
+    
+    # 顯示 PR 列表
+    echo >&2
+    info_msg "📋 待審查的 Pull Request:"
+    echo "$pr_list" | head -10 >&2
+    echo >&2
+    
+    # 選擇要審查的 PR
+    printf "請輸入要審查的 PR 編號: " >&2
+    read -r pr_number
+    pr_number=$(echo "$pr_number" | xargs)
+    
+    if [ -z "$pr_number" ]; then
+        handle_error "PR 編號不能為空"
+    fi
+    
+    # 檢查 PR 是否存在
+    if ! gh pr view "$pr_number" >/dev/null 2>&1; then
+        handle_error "PR #$pr_number 不存在"
+    fi
+    
+    # 顯示 PR 詳細資訊
+    echo >&2
+    info_msg "📝 PR #$pr_number 詳細資訊:"
+    gh pr view "$pr_number" >&2
+    echo >&2
+    
+    # 檢查 CI 狀態
+    info_msg "🔍 檢查 CI 狀態..."
+    local ci_status
+    ci_status=$(gh pr checks "$pr_number" 2>/dev/null)
+    
+    echo >&2
+    info_msg "🏗️ CI 檢查狀態:"
+    echo "$ci_status" >&2
+    echo >&2
+    
+    # 檢查是否有失敗的檢查
+    if echo "$ci_status" | grep -q "fail\|error\|❌"; then
+        warning_msg "⚠️ 檢測到 CI 檢查失敗，建議先修復後再合併"
+        printf "是否繼續進行審查？[y/N]: " >&2
+        read -r continue_review
+        continue_review=$(echo "$continue_review" | xargs | tr '[:upper:]' '[:lower:]')
+        
+        if [[ ! "$continue_review" =~ ^(y|yes|是|確定)$ ]]; then
+            info_msg "已取消審查流程"
+            return 1
+        fi
+    else
+        success_msg "✅ 所有 CI 檢查通過"
+    fi
+    
+    # 審查選項
+    echo >&2
+    info_msg "🔍 請選擇審查動作:"
+    printf "\033[1;32m1.\033[0m ✅ 批准並合併\n" >&2
+    printf "\033[1;33m2.\033[0m 💬 添加評論但不合併\n" >&2
+    printf "\033[1;31m3.\033[0m ❌ 請求變更\n" >&2
+    printf "\033[1;36m4.\033[0m 📖 只查看，不進行審查\n" >&2
+    echo "==================================================" >&2
+    printf "請選擇 [1-4]: " >&2
+    read -r review_action
+    review_action=$(echo "$review_action" | xargs)
+    
+    case "$review_action" in
+        1)
+            # 批准並合併
+            info_msg "✅ 批准 PR #$pr_number..."
+            
+            # 先進行批准審查
+            printf "請輸入審查評論 (可選，直接按 Enter 跳過): " >&2
+            read -r review_comment
+            
+            if [ -n "$review_comment" ]; then
+                if ! gh pr review "$pr_number" --approve --body "$review_comment"; then
+                    handle_error "批准 PR 失敗"
+                fi
+            else
+                if ! gh pr review "$pr_number" --approve; then
+                    handle_error "批准 PR 失敗"
+                fi
+            fi
+            
+            success_msg "✅ PR #$pr_number 已批准"
+            
+            # 確認是否要合併
+            echo >&2
+            printf "是否立即合併此 PR？[Y/n]: " >&2
+            read -r merge_confirm
+            merge_confirm=$(echo "$merge_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+            
+            if [[ -z "$merge_confirm" ]] || [[ "$merge_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+                info_msg "🔀 合併 PR #$pr_number (使用 squash 模式)..."
+                
+                # 使用 squash 合併並刪除分支
+                if gh pr merge "$pr_number" --squash --delete-branch; then
+                    success_msg "🎉 PR #$pr_number 已成功合併並刪除功能分支"
+                    
+                    # 更新本地 main 分支
+                    local main_branch
+                    main_branch=$(get_main_branch)
+                    
+                    info_msg "📥 更新本地 $main_branch 分支..."
+                    if git checkout "$main_branch" 2>/dev/null && git pull --ff-only origin "$main_branch"; then
+                        success_msg "✅ 本地 $main_branch 分支已更新"
+                        
+                        # 顯示最新的提交歷史
+                        echo >&2
+                        info_msg "📜 最新提交歷史:"
+                        git log --oneline -n 5 >&2
+                    else
+                        warning_msg "更新本地 $main_branch 分支時發生問題，請手動執行: git checkout $main_branch && git pull"
+                    fi
+                else
+                    handle_error "合併 PR 失敗"
+                fi
+            else
+                info_msg "已批准 PR，但未進行合併"
+            fi
+            ;;
+            
+        2)
+            # 添加評論
+            info_msg "💬 添加 PR 評論..."
+            printf "請輸入評論內容: " >&2
+            read -r comment_text
+            
+            if [ -z "$comment_text" ]; then
+                handle_error "評論內容不能為空"
+            fi
+            
+            if gh pr comment "$pr_number" --body "$comment_text"; then
+                success_msg "✅ 評論已添加到 PR #$pr_number"
+            else
+                handle_error "添加評論失敗"
+            fi
+            ;;
+            
+        3)
+            # 請求變更
+            info_msg "❌ 請求變更..."
+            printf "請輸入變更要求說明: " >&2
+            read -r change_request
+            
+            if [ -z "$change_request" ]; then
+                handle_error "變更要求說明不能為空"
+            fi
+            
+            if gh pr review "$pr_number" --request-changes --body "$change_request"; then
+                success_msg "✅ 已向 PR #$pr_number 請求變更"
+            else
+                handle_error "請求變更失敗"
+            fi
+            ;;
+            
+        4)
+            # 只查看
+            info_msg "📖 已查看 PR #$pr_number，無進一步動作"
+            ;;
+            
+        *)
+            warning_msg "無效選項：$review_action，已取消審查流程"
+            return 1
+            ;;
+    esac
+    
+    echo >&2
+    success_msg "🎉 PR 審查流程完成！"
 }
 
 # 腳本入口點

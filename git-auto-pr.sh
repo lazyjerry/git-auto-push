@@ -381,7 +381,7 @@ clean_ai_message() {
     message=$(echo "$message" | grep -v "^\[.*\] OpenAI Codex" | grep -v "^--------" | grep -v "^workdir:" | grep -v "^model:" | grep -v "^provider:" | grep -v "^approval:" | grep -v "^sandbox:" | grep -v "^reasoning" | grep -v "^\[.*\] User instructions:" | grep -v "^\[.*\] codex$" | grep -v "^\[.*\] tokens used:")
     
     # 移除 prompt 回音（AI 工具有時會重複 prompt 內容）
-    message=$(echo "$message" | grep -v "^請分析以下" | grep -v "^變更內容：" | grep -v "^要求：" | grep -v "^專案資訊：" | grep -v "^請為.*生成" | grep -v "^Issue:" | grep -v "^分支:" | grep -v "^提交記錄:" | grep -v "^檔案變更:")
+    message=$(echo "$message" | grep -v "^請分析以下" | grep -v "^變更內容：" | grep -v "^要求：" | grep -v "^專案資訊：" | grep -v "^請為.*生成" | grep -v "^Issue:" | grep -v "^分支:" | grep -v "^提交記錄:" | grep -v "^檔案變更:" | grep -v "^功能描述:")
     
     # 移除空行和只有空格的行
     message=$(echo "$message" | sed '/^[[:space:]]*$/d')
@@ -405,19 +405,72 @@ clean_ai_message() {
     echo "$message"
 }
 
+# 專門清理和驗證分支名稱的函數
+clean_branch_name() {
+    local branch_name="$1"
+    
+    # 先進行基本的 AI 輸出清理
+    branch_name=$(clean_ai_message "$branch_name")
+    
+    # 移除分支名稱中的描述性前綴
+    branch_name=$(echo "$branch_name" | sed 's/^分支名稱[：:][[:space:]]*//')
+    branch_name=$(echo "$branch_name" | sed 's/^建議[的]*分支名稱[：:][[:space:]]*//')
+    branch_name=$(echo "$branch_name" | sed 's/^功能描述[：:][[:space:]]*//')
+    
+    # 如果不是以 feature/ 開頭，檢查是否包含有效的分支名稱
+    if [[ ! "$branch_name" =~ ^feature/ ]]; then
+        # 嘗試提取看起來像分支名稱的部分
+        local extracted
+        extracted=$(echo "$branch_name" | grep -o 'feature/[a-zA-Z0-9][a-zA-Z0-9._/-]*' | head -n 1)
+        if [ -n "$extracted" ]; then
+            branch_name="$extracted"
+        else
+            # 如果沒有找到標準格式，返回空值讓系統使用後備方案
+            echo ""
+            return 1
+        fi
+    fi
+    
+    # 清理分支名稱中的無效字符
+    branch_name=$(echo "$branch_name" | sed 's/[^a-zA-Z0-9._/-]//g')
+    
+    # 移除多餘的連字號和點
+    branch_name=$(echo "$branch_name" | sed 's/--*/-/g' | sed 's/\.\.*/\./g')
+    
+    # 移除開頭和結尾的連字號或點
+    branch_name=$(echo "$branch_name" | sed 's/^[-\.]*//; s/[-\.]*$//')
+    
+    # 驗證分支名稱是否符合 Git 規範
+    if [[ "$branch_name" =~ ^feature/[a-zA-Z0-9][a-zA-Z0-9._/-]*[a-zA-Z0-9]$ ]] && [ ${#branch_name} -le 50 ]; then
+        echo "$branch_name"
+        return 0
+    else
+        # 分支名稱無效
+        echo ""
+        return 1
+    fi
+}
+
 # 使用 AI 生成分支名稱
 generate_branch_name_with_ai() {
     local issue_key="$1"
     local description_hint="$2"
     
-    local prompt="請為 Git 分支生成一個符合 GitHub Flow 規範的分支名稱。
+    local prompt="Generate a valid Git branch name following GitHub Flow conventions.
+
 Issue: $issue_key
-功能描述: $description_hint
-要求：
-- 格式：feature/issue-123-brief-description
-- 使用英文和連字號，避免特殊字符
-- 描述簡潔明確，3-5個單詞
-- 只回應分支名稱，不要其他內容"
+Description: $description_hint
+
+STRICT REQUIREMENTS:
+- Format: feature/issue-123-brief-description
+- Use ONLY: lowercase letters (a-z), numbers (0-9), hyphens (-)
+- NO spaces, NO colons (:), NO Chinese characters, NO special symbols
+- Start with 'feature/' followed by alphanumeric characters
+- End with alphanumeric character (not hyphen)
+- Maximum 40 characters total
+- Example: feature/jira-456-add-user-auth
+
+Return ONLY the branch name - no explanations, no quotes, no extra text."
     
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
     
@@ -431,7 +484,7 @@ Issue: $issue_key
         case "$tool" in
             "codex")
                 if result=$(run_codex_command "$prompt"); then
-                    result=$(clean_ai_message "$result")
+                    result=$(clean_branch_name "$result")
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
                         echo "$result"
@@ -441,7 +494,7 @@ Issue: $issue_key
                 ;;
             *)
                 if result=$(run_ai_tool_command "$tool" "$prompt"); then
-                    result=$(clean_ai_message "$result")
+                    result=$(clean_branch_name "$result")
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
                         echo "$result"
@@ -472,7 +525,18 @@ generate_commit_message_with_ai() {
     # 截斷過長的 diff 內容並簡化 prompt
     local short_diff
     short_diff=$(echo "$diff_content" | head -20 | tr '\n' ' ')
-    local prompt="根據以下變更生成一個簡潔的中文 commit 訊息，使用 feat/fix/docs 等前綴：$short_diff"
+    local prompt="分析以下 Git 變更，生成一個符合 Conventional Commits 規範的中文 commit 訊息：
+
+變更內容：$short_diff
+
+要求：
+- 使用前綴：feat/fix/docs/style/refactor/test/chore
+- 訊息簡潔明確，50字以內
+- 使用繁體中文描述
+- 格式：<類型>: <簡短描述>
+- 例如：feat: 新增用戶認證功能
+
+只回應 commit 訊息，不要其他內容。"
     
     info_msg "🤖 使用 AI 生成 commit message..." >&2
     
@@ -529,7 +593,7 @@ generate_pr_content_with_ai() {
     file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null)
     
     # 簡化並清理 prompt，避免特殊字符問題
-    local prompt="請為 Pull Request 生成專業的標題和內容。
+    local prompt="為 Pull Request 生成專業的標題和內容。
 
 專案資訊：
 - Issue: $issue_key
@@ -537,12 +601,25 @@ generate_pr_content_with_ai() {
 - 提交記錄: $commits
 - 檔案變更: $file_changes
 
-要求：
+輸出要求：
 - 使用繁體中文
-- 標題：簡潔明確，描述主要功能（30字以內）
-- 內容：包含功能說明、主要變更、測試說明
+- 標題：簡潔明確，描述主要功能（25字以內）
+- 內容：功能說明、主要變更、測試資訊
 - 使用 Markdown 格式
-- 回應格式：標題|||內容（用三個豎線分隔）"
+- 嚴格格式：<標題>|||<內容>（用三個豎線分隔，不可有其他文字）
+
+範例輸出：
+feat: 新增用戶認證功能|||## 功能描述
+新增完整的用戶登入認證系統
+
+## 主要變更
+- 實作 JWT 令牌驗證
+- 新增登入/註冊 API
+- 加強安全性驗證
+
+## 測試說明
+- 單元測試覆蓋率 90%
+- 已通過所有 CI 檢查"
     
     info_msg "🤖 使用 AI 生成 PR 內容..." >&2
     
@@ -801,6 +878,8 @@ execute_create_branch() {
             if [[ -n "$confirm_branch" ]] && [[ ! "$confirm_branch" =~ ^(y|yes|是|確定)$ ]]; then
                 branch_name=""
             fi
+        else
+            warning_msg "AI 生成分支名稱失敗，將使用建議的名稱"
         fi
     fi
     

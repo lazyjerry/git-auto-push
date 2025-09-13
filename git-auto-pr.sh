@@ -1256,21 +1256,60 @@ execute_review_and_merge() {
             # 批准並合併
             info_msg "✅ 批准 PR #$pr_number..."
             
-            # 先進行批准審查
-            printf "請輸入審查評論 (可選，直接按 Enter 跳過): " >&2
-            read -r review_comment
+            # 檢查 PR 作者是否為當前用戶
+            local pr_author
+            local current_user
+            pr_author=$(gh pr view "$pr_number" --json author --jq '.author.login' 2>/dev/null)
+            current_user=$(gh api user --jq '.login' 2>/dev/null)
             
-            if [ -n "$review_comment" ]; then
-                if ! gh pr review "$pr_number" --approve --body "$review_comment"; then
-                    handle_error "批准 PR 失敗"
+            if [ "$pr_author" = "$current_user" ]; then
+                warning_msg "⚠️  無法批准自己的 Pull Request"
+                info_msg "GitHub 政策不允許開發者批准自己創建的 PR"
+                info_msg "請請其他團隊成員進行審查，或直接合併（如果您有權限）"
+                
+                printf "是否直接合併此 PR（跳過批准步驟）？[y/N]: " >&2
+                read -r skip_approve
+                skip_approve=$(echo "$skip_approve" | xargs | tr '[:upper:]' '[:lower:]')
+                
+                if [[ "$skip_approve" =~ ^(y|yes|是|確定)$ ]]; then
+                    info_msg "跳過批准步驟，直接進入合併流程..."
+                else
+                    info_msg "已取消操作。請請其他團隊成員審查此 PR。"
+                    return 1
                 fi
             else
-                if ! gh pr review "$pr_number" --approve; then
-                    handle_error "批准 PR 失敗"
+                # 先進行批准審查
+                printf "請輸入審查評論 (可選，直接按 Enter 跳過): " >&2
+                read -r review_comment
+                
+                if [ -n "$review_comment" ]; then
+                    if ! gh pr review "$pr_number" --approve --body "$review_comment" 2>/dev/null; then
+                        local error_output
+                        error_output=$(gh pr review "$pr_number" --approve --body "$review_comment" 2>&1)
+                        if [[ "$error_output" == *"Can not approve your own pull request"* ]]; then
+                            warning_msg "⚠️  無法批准自己的 Pull Request"
+                            info_msg "請請其他團隊成員進行審查"
+                            return 1
+                        else
+                            handle_error "批准 PR 失敗: $error_output"
+                        fi
+                    fi
+                else
+                    if ! gh pr review "$pr_number" --approve 2>/dev/null; then
+                        local error_output
+                        error_output=$(gh pr review "$pr_number" --approve 2>&1)
+                        if [[ "$error_output" == *"Can not approve your own pull request"* ]]; then
+                            warning_msg "⚠️  無法批准自己的 Pull Request"
+                            info_msg "請請其他團隊成員進行審查"
+                            return 1
+                        else
+                            handle_error "批准 PR 失敗: $error_output"
+                        fi
+                    fi
                 fi
+                
+                success_msg "✅ PR #$pr_number 已批准"
             fi
-            
-            success_msg "✅ PR #$pr_number 已批准"
             
             # 確認是否要合併
             echo >&2

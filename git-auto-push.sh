@@ -350,6 +350,21 @@ run_codex_command() {
         printf "   2. 變更內容過大 - 嘗試分批提交較小的變更\n" >&2
         printf "   3. API 服務繁忙 - 稍後重試或使用其他 AI 工具\n" >&2
         printf "\033[0;36m   🔄 腳本會自動嘗試下一個 AI 工具...\033[0m\n" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（超時錯誤）:\033[0m\n" >&2
+        printf "\033[0;90m執行的指令: codex exec '%s'\033[0m\n" "$prompt" >&2
+        printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
+        if [ -n "$output" ]; then
+            printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
+            echo "$output" | head -n 10 | sed 's/^/  /' >&2
+            if [ $(echo "$output" | wc -l) -gt 10 ]; then
+                printf "\033[0;90m  ... (輸出內容過長，已截斷)\033[0m\n" >&2
+            fi
+        else
+            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+        fi
+        printf "\n" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
         # 檢查輸出中是否包含錯誤訊息
@@ -360,6 +375,18 @@ run_codex_command() {
         else
             warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
         fi
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（執行失敗）:\033[0m\n" >&2
+        printf "\033[0;90m執行的指令: codex exec '%s'\033[0m\n" "$prompt" >&2
+        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        if [ -n "$output" ]; then
+            printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
+            echo "$output" | sed 's/^/  /' >&2
+        else
+            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+        fi
+        printf "\n" >&2
         return 1
     fi
     
@@ -399,7 +426,34 @@ run_codex_command() {
     fi
     
     warning_msg "codex 沒有返回有效的 commit message 內容" >&2
-    printf "調試信息 - 過濾後內容: '%s'\n" "$filtered_output" >&2
+    
+    # 顯示詳細的調試信息
+    printf "\n\033[0;90m🔍 調試信息（過濾失敗）:\033[0m\n" >&2
+    printf "\033[0;90m執行的指令: codex exec '%s'\033[0m\n" "$prompt" >&2
+    printf "\033[0;90m過濾後內容: '%s'\033[0m\n" "$filtered_output" >&2
+    printf "\033[0;90m過濾後內容長度: %d 字符\033[0m\n" "${#filtered_output}" >&2
+    
+    if [ -n "$output" ]; then
+        printf "\033[0;90m原始完整輸出:\033[0m\n" >&2
+        echo "$output" | sed 's/^/  /' >&2
+        printf "\033[0;90m原始輸出總行數: %d 行\033[0m\n" "$(echo "$output" | wc -l)" >&2
+        
+        # 顯示過濾步驟的中間結果
+        printf "\033[0;90m第一階段過濾結果:\033[0m\n" >&2
+        local first_filter
+        first_filter=$(echo "$output" | \
+            grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex)" | \
+            grep -v -E "^(effort:|summaries:)" | \
+            tail -n 5)
+        if [ -n "$first_filter" ]; then
+            echo "$first_filter" | sed 's/^/  /' >&2
+        else
+            printf "\033[0;90m  (第一階段過濾結果為空)\033[0m\n" >&2
+        fi
+    else
+        printf "\033[0;90m原始輸出內容: (無)\033[0m\n" >&2
+    fi
+    printf "\n" >&2
     return 1
 }
 
@@ -450,15 +504,48 @@ run_stdin_ai_command() {
     rm -f "$temp_diff"
     
     if [ $exit_code -eq 124 ]; then
-        warning_msg "$tool_name 執行超時（${timeout}秒）" >&2
+        printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（%s 超時錯誤）:\033[0m\n" "$tool_name" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
+        printf "\033[0;90m diff 內容大小: %d 行\033[0m\n" "$(echo "$diff_content" | wc -l)" >&2
+        if [ -n "$output" ]; then
+            printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
+            echo "$output" | head -n 5 | sed 's/^/  /' >&2
+        else
+            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+        fi
+        printf "\n" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        warning_msg "$tool_name 執行失敗（退出碼: $exit_code）" >&2
+        printf "\033[0;31m❌ %s 執行失敗（退出碼: %d）\033[0m\n" "$tool_name" "$exit_code" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（%s 執行失敗）:\033[0m\n" "$tool_name" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        if [ -n "$output" ]; then
+            printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
+            echo "$output" | sed 's/^/  /' >&2
+        else
+            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+        fi
+        printf "\n" >&2
         return 1
     fi
     
     if [ -z "$output" ]; then
-        warning_msg "$tool_name 沒有返回內容" >&2
+        printf "\033[0;31m❌ %s 沒有返回內容\033[0m\n" "$tool_name" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（%s 無輸出）:\033[0m\n" "$tool_name" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        printf "\033[0;90m diff 內容預覽:\033[0m\n" >&2
+        echo "$diff_content" | head -n 5 | sed 's/^/  /' >&2
+        printf "\n" >&2
         return 1
     fi
     

@@ -509,6 +509,51 @@ validate_and_standardize_issue_key() {
     fi
 }
 
+# 格式化 PR 標題和內容的函數，提升可讀性
+format_pr_content() {
+    local title="$1"
+    local body="$2"
+    
+    # 格式化標題：移除多餘空白，確保首字母大寫
+    title=$(echo "$title" | xargs)
+    # 只將第一個字母轉大寫，而不是整個首字符
+    title=$(echo "${title:0:1}" | tr '[:lower:]' '[:upper:]')$(echo "${title:1}")
+    
+    # 格式化內容：處理轉義的換行符
+    body=$(echo "$body" | sed 's/\\n/\n/g')
+    
+    # 如果已經包含 Markdown 標題，保持原格式
+    if [[ "$body" =~ ^#.*$ ]]; then
+        # 已有 Markdown 格式，進行基本清理
+        body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
+    else
+        # 處理中文句號分隔的內容
+        if [[ "$body" == *"。"* ]] && [[ ${#body} -gt 80 ]]; then
+            # 在句號後添加換行，創建段落
+            body=$(echo "$body" | sed 's/。/。\n\n/g' | sed '/^[[:space:]]*$/d')
+            body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
+        fi
+        
+        # 添加基本的 PR 結構
+        if [ ${#body} -lt 30 ]; then
+            body="## 📝 變更說明
+$body
+
+## 🔍 測試說明
+- [ ] 功能測試通過
+- [ ] 無破壞性變更"
+        else
+            # 為較長內容添加標題結構
+            body="## 📝 變更說明
+
+$body"
+        fi
+    fi
+    
+    # 返回格式化後的內容，使用特殊分隔符
+    echo "${title}|||${body}"
+}
+
 # 專門清理和驗證分支名稱的函數
 clean_branch_name() {
     local branch_name="$1"
@@ -543,6 +588,9 @@ clean_branch_name() {
     
     # 移除開頭和結尾的連字號或點
     branch_name=$(echo "$branch_name" | sed 's/^[-\.]*//; s/[-\.]*$//')
+    
+    # 標準化為小寫以符合 Git 慣例
+    branch_name=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
     
     # 驗證分支名稱是否符合 Git 規範
     if [[ "$branch_name" =~ ^feature/[a-zA-Z0-9][a-zA-Z0-9._/-]*[a-zA-Z0-9]$ ]] && [ ${#branch_name} -le 50 ]; then
@@ -719,6 +767,15 @@ show_operation_menu() {
     echo "==================================================" >&2
     info_msg "請選擇要執行的 GitHub Flow PR 操作:" >&2
     printf "\033[0;36m📋 偵測到的主分支: %s\033[0m\n" "$main_branch" >&2
+    
+    # 顯示當前分支資訊
+    local current_branch
+    current_branch=$(get_current_branch)
+    if [ -n "$current_branch" ]; then
+        printf "\033[0;35m🌿 當前所在分支: %s\033[0m\n" "$current_branch" >&2
+    else
+        printf "\033[0;31m⚠️  無法偵測當前分支\033[0m\n" >&2
+    fi
     echo "==================================================" >&2
     printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
     printf "\033[1;35m2.\033[0m � 建立 Pull Request\n" >&2
@@ -855,6 +912,12 @@ execute_create_branch() {
     current_branch=$(echo "$current_branch" | tr -d '\r\n' | xargs)
     main_branch=$(echo "$main_branch" | tr -d '\r\n' | xargs)
     
+    # 顯示當前分支狀態
+    echo >&2
+    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
+    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    echo >&2
+    
     if ! check_main_branch; then
         printf "\033[1;33m當前不在主分支（當前: %s，主分支: %s）\033[0m\n" "$current_branch" "$main_branch" >&2
         printf "是否切換到 %s 分支？[Y/n]: " "$main_branch" >&2
@@ -985,6 +1048,10 @@ execute_create_branch() {
             return 1
         fi
     else
+        
+        # 標準化分支名稱：轉換為小寫以符合 Git 慣例
+        branch_name=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
+
         # 建立新分支
         info_msg "建立並切換到新分支: $branch_name"
         run_command "git checkout -b '$branch_name'" "建立分支失敗"
@@ -1087,6 +1154,12 @@ execute_create_pr() {
     
     local main_branch
     main_branch=$(get_main_branch)
+    
+    # 顯示分支資訊
+    echo >&2
+    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
+    printf "\033[0;36m🎯 目標分支: %s\033[0m\n" "$main_branch" >&2
+    echo >&2
     
     if [ "$current_branch" = "$main_branch" ]; then
         handle_error "無法從主分支 ($main_branch) 建立 PR"
@@ -1218,15 +1291,24 @@ execute_create_pr() {
             # 解析 AI 生成的內容（假設格式為 "標題|||內容"）
             if [[ "$pr_content" == *"|||"* ]]; then
                 pr_title=$(echo "$pr_content" | cut -d'|' -f1 | xargs)
-                pr_body=$(echo "$pr_content" | cut -d'|' -f2- | sed 's/^||*//' | xargs)
+                pr_body=$(echo "$pr_content" | cut -d'|' -f2- | sed 's/^||*//')
             else
                 pr_title="$pr_content"
                 pr_body="Issue: $issue_key\nSummary: Implement feature as described in $issue_key"
             fi
             
+            # 應用格式化處理
+            local formatted_content
+            formatted_content=$(format_pr_content "$pr_title" "$pr_body")
+            pr_title=$(echo "$formatted_content" | cut -d'|' -f1)
+            pr_body=$(echo "$formatted_content" | cut -d'|' -f2- | sed 's/^||*//')
+            
             echo >&2
-            info_msg "AI 生成的 PR 標題: $pr_title"
-            info_msg "AI 生成的 PR 內容:"
+            info_msg "🎯 格式化後的 PR 標題:"
+            printf "\033[1;32m   %s\033[0m\n" "$pr_title" >&2
+            echo >&2
+            info_msg "📝 格式化後的 PR 內容:"
+            echo >&2
             printf "%s\n" "$pr_body" | sed 's/^/   /' >&2
             echo >&2
             
@@ -1265,6 +1347,24 @@ execute_create_pr() {
         fi
     fi
     
+    # 對最終的 PR 內容應用格式化處理
+    local final_formatted_content
+    final_formatted_content=$(format_pr_content "$pr_title" "$pr_body")
+    pr_title=$(echo "$final_formatted_content" | cut -d'|' -f1)
+    pr_body=$(echo "$final_formatted_content" | cut -d'|' -f2- | sed 's/^||*//')
+    
+    # 顯示最終格式化的 PR 預覽
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "📋 最終 PR 預覽:" >&2
+    echo "==================================================" >&2
+    printf "\033[1;36m標題:\033[0m %s\n" "$pr_title" >&2
+    echo >&2
+    printf "\033[1;36m內容:\033[0m\n" >&2
+    printf "%s\n" "$pr_body" | sed 's/^/  /' >&2
+    echo "==================================================" >&2
+    echo >&2
+    
     # 建立 Pull Request
     info_msg "正在建立 Pull Request..."
     
@@ -1293,7 +1393,17 @@ execute_create_pr() {
 execute_full_pr_workflow() {
     info_msg "🚀 執行完整 GitHub Flow PR 流程..."
     
+    # 顯示當前分支狀態
+    local current_branch
+    local main_branch
+    current_branch=$(get_current_branch)
+    main_branch=$(get_main_branch)
+    
     echo >&2
+    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
+    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    echo >&2
+    
     info_msg "步驟 1: 建立功能分支"
     if ! execute_create_branch; then
         handle_error "建立分支步驟失敗"
@@ -1330,6 +1440,17 @@ execute_full_pr_workflow() {
 # 審查與合併 PR (專案擁有者功能)
 execute_review_and_merge() {
     info_msg "👑 專案擁有者審查與合併 PR 流程..."
+    
+    # 顯示當前分支狀態
+    local current_branch
+    local main_branch
+    current_branch=$(get_current_branch)
+    main_branch=$(get_main_branch)
+    
+    echo >&2
+    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
+    printf "\033[0;36m🎯 主分支: %s\033[0m\n" "$main_branch" >&2
+    echo >&2
     
     # 檢查是否有待審查的 PR
     info_msg "🔍 檢查待審查的 Pull Request..."

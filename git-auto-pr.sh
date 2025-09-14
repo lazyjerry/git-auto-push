@@ -69,6 +69,15 @@ generate_ai_pr_prompt() {
 readonly AI_TOOLS=( "gemini" "codex" "claude")
 
 # ==============================================
+# 分支配置區域
+# ==============================================
+#
+# 主分支候選清單：依優先順序自動檢測
+# 可自行添加更多分支名稱，腳本會按順序檢測第一個存在的分支
+# 格式：("分支1" "分支2" "分支3" ...)
+readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+
+# ==============================================
 # 工具函數區域
 # ==============================================
 
@@ -155,29 +164,41 @@ get_current_branch() {
     echo "$branch" | tr -d '\r\n' | xargs
 }
 
-# 獲取主分支名稱（自動檢測 main 或 master）
+# 獲取主分支名稱（從配置陣列中自動檢測）
 get_main_branch() {
-    local branch
+    local branch_candidate
+    local found_branch=""
     
-    # 優先檢查遠端分支
-    if git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then
-        branch="main"
-    elif git ls-remote --heads origin master 2>/dev/null | grep -q 'refs/heads/master'; then
-        branch="master"
-    else
+    # 依照配置陣列的順序檢測分支
+    for branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
+        # 優先檢查遠端分支
+        if git ls-remote --heads origin "$branch_candidate" 2>/dev/null | grep -q "refs/heads/$branch_candidate"; then
+            found_branch="$branch_candidate"
+            break
         # 如果遠端檢查失敗，檢查本地分支
-        if git show-ref --verify --quiet refs/heads/main; then
-            branch="main"
-        elif git show-ref --verify --quiet refs/heads/master; then
-            branch="master"
-        else
-            # 預設返回 main（現代標準）
-            branch="main"
+        elif git show-ref --verify --quiet "refs/heads/$branch_candidate"; then
+            found_branch="$branch_candidate"
+            break
         fi
+    done
+    
+    # 如果都沒找到，顯示錯誤訊息並退出程式
+    if [ -z "$found_branch" ]; then
+        printf "\033[0;31m❌ 錯誤：找不到任何配置的主分支\033[0m\n" >&2
+        printf "\033[0;33m📋 配置的主分支候選清單: %s\033[0m\n" "${DEFAULT_MAIN_BRANCHES[*]}" >&2
+        printf "\033[0;36m💡 解決方法：\033[0m\n" >&2
+        printf "   1. 檢查 Git 倉庫是否已初始化\n" >&2
+        printf "   2. 創建其中一個主分支：\n" >&2
+        for branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
+            printf "      \033[0;32mgit checkout -b %s\033[0m\n" "$branch_candidate" >&2
+        done
+        printf "   3. 或修改腳本頂部的 DEFAULT_MAIN_BRANCHES 陣列\n" >&2
+        printf "      \033[0;90m位置: %s (第 78 行)\033[0m\n" "${BASH_SOURCE[0]}" >&2
+        exit 1
     fi
     
     # 清理可能的特殊字符和空白
-    echo "$branch" | tr -d '\r\n' | xargs
+    echo "$found_branch" | tr -d '\r\n' | xargs
 }
 
 # 檢查是否在主分支

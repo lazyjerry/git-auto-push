@@ -47,6 +47,10 @@ readonly AI_TOOLS=(
     "claude"    # claude 需要登入認證
 )
 
+# AI 提示詞配置
+# 用於 commit message 生成的統一提示詞
+readonly AI_COMMIT_PROMPT="請分析暫存區的 git 變更內容，並生成一個簡潔的中文 commit 訊息標題。只需回應標題，不要額外說明。"
+
 # ==============================================
 # 工具函數區域
 # ==============================================
@@ -428,7 +432,7 @@ run_stdin_ai_command() {
 generate_auto_commit_message_silent() {
     info_msg "🤖 全自動模式：正在使用 AI 工具分析變更並生成 commit message..." >&2
     
-    local prompt="請分析暫存區的 git 變更內容，並生成一個簡潔的中文 commit 訊息標題。只需回應標題，不要額外說明。"
+    local prompt="$AI_COMMIT_PROMPT"
     local generated_message
     local ai_tool_used=""
     
@@ -488,7 +492,7 @@ generate_auto_commit_message_silent() {
 generate_auto_commit_message() {
     info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
     
-    local prompt="請分析暫存區的 git 變更內容，並生成一個簡潔的中文 commit 訊息標題。只需回應標題，不要額外說明。"
+    local prompt="$AI_COMMIT_PROMPT"
     local generated_message
     local ai_tool_used=""
     
@@ -555,7 +559,7 @@ generate_auto_commit_message() {
     
     # 如果所有 AI 工具都不可用或失敗
     warning_msg "所有 AI 工具都執行失敗或未生成有效的 commit message" >&2
-    info_msg "已嘗試的工具: ${ai_tools[*]}" >&2
+    info_msg "已嘗試的工具: ${AI_TOOLS[*]}" >&2
     return 1
 }
 

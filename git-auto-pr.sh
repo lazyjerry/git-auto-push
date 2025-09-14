@@ -60,7 +60,7 @@ generate_ai_pr_prompt() {
     local branch_name="$2"
     local commits="$3"
     local file_changes="$4"
-    echo "生成PR標題和內容，格式：標題|||內容。Issue: $issue_key, 分支: $branch_name, 變更: $commits $file_changes。使用繁體中文，標題25字內，內容包含功能說明和主要變更。"
+    echo "生成PR標題和內容，格式：標題|||內容。Issue: $issue_key, 分支: $branch_name, 變更: $commits $file_changes。要求：標題10-20字簡潔描述功能，內容包含功能變更和技術實作細節。使用繁體中文。"
 }
 
 # AI 工具優先順序配置
@@ -534,19 +534,28 @@ format_pr_content() {
             body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
         fi
         
-        # 添加基本的 PR 結構
+        # 添加簡化的 PR 結構
         if [ ${#body} -lt 30 ]; then
-            body="## 📝 變更說明
+            body="## 📝 功能變更
 $body
 
-## 🔍 測試說明
-- [ ] 功能測試通過
-- [ ] 無破壞性變更"
+## � 技術實作
+- [ ] 功能測試通過"
         else
-            # 為較長內容添加標題結構
-            body="## 📝 變更說明
+            # 為較長內容添加簡化結構
+            if [[ ! "$body" =~ (功能變更|技術實作) ]]; then
+                body="## 📝 功能變更
+
+$body
+
+## 🔧 技術實作
+- 實作方式：[補充技術細節]"
+            else
+                # 已包含結構化內容，僅添加標題
+                body="## 📝 功能變更
 
 $body"
+            fi
         fi
     fi
     
@@ -1327,23 +1336,31 @@ execute_create_pr() {
     
     # 手動輸入 PR 內容（如果 AI 失敗或用戶不採用）
     if [ -z "$pr_title" ]; then
-        printf "請輸入 PR 標題: " >&2
+        printf "請輸入 PR 標題 (建議10-20字簡潔描述): " >&2
         read -r pr_title
         pr_title=$(echo "$pr_title" | xargs)
         
         if [ -z "$pr_title" ]; then
             # 使用預設標題
-            pr_title="[$issue_key] Implement feature"
+            pr_title="[$issue_key] 實作功能"
         fi
     fi
     
     if [ -z "$pr_body" ]; then
+        echo >&2
+        info_msg "💡 建議包含：功能變更、技術實作細節" >&2
         printf "請輸入 PR 描述 (可選，直接按 Enter 跳過): " >&2
         read -r pr_body_input
         if [ -n "$pr_body_input" ]; then
             pr_body="$pr_body_input"
         else
-            pr_body="Issue: $issue_key\nSummary: Implement feature as described in $issue_key"
+            pr_body="Issue: $issue_key
+
+## 📝 功能變更
+根據 $issue_key 實作相關功能
+
+## 🔧 技術實作
+- [ ] 功能測試通過"
         fi
     fi
     

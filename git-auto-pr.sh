@@ -21,6 +21,57 @@
 # 參考: docs/github-flow.md
 #
 
+# ==============================================
+# AI 提示詞配置區域
+# ==============================================
+# 
+# 說明：此區域包含所有 AI 工具使用的提示詞模板
+# 修改這些函數可以調整 AI 生成的內容品質和格式
+# 支援的 AI 工具：codex, gemini, claude
+#
+# 注意事項：
+# 1. 提示詞應保持簡潔明確，避免過長導致超時
+# 2. 使用統一的輸出格式便於後處理
+# 3. 修改後請測試各種場景確保相容性
+# ==============================================
+
+# AI 分支名稱生成提示詞模板
+# 參數：$1=issue_key, $2=description_hint
+# 輸出：符合 Git 規範的分支名稱 (feature/xxx-xxx 格式)
+generate_ai_branch_prompt() {
+    local issue_key="$1"
+    local description_hint="$2"
+    echo "Generate branch name: feature/$issue_key-description. Issue: $issue_key, Description: $description_hint. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+}
+
+# AI Commit 訊息生成提示詞模板  
+# 參數：$1=short_diff (截斷的變更內容)
+# 輸出：符合 Conventional Commits 規範的中文訊息
+generate_ai_commit_prompt() {
+    local short_diff="$1"
+    echo "根據以下變更生成簡潔的中文 commit 訊息（格式：feat/fix/docs: 描述）：$short_diff"
+}
+
+# AI PR 內容生成提示詞模板
+# 參數：$1=issue_key, $2=branch_name, $3=commits, $4=file_changes  
+# 輸出：PR標題|||PR內容 格式，使用 ||| 分隔標題和內容
+generate_ai_pr_prompt() {
+    local issue_key="$1"
+    local branch_name="$2"
+    local commits="$3"
+    local file_changes="$4"
+    echo "生成PR標題和內容，格式：標題|||內容。Issue: $issue_key, 分支: $branch_name, 變更: $commits $file_changes。使用繁體中文，標題25字內，內容包含功能說明和主要變更。"
+}
+
+# AI 工具優先順序配置
+# 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
+# 修改此陣列可以調整工具優先級或新增其他 AI 工具
+readonly AI_TOOLS=( "gemini" "codex" "claude")
+
+# ==============================================
+# 工具函數區域
+# ==============================================
+
 # 錯誤處理函數
 handle_error() {
     printf "\033[0;31m錯誤: %s\033[0m\n" "$1" >&2
@@ -456,14 +507,13 @@ generate_branch_name_with_ai() {
     local issue_key="$1"
     local description_hint="$2"
     
-    local prompt="Generate branch name: feature/$issue_key-description. Issue: $issue_key, Description: $description_hint. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+    local prompt
+    prompt=$(generate_ai_branch_prompt "$issue_key" "$description_hint")
     
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
     
     # 嘗試使用不同的 AI 工具
-    local ai_tools=("codex" "gemini" "claude")
-    
-    for tool in "${ai_tools[@]}"; do
+    for tool in "${AI_TOOLS[@]}"; do
         printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
         
         local result
@@ -511,14 +561,13 @@ generate_commit_message_with_ai() {
     # 截斷過長的 diff 內容並簡化 prompt
     local short_diff
     short_diff=$(echo "$diff_content" | head -20 | tr '\n' ' ')
-    local prompt="根據以下變更生成簡潔的中文 commit 訊息（格式：feat/fix/docs: 描述）：$short_diff"
+    local prompt
+    prompt=$(generate_ai_commit_prompt "$short_diff")
     
     info_msg "🤖 使用 AI 生成 commit message..." >&2
     
     # 嘗試使用不同的 AI 工具
-    local ai_tools=("codex" "gemini" "claude")
-    
-    for tool in "${ai_tools[@]}"; do
+    for tool in "${AI_TOOLS[@]}"; do
         printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
         
         local result
@@ -567,15 +616,14 @@ generate_pr_content_with_ai() {
     local file_changes
     file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null)
     
-    # 簡化 prompt
-    local prompt="生成PR標題和內容，格式：標題|||內容。Issue: $issue_key, 分支: $branch_name, 變更: $commits $file_changes。使用繁體中文，標題25字內，內容包含功能說明和主要變更。"
+    # 使用提示詞模板生成 prompt
+    local prompt
+    prompt=$(generate_ai_pr_prompt "$issue_key" "$branch_name" "$commits" "$file_changes")
     
     info_msg "🤖 使用 AI 生成 PR 內容..." >&2
     
     # 嘗試使用不同的 AI 工具
-    local ai_tools=("codex" "gemini" "claude")
-    
-    for tool in "${ai_tools[@]}"; do
+    for tool in "${AI_TOOLS[@]}"; do
         printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
         
         local result
@@ -839,7 +887,7 @@ execute_create_branch() {
             local suggested_branch
             suggested_branch="feature/${issue_key}-$(echo "$description" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')"
             printf "建議的分支名稱: %s\n" "$suggested_branch" >&2
-            printf "請輸入分支名稱 (直接按 Enter 使用建議): " >&2
+            printf "請輸入分支名稱 (英文。直接按 Enter 使用建議): " >&2
             read -r branch_input
             branch_input=$(echo "$branch_input" | xargs)
             

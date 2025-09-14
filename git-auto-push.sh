@@ -42,9 +42,9 @@
 # AI 工具優先順序配置
 # 定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 readonly AI_TOOLS=(
-    "codex"     # 優先使用 codex，因為它工作正常
-    "gemini"    # gemini 可能有網路或認證問題  
-    "claude"    # claude 需要登入認證
+    "gemini" 
+    "codex"     
+    "claude"
 )
 
 # AI 提示詞配置

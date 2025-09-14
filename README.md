@@ -20,8 +20,8 @@
 ### 核心組件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1045 行）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（1402 行）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1054 行）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（1450 行）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤檢測      # 認證過期、網路錯誤自動識別
 │   ├── 友善錯誤提示      # 提供具體解決方案
@@ -72,11 +72,8 @@ chmod +x git-auto-pr.sh
 ### 3. 全域安裝（選擇性）
 
 ```bash
-# 安裝兩個工具到系統路徑
-sudo cp git-auto-push.sh /usr/local/bin/git-auto-push
-sudo cp git-auto-pr.sh /usr/local/bin/git-auto-pr
-sudo chmod +x /usr/local/bin/git-auto-push
-sudo chmod +x /usr/local/bin/git-auto-pr
+# 安裝兩個工具到系統路徑（一行指令）
+sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push && sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
 ```
 
 ### 4. 依賴工具安裝
@@ -320,7 +317,8 @@ git checkout main && git pull
 **GitHub Flow 流程（git-auto-pr.sh）**
 
 - 端到端 PR 流程自動化
-- 主分支自動檢測（main/master）
+- **智慧分支配置系統** ✨：可配置主分支候選清單，按優先順序自動檢測
+- 分支錯誤處理：找不到主分支時提供詳細解決建議和修復命令
 - 分支狀態智慧驗證
 - **PR 審查管理**：自動檢測用戶身份避免自我批准，提供團隊審查或直接合併選項
 
@@ -491,6 +489,181 @@ RUN chmod +x /usr/local/bin/git-auto-*
 CMD ["git-auto-push", "--auto"]
 ```
 
+## 開發修改注意事項
+
+### 🛠️ 程式碼架構說明
+
+本專案採用模組化設計，主要組件包括：
+
+#### 配置區域總覽
+
+- **位置**：兩個腳本檔案的開頭部分
+- **git-auto-push.sh**：第 28-52 行 - AI 工具優先順序和提示詞配置
+- **git-auto-pr.sh**：第 25-78 行 - AI 提示詞模板、工具配置和分支配置
+- **修改原則**：所有配置都集中在檔案上方，便於維護和修改
+
+#### 分支配置系統（NEW! ✨）
+
+**git-auto-pr.sh** 新增智慧分支配置功能：
+
+- **主分支陣列配置**：`DEFAULT_MAIN_BRANCHES=("main" "master")`
+- **自動檢測機制**：按順序檢測第一個存在的分支
+- **錯誤處理**：找不到分支時提供詳細解決建議
+- **易於擴展**：可添加 `develop`、`dev` 等更多分支選項
+
+#### 統一變數管理
+
+- **AI_TOOLS 變數**：統一的 AI 工具優先順序陣列
+- **readonly 保護**：防止意外修改配置
+- **調用順序**：codex → gemini → claude
+
+### 📝 修改指導原則
+
+#### 1. AI 提示詞修改
+
+```bash
+# 修改位置：檔案開頭的 AI 提示詞配置區域
+generate_ai_branch_prompt() {
+    # 修改分支名稱生成邏輯
+}
+
+generate_ai_commit_prompt() {
+    # 修改 commit 訊息生成邏輯
+}
+
+generate_ai_pr_prompt() {
+    # 修改 PR 內容生成邏輯
+}
+```
+
+#### 2. AI 工具順序調整
+
+```bash
+# 修改 AI_TOOLS 陣列即可改變調用順序
+readonly AI_TOOLS=(
+    "codex"     # 第一優先
+    "gemini"    # 第二優先
+    "claude"    # 第三優先
+)
+```
+
+#### 3. 新增 AI 工具
+
+1. 在 `AI_TOOLS` 陣列中添加新工具名稱
+2. 在對應函數中添加 case 分支處理
+3. 實現對應的 `run_*_command()` 函數
+
+#### 4. 分支配置自定義 ✨
+
+```bash
+# git-auto-pr.sh 分支配置修改（第 78 行）
+readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+
+# 添加更多分支選項
+readonly -a DEFAULT_MAIN_BRANCHES=("main" "master" "develop" "dev")
+
+# 只使用特定分支
+readonly -a DEFAULT_MAIN_BRANCHES=("main")
+```
+
+**配置說明**：
+
+- **檢測順序**：腳本會按陣列順序檢測第一個存在的分支
+- **錯誤處理**：找不到任何分支時會顯示詳細錯誤訊息和解決建議
+- **動態提示**：錯誤訊息會根據配置陣列動態生成修復指令
+
+#### 5. 錯誤處理擴展
+
+- 在現有錯誤檢測函數中添加新的錯誤模式
+- 更新錯誤訊息和修復建議
+- 保持一致的錯誤輸出格式
+
+### ⚠️ 重要注意事項
+
+#### 同步修改要求
+
+- **AI 工具整合**：修改 AI 工具時，需同時更新兩個腳本檔案
+- **提示詞優化**：兩個檔案的提示詞風格應保持一致
+- **錯誤處理**：統一的錯誤處理模式和輸出格式
+
+#### 測試要求
+
+```bash
+# 語法檢查
+bash -n git-auto-push.sh
+bash -n git-auto-pr.sh
+
+# 功能測試
+./git-auto-push.sh --help
+./git-auto-pr.sh --help
+
+# AI 工具測試
+source git-auto-push.sh
+for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
+```
+
+#### 版本控制
+
+- 修改後更新版本號
+- 更新 README 中的行數統計
+- 記錄重要變更到 commit message
+
+### 🔧 常見修改場景
+
+#### 場景 1：優化 AI 提示詞
+
+1. 修改對應的 `generate_ai_*_prompt()` 函數
+2. 測試生成效果
+3. 更新相關文檔
+
+#### 場景 2：新增錯誤處理
+
+1. 識別新的錯誤模式
+2. 在檢測函數中添加條件判斷
+3. 提供具體的修復建議
+
+#### 場景 3：調整工作流程
+
+1. 修改 `execute_*_workflow()` 函數
+2. 更新選單顯示
+3. 測試完整流程
+
+## 📋 更新日誌
+
+### v1.2.0 - 分支配置系統 (2025-09-14)
+
+**🆕 新功能**
+
+- **智慧分支配置**：git-auto-pr.sh 新增 `DEFAULT_MAIN_BRANCHES` 陣列配置
+- **自動檢測機制**：按優先順序自動檢測第一個存在的主分支
+- **錯誤處理優化**：找不到分支時提供詳細解決建議和動態修復命令
+
+**🔧 改進**
+
+- 配置集中化：所有分支相關設定移至檔案頂部
+- 錯誤訊息彩色化：使用表情符號和顏色提升可讀性
+- 動態建議生成：根據配置陣列自動產生對應的 Git 命令
+
+**📍 設定位置**
+
+- `git-auto-pr.sh` 第 78 行：`readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")`
+
+### v1.1.0 - AI 配置整合 (2025-09-13)
+
+**🔧 重構**
+
+- AI 提示詞提取至檔案頂部作為配置變數
+- 統一 AI_TOOLS 變數，便於維護
+- 新增 README 開發修改指導說明
+
+### 📚 參考資源
+
+- [AGENTS.md](AGENTS.md) - 詳細開發指引
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理指導
+- [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
+
 ## 授權條款
 
 本專案採用 MIT License 授權條款。詳細內容請參閱 [LICENSE](LICENSE) 檔案。
+# 測試超時改進 2025年 9月15日 週一 00時08分43秒 CST
+# 測試調試功能改進 2025年 9月15日 週一 00時28分53秒 CST

@@ -69,6 +69,15 @@ generate_ai_pr_prompt() {
 readonly AI_TOOLS=( "gemini" "codex" "claude")
 
 # ==============================================
+# 分支配置區域
+# ==============================================
+#
+# 主分支候選清單：依優先順序自動檢測
+# 可自行添加更多分支名稱，腳本會按順序檢測第一個存在的分支
+# 格式：("分支1" "分支2" "分支3" ...)
+readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+
+# ==============================================
 # 工具函數區域
 # ==============================================
 
@@ -155,29 +164,41 @@ get_current_branch() {
     echo "$branch" | tr -d '\r\n' | xargs
 }
 
-# 獲取主分支名稱（自動檢測 main 或 master）
+# 獲取主分支名稱（從配置陣列中自動檢測）
 get_main_branch() {
-    local branch
+    local branch_candidate
+    local found_branch=""
     
-    # 優先檢查遠端分支
-    if git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then
-        branch="main"
-    elif git ls-remote --heads origin master 2>/dev/null | grep -q 'refs/heads/master'; then
-        branch="master"
-    else
+    # 依照配置陣列的順序檢測分支
+    for branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
+        # 優先檢查遠端分支
+        if git ls-remote --heads origin "$branch_candidate" 2>/dev/null | grep -q "refs/heads/$branch_candidate"; then
+            found_branch="$branch_candidate"
+            break
         # 如果遠端檢查失敗，檢查本地分支
-        if git show-ref --verify --quiet refs/heads/main; then
-            branch="main"
-        elif git show-ref --verify --quiet refs/heads/master; then
-            branch="master"
-        else
-            # 預設返回 main（現代標準）
-            branch="main"
+        elif git show-ref --verify --quiet "refs/heads/$branch_candidate"; then
+            found_branch="$branch_candidate"
+            break
         fi
+    done
+    
+    # 如果都沒找到，顯示錯誤訊息並退出程式
+    if [ -z "$found_branch" ]; then
+        printf "\033[0;31m❌ 錯誤：找不到任何配置的主分支\033[0m\n" >&2
+        printf "\033[0;33m📋 配置的主分支候選清單: %s\033[0m\n" "${DEFAULT_MAIN_BRANCHES[*]}" >&2
+        printf "\033[0;36m💡 解決方法：\033[0m\n" >&2
+        printf "   1. 檢查 Git 倉庫是否已初始化\n" >&2
+        printf "   2. 創建其中一個主分支：\n" >&2
+        for branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
+            printf "      \033[0;32mgit checkout -b %s\033[0m\n" "$branch_candidate" >&2
+        done
+        printf "   3. 或修改腳本頂部的 DEFAULT_MAIN_BRANCHES 陣列\n" >&2
+        printf "      \033[0;90m位置: %s (第 78 行)\033[0m\n" "${BASH_SOURCE[0]}" >&2
+        exit 1
     fi
     
     # 清理可能的特殊字符和空白
-    echo "$branch" | tr -d '\r\n' | xargs
+    echo "$found_branch" | tr -d '\r\n' | xargs
 }
 
 # 檢查是否在主分支
@@ -456,6 +477,38 @@ clean_ai_message() {
     echo "$message"
 }
 
+# 驗證和標準化 issue key 的函數
+validate_and_standardize_issue_key() {
+    local input="$1"
+    
+    # 移除前後空白
+    input=$(echo "$input" | xargs)
+    
+    # 轉換為大寫
+    input=$(echo "$input" | tr '[:lower:]' '[:upper:]')
+    
+    # 檢查格式：只允許英文字母、數字和連字號/底線
+    if [[ ! "$input" =~ ^[A-Z0-9_-]+$ ]]; then
+        return 1  # 格式不正確
+    fi
+    
+    # 檢查是否符合 issue key 的基本模式（字母開頭）
+    if [[ ! "$input" =~ ^[A-Z] ]]; then
+        return 2  # 必須以字母開頭
+    fi
+    
+    # 建議的格式：至少包含一個連字號或底線分隔的數字部分
+    if [[ "$input" =~ ^[A-Z][A-Z0-9]*[-_][0-9]+$ ]]; then
+        echo "$input"
+        return 0  # 標準格式
+    elif [[ "$input" =~ ^[A-Z][A-Z0-9_-]*$ ]]; then
+        echo "$input"
+        return 3  # 可接受但不是標準格式
+    else
+        return 1  # 格式不正確
+    fi
+}
+
 # 專門清理和驗證分支名稱的函數
 clean_branch_name() {
     local branch_name="$1"
@@ -668,13 +721,11 @@ show_operation_menu() {
     printf "\033[0;36m📋 偵測到的主分支: %s\033[0m\n" "$main_branch" >&2
     echo "==================================================" >&2
     printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
-    printf "\033[1;34m2.\033[0m 📝 提交並推送變更\n" >&2
-    printf "\033[1;35m3.\033[0m � 建立 Pull Request\n" >&2
-    printf "\033[1;32m4.\033[0m � 完整 PR 流程 (建立分支 → 開發 → 提交 → PR)\n" >&2
-    printf "\033[1;36m5.\033[0m 🤖 全自動 PR 模式\n" >&2
-    printf "\033[1;31m6.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
+    printf "\033[1;35m2.\033[0m � 建立 Pull Request\n" >&2
+    printf "\033[1;32m3.\033[0m � 完整 PR 流程 (建立分支 → 開發 → 提交 → PR)\n" >&2
+    printf "\033[1;31m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-6]: " >&2
+    printf "請輸入選項 [1-4]: " >&2
 }
 
 # 獲取用戶選擇的操作
@@ -698,32 +749,22 @@ get_operation_choice() {
                 return 0
                 ;;
             2)
-                info_msg "✅ 已選擇：提交並推送變更" >&2
-                echo "$choice"
-                return 0
-                ;;
-            3)
                 info_msg "✅ 已選擇：建立 Pull Request" >&2
                 echo "$choice"
                 return 0
                 ;;
-            4)
+            3)
                 info_msg "✅ 已選擇：完整 PR 流程" >&2
                 echo "$choice"
                 return 0
                 ;;
-            5)
-                info_msg "✅ 已選擇：全自動 PR 模式" >&2
-                echo "$choice"
-                return 0
-                ;;
-            6)
+            4)
                 info_msg "✅ 已選擇：審查與合併 PR (專案擁有者)" >&2
                 echo "$choice"
                 return 0
                 ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3 或 4" >&2
                 echo >&2
                 ;;
         esac
@@ -744,11 +785,10 @@ main() {
 
     warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。" >&2
     
-    # 檢查命令行參數
-    local auto_mode=false
+    # 檢查命令行參數（移除自動模式支援）
     if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
-        auto_mode=true
-        info_msg "🤖 命令行啟用全自動 PR 模式" >&2
+        warning_msg "⚠️  全自動模式已移除，請使用互動式選單操作" >&2
+        echo >&2
     fi
     
     # 顯示工具標題
@@ -776,38 +816,27 @@ main() {
             ;;
     esac
     
-    # 根據模式執行
-    if [ "$auto_mode" = true ]; then
-        execute_auto_pr_workflow
-    else
-        # 獲取用戶選擇
-        local choice
-        choice=$(get_operation_choice)
-        
-        echo >&2
-        info_msg "🚀 執行 GitHub Flow PR 操作..."
-        
-        case "$choice" in
-            1)
-                execute_create_branch
-                ;;
-            2)
-                execute_commit_and_push
-                ;;
-            3)
-                execute_create_pr
-                ;;
-            4)
-                execute_full_pr_workflow
-                ;;
-            5)
-                execute_auto_pr_workflow
-                ;;
-            6)
-                execute_review_and_merge
-                ;;
-        esac
-    fi
+    # 獲取用戶選擇並執行
+    local choice
+    choice=$(get_operation_choice)
+    
+    echo >&2
+    info_msg "🚀 執行 GitHub Flow PR 操作..."
+    
+    case "$choice" in
+        1)
+            execute_create_branch
+            ;;
+        2)
+            execute_create_pr
+            ;;
+        3)
+            execute_full_pr_workflow
+            ;;
+        4)
+            execute_review_and_merge
+            ;;
+    esac
     
     show_random_thanks
 }
@@ -845,14 +874,44 @@ execute_create_branch() {
         run_command "git pull --ff-only origin $main_branch" "更新 $main_branch 分支失敗"
     fi
     
-    # 獲取 issue key
-    printf "\n請輸入 issue key (例: ISSUE-123, JIRA-456, 或自定義編號): " >&2
-    read -r issue_key
-    issue_key=$(echo "$issue_key" | xargs)
-    
-    if [ -z "$issue_key" ]; then
-        handle_error "Issue key 不能為空"
-    fi
+    # 獲取和驗證 issue key
+    local issue_key=""
+    while [ -z "$issue_key" ]; do
+        printf "\n請輸入 issue key (例: ISSUE-123, JIRA-456, PROJ_001): " >&2
+        read -r user_input
+        user_input=$(echo "$user_input" | xargs)
+        
+        if [ -z "$user_input" ]; then
+            warning_msg "⚠️  Issue key 不能為空" >&2
+            continue
+        fi
+        
+        # 驗證和標準化 issue key
+        local validated_key
+        local validation_result
+        validated_key=$(validate_and_standardize_issue_key "$user_input")
+        validation_result=$?
+        
+        case $validation_result in
+            0)
+                issue_key="$validated_key"
+                info_msg "✅ 使用標準格式 issue key: $issue_key" >&2
+                ;;
+            1)
+                warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)" >&2
+                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                ;;
+            2)
+                warning_msg "❌ Issue key 必須以英文字母開頭" >&2
+                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                ;;
+            3)
+                issue_key="$validated_key"
+                warning_msg "⚠️  接受的 issue key: $issue_key" >&2
+                warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}" >&2
+                ;;
+        esac
+    done
     
     # 獲取功能描述
     printf "請輸入功能簡短描述 (例: add user authentication): " >&2
@@ -933,7 +992,7 @@ execute_create_branch() {
     info_msg "📝 接下來您可以："
     printf "   1. 在 VS Code 中開始開發: \033[0;36mcode .\033[0m\n" >&2
     printf "   2. 執行測試: \033[0;36mnpm test\033[0m 或 \033[0;36mphp artisan test\033[0m\n" >&2
-    printf "   3. 完成開發後運行: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 3 或 1)\n" >&2
+    printf "   3. 完成開發後運行: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2 或 1)\n" >&2
     echo >&2
 }
 
@@ -1009,7 +1068,7 @@ execute_commit_and_push() {
     
     echo >&2
     info_msg "📝 接下來您可以："
-    printf "   1. 建立 Pull Request: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 4 或 1)\n" >&2
+    printf "   1. 建立 Pull Request: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2 或 1)\n" >&2
     printf "   2. 手動建立 PR: \033[0;36mgh pr create\033[0m\n" >&2
     echo >&2
 }
@@ -1045,21 +1104,100 @@ execute_create_pr() {
     fi
     
     # 獲取 issue key（從分支名稱提取或手動輸入）
-    local issue_key
-    if [[ "$current_branch" =~ feature/([A-Z0-9]+-[0-9]+) ]]; then
-        issue_key="${BASH_REMATCH[1]}"
-        info_msg "從分支名稱提取 issue key: $issue_key"
+    local issue_key=""
+    local suggested_key=""
+    
+    # 1. 嘗試從分支名稱中提取 issue key（支援多種格式）
+    # 支援的格式：
+    # - feature/JIRA-123 或 feature/jira-123
+    # - feature/ISSUE-001 或 feature/issue-001  
+    # - feature/PROJ-456 或 feature/proj-456
+    # - 任何 {字詞}-{數字} 的組合
+    
+    # 優先匹配 feature/ 後面的格式
+    if [[ "$current_branch" =~ feature/([a-zA-Z][a-zA-Z0-9]*-[0-9]+) ]]; then
+        suggested_key="${BASH_REMATCH[1]}"
+        # 轉換為大寫格式（標準化）
+        suggested_key=$(echo "$suggested_key" | tr '[:lower:]' '[:upper:]')
+        info_msg "從分支名稱 '$current_branch' 提取到 issue key: $suggested_key"
     else
-        printf "請輸入 issue key (例: ISSUE-123, JIRA-456, 或直接按 Enter 自動判斷): " >&2
-        read -r issue_key
-        issue_key=$(echo "$issue_key" | xargs)
+        # 嘗試匹配分支名稱中任何位置的 {字詞}-{數字} 格式
+        if [[ "$current_branch" =~ ([a-zA-Z][a-zA-Z0-9]*-[0-9]+) ]]; then
+            suggested_key="${BASH_REMATCH[1]}"
+            # 轉換為大寫格式（標準化）
+            suggested_key=$(echo "$suggested_key" | tr '[:lower:]' '[:upper:]')
+            info_msg "從分支名稱 '$current_branch' 提取到 issue key: $suggested_key"
+        else
+            # 嘗試更寬鬆的匹配：任何字母開頭後跟連字號和數字
+            local possible_keys
+            possible_keys=$(echo "$current_branch" | grep -oE '[a-zA-Z][a-zA-Z0-9]*-[0-9]+' | head -1)
+            if [ -n "$possible_keys" ]; then
+                suggested_key=$(echo "$possible_keys" | tr '[:lower:]' '[:upper:]')
+                info_msg "從分支名稱 '$current_branch' 提取到可能的 issue key: $suggested_key"
+            fi
+        fi
     fi
     
-    # Issue key 可以為空（可選）
-    if [ -z "$issue_key" ]; then
-        issue_key="FEATURE"  # 預設值
-        info_msg "使用預設 issue key: $issue_key"
+    # 2. 顯示分支名稱作為參考並要求手動輸入
+    echo >&2
+    info_msg "當前分支名稱: $current_branch"
+    if [ -n "$suggested_key" ]; then
+        printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
+    else
+        printf "請輸入 issue key (例: ISSUE-123, JIRA-456, PROJ-001, TASK-789): " >&2
     fi
+    
+    # 3. 強制手動輸入，重複提示直到獲得有效輸入
+    while [ -z "$issue_key" ]; do
+        read -r user_input
+        user_input=$(echo "$user_input" | xargs)
+        
+        if [ -n "$user_input" ]; then
+            # 驗證和標準化 issue key
+            local validated_key
+            local validation_result
+            validated_key=$(validate_and_standardize_issue_key "$user_input")
+            validation_result=$?
+            
+            case $validation_result in
+                0)
+                    issue_key="$validated_key"
+                    info_msg "✅ 使用標準格式 issue key: $issue_key"
+                    ;;
+                1)
+                    warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)" >&2
+                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                    if [ -n "$suggested_key" ]; then
+                        printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
+                    else
+                        printf "請輸入 issue key (例: ISSUE-123, JIRA_456, PROJ-001): " >&2
+                    fi
+                    ;;
+                2)
+                    warning_msg "❌ Issue key 必須以英文字母開頭" >&2
+                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                    if [ -n "$suggested_key" ]; then
+                        printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
+                    else
+                        printf "請輸入 issue key (例: ISSUE-123, JIRA_456, PROJ-001): " >&2
+                    fi
+                    ;;
+                3)
+                    issue_key="$validated_key"
+                    warning_msg "⚠️  接受的 issue key: $issue_key" >&2
+                    warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}" >&2
+                    ;;
+            esac
+        else
+            # 強制用戶輸入，不接受空輸入
+            warning_msg "⚠️  Issue key 不能為空，請輸入有效的 issue key" >&2
+            if [ -n "$suggested_key" ]; then
+                printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
+            else
+                printf "請輸入 issue key (例: ISSUE-123, JIRA_456, PROJ-001): " >&2
+            fi
+        fi
+    done
     
     # 生成 PR 標題和內容
     local pr_title
@@ -1159,7 +1297,7 @@ execute_full_pr_workflow() {
     
     echo >&2
     success_msg "✅ 分支建立完成，請開始開發..."
-    warning_msg "⏸️  開發完成後，請再次執行此腳本選擇「提交並推送變更」或「完整 PR 流程」"
+    warning_msg "⏸️  開發完成後，請再次執行此腳本選擇「完整 PR 流程」"
     
     # 提示用戶開發完成後的操作
     printf "\n開發完成後是否繼續後續流程？[y/N]: " >&2
@@ -1183,43 +1321,6 @@ execute_full_pr_workflow() {
     else
         info_msg "👋 流程暫停，開發完成後請繼續執行後續步驟"
     fi
-}
-
-# 全自動 PR 模式
-execute_auto_pr_workflow() {
-    info_msg "🤖 執行全自動 PR 流程..."
-    
-    # 檢查當前狀態
-    local current_branch
-    current_branch=$(get_current_branch)
-    
-    # 如果在主分支，需要先建立功能分支
-    local main_branch
-    main_branch=$(get_main_branch)
-    
-    if [ "$current_branch" = "$main_branch" ]; then
-        warning_msg "當前在主分支 ($main_branch)，全自動模式需要先建立功能分支"
-        handle_error "請先切換到功能分支或使用互動模式建立分支"
-    fi
-    
-    # 如果有未提交的變更，自動提交並推送
-    local status
-    status=$(git status --porcelain 2>/dev/null)
-    
-    if [ -n "$status" ]; then
-        info_msg "檢測到未提交的變更，自動提交並推送..."
-        if ! execute_commit_and_push; then
-            handle_error "自動提交推送失敗"
-        fi
-    fi
-    
-    # 建立 Pull Request
-    info_msg "自動建立 Pull Request..."
-    if ! execute_create_pr; then
-        handle_error "自動建立 PR 失敗"
-    fi
-    
-    success_msg "🎉 全自動 PR 流程執行完成！"
 }
 
 # 審查與合併 PR (專案擁有者功能)

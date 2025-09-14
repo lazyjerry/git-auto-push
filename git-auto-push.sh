@@ -137,6 +137,9 @@ add_all_files() {
 clean_ai_message() {
     local message="$1"
     
+    # 顯示原始訊息用於比較
+    printf "\033[0;90m🔍 AI 原始輸出: '%s'\033[0m\n" "$message" >&2
+    
     # 移除前後空白、換行符號
     message=$(echo "$message" | xargs)
     
@@ -148,6 +151,9 @@ clean_ai_message() {
     
     # 移除多餘的空白
     message=$(echo "$message" | sed 's/  */ /g' | xargs)
+    
+    # 顯示清理後的訊息用於比較
+    printf "\033[0;90m🧹 清理後輸出: '%s'\033[0m\n" "$message" >&2
     
     echo "$message"
 }

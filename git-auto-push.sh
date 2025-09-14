@@ -298,7 +298,7 @@ run_command_with_loading() {
 # 執行 codex 命令並處理輸出
 run_codex_command() {
     local prompt="$1"
-    local timeout=45  # 增加超時時間到 45 秒
+    local timeout=60  # 增加超時時間到 60 秒，給複雜分析更多時間
     
     info_msg "正在調用 codex..." >&2
     
@@ -308,15 +308,23 @@ run_codex_command() {
         return 1
     fi
     
+    # 檢查 git diff 大小，如果太大則增加超時
+    local diff_size
+    diff_size=$(git diff --cached 2>/dev/null | wc -l)
+    if [ "$diff_size" -gt 500 ]; then
+        timeout=90  # 大型 diff 使用 90 秒超時
+        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
+    fi
+    
     # 使用帶 loading 的命令執行
     local output
     local exit_code
     
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec '$prompt'" "正在等待 codex 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec '$prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec '$prompt'" "正在等待 codex 回應" "$timeout")
+        output=$(run_command_with_loading "codex exec '$prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     fi
     
@@ -336,7 +344,12 @@ run_codex_command() {
     fi
     
     if [ $exit_code -eq 124 ]; then
-        warning_msg "codex 執行超時（${timeout}秒）" >&2
+        printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
+        printf "\033[1;33m💡 可能原因和解決方案：\033[0m\n" >&2
+        printf "   1. 網路連接緩慢 - 請檢查網路狀況\n" >&2
+        printf "   2. 變更內容過大 - 嘗試分批提交較小的變更\n" >&2
+        printf "   3. API 服務繁忙 - 稍後重試或使用其他 AI 工具\n" >&2
+        printf "\033[0;36m   🔄 腳本會自動嘗試下一個 AI 工具...\033[0m\n" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
         # 檢查輸出中是否包含錯誤訊息
@@ -350,18 +363,44 @@ run_codex_command() {
         return 1
     fi
     
-    # 過濾 codex 的系統輸出，只保留實際的回應內容
+    # 改進的輸出過濾邏輯
     local filtered_output
-    filtered_output=$(echo "$output" | grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$)" | tail -n 1)
     
+    # 記錄原始輸出用於調試（可選）
+    # printf "DEBUG - 原始 codex 輸出:\n%s\n" "$output" >&2
+    
+    # 多階段過濾：先移除系統輸出，再提取有效內容
+    filtered_output=$(echo "$output" | \
+        grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex)" | \
+        grep -v -E "^(effort:|summaries:)" | \
+        tail -n 5 | \
+        grep -E ".+" | \
+        head -n 1)
+    
+    # 如果第一次過濾失敗，嘗試更寬鬆的過濾
     if [ -z "$filtered_output" ]; then
-        warning_msg "codex 沒有返回有效內容" >&2
-        return 1
+        filtered_output=$(echo "$output" | \
+            sed '/^\[.*\]/d; /^workdir:/d; /^model:/d; /^provider:/d; /^approval:/d; /^sandbox:/d; /^reasoning/d; /^tokens used:/d; /^-------/d; /^User instructions:/d; /^codex$/d; /^$/d; /^OpenAI Codex/d' | \
+            tail -n 3 | \
+            head -n 1)
     fi
     
-    success_msg "codex 回應完成" >&2
-    echo "$filtered_output"
-    return 0
+    # 最終檢查和清理
+    if [ -n "$filtered_output" ]; then
+        # 移除可能的前後空白和特殊字符
+        filtered_output=$(echo "$filtered_output" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+        
+        # 檢查是否為有效的 commit message（長度大於 3 且不全是特殊字符）
+        if [ ${#filtered_output} -gt 3 ] && [[ "$filtered_output" =~ [a-zA-Z0-9\u4e00-\u9fff] ]]; then
+            success_msg "codex 回應完成" >&2
+            echo "$filtered_output"
+            return 0
+        fi
+    fi
+    
+    warning_msg "codex 沒有返回有效的 commit message 內容" >&2
+    printf "調試信息 - 過濾後內容: '%s'\n" "$filtered_output" >&2
+    return 1
 }
 
 # 執行基於 stdin 的 AI 命令

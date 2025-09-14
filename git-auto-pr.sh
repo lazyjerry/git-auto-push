@@ -912,6 +912,10 @@ execute_create_branch() {
                 ;;
         esac
     done
+
+    # 確保 issue_key 為大寫格式（標準化）
+    issue_key=$(echo "$issue_key" | tr '[:lower:]' '[:upper:]')
+    info_msg "📝 最終 issue key: $issue_key" >&2
     
     # 獲取功能描述
     printf "請輸入功能簡短描述 (例: add user authentication): " >&2

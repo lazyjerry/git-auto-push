@@ -742,6 +742,7 @@ generate_pr_content_with_ai() {
                 if result=$(run_codex_command "$prompt"); then
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成 PR 內容成功" >&2
+                        success_msg "$result" >&2
                         echo "$result"
                         return 0
                     fi
@@ -751,6 +752,7 @@ generate_pr_content_with_ai() {
                 if result=$(run_ai_tool_command "$tool" "$prompt"); then
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成 PR 內容成功" >&2
+                        success_msg "$result" >&2
                         echo "$result"
                         return 0
                     fi
@@ -1297,10 +1299,16 @@ execute_create_pr() {
         info_msg "🤖 使用 AI 生成 PR 內容..."
         
         if pr_content=$(generate_pr_content_with_ai "$issue_key" "$current_branch"); then
-            # 解析 AI 生成的內容（假設格式為 "標題|||內容"）
+            # 解析 AI 生成的內容（格式為 "標題|||內容"）
             if [[ "$pr_content" == *"|||"* ]]; then
-                pr_title=$(echo "$pr_content" | cut -d'|' -f1 | xargs)
-                pr_body=$(echo "$pr_content" | cut -d'|' -f2- | sed 's/^||*//')
+                # 正確分割標題和內容：標題是第一行 ||| 之前的部分
+                pr_title=$(echo "$pr_content" | sed -n '1s/|||.*//p' | xargs)
+                # 內容是第一行 ||| 之後的部分，加上其餘行
+                if echo "$pr_content" | head -n 1 | grep -q '|||'; then
+                    pr_body=$(echo "$pr_content" | sed '1s/^[^|]*|||\s*//')
+                else
+                    pr_body=$(echo "$pr_content" | sed '1d')
+                fi
             else
                 pr_title="$pr_content"
                 pr_body="Issue: $issue_key\nSummary: Implement feature as described in $issue_key"
@@ -1309,8 +1317,12 @@ execute_create_pr() {
             # 應用格式化處理
             local formatted_content
             formatted_content=$(format_pr_content "$pr_title" "$pr_body")
-            pr_title=$(echo "$formatted_content" | cut -d'|' -f1)
-            pr_body=$(echo "$formatted_content" | cut -d'|' -f2- | sed 's/^||*//')
+            pr_title=$(echo "$formatted_content" | sed -n '1s/|||.*//p')
+            if echo "$formatted_content" | head -n 1 | grep -q '|||'; then
+                pr_body=$(echo "$formatted_content" | sed '1s/^[^|]*|||\s*//')
+            else
+                pr_body=$(echo "$formatted_content" | sed '1d')
+            fi
             
             echo >&2
             info_msg "🎯 格式化後的 PR 標題:"
@@ -1367,8 +1379,12 @@ execute_create_pr() {
     # 對最終的 PR 內容應用格式化處理
     local final_formatted_content
     final_formatted_content=$(format_pr_content "$pr_title" "$pr_body")
-    pr_title=$(echo "$final_formatted_content" | cut -d'|' -f1)
-    pr_body=$(echo "$final_formatted_content" | cut -d'|' -f2- | sed 's/^||*//')
+    pr_title=$(echo "$final_formatted_content" | sed -n '1s/|||.*//p')
+    if echo "$final_formatted_content" | head -n 1 | grep -q '|||'; then
+        pr_body=$(echo "$final_formatted_content" | sed '1s/^[^|]*|||\s*//')
+    else
+        pr_body=$(echo "$final_formatted_content" | sed '1d')
+    fi
     
     # 顯示最終格式化的 PR 預覽
     echo >&2

@@ -149,14 +149,11 @@ git-auto-pr --auto
 
 #### git-auto-pr.sh 操作模式
 
-| 模式             | 功能描述                             | 使用情境               |
-| ---------------- | ------------------------------------ | ---------------------- |
-| 1. 建立功能分支  | 基於 main 建立 feature 分支          | 開始新功能開發         |
-| 2. 提交並推送    | add → commit → push                  | 功能開發完成後提交     |
-| 3. 建立 PR       | 基於當前分支建立 Pull Request        | 提交代碼審查           |
-| 4. 完整 PR 流程  | 建立分支 → 開發提示 → 提交 → 建立 PR | 新功能開發完整流程     |
-| 5. 全自動 PR     | 自動提交 → 自動建立 PR               | 快速提交並建立審查流程 |
-| 6. 審查與合併 PR | 審查 → 批准/請求變更 → 合併 → 更新   | 專案擁有者 PR 管理     |
+| 模式             | 功能描述                      | 使用情境           |
+| ---------------- | ----------------------------- | ------------------ |
+| 1. 建立功能分支  | 基於 main 建立 feature 分支   | 開始新功能開發     |
+| 2. 建立 PR       | 基於當前分支建立 Pull Request | 提交代碼審查       |
+| 3. 審查與合併 PR | 審查 → 批准/請求變更 → 合併   | 專案擁有者 PR 管理 |
 
 #### GitHub Flow 工作流程特色
 
@@ -206,16 +203,16 @@ git-auto-pr --auto
 
 ### git-auto-pr.sh 使用情境 ✨
 
-#### 完整 GitHub Flow 開發流程
+#### GitHub Flow 開發流程
 
 ```bash
 # 1. 開始新功能開發
 ./git-auto-pr.sh
 # 選擇選項 1，輸入 JIRA-123 和功能描述，AI 生成分支名稱
 
-# 2. 開發完成後提交並建立 PR
+# 2. 開發完成後建立 PR
 ./git-auto-pr.sh
-# 選擇選項 1 繼續，或直接選項 3→4
+# 選擇選項 2，AI 生成 PR 標題和內容
 ```
 
 #### 快速 PR 建立
@@ -229,15 +226,11 @@ git-auto-pr --auto
 
 ```bash
 # 1. 建立功能分支
-./git-auto-pr.sh  # 選擇選項 2
+./git-auto-pr.sh  # 選擇選項 1
 # 輸入 JIRA-123，開發完成後...
 
-# 2. 提交變更
-./git-auto-pr.sh  # 選擇選項 3
-# AI 生成 commit message
-
-# 3. 建立 PR
-./git-auto-pr.sh  # 選擇選項 4
+# 2. 建立 PR
+./git-auto-pr.sh  # 選擇選項 2
 # AI 生成 PR 標題和內容
 ```
 
@@ -246,23 +239,20 @@ git-auto-pr --auto
 ```bash
 # 開發者：基於 main 分支開始新功能
 git checkout main && git pull
-./git-auto-pr.sh  # 建立 feature/JIRA-123-new-feature
-
-# 開發者：開發中途提交進度
-./git-auto-pr.sh  # 選擇選項 2，持續提交
+./git-auto-pr.sh  # 選擇選項 1，建立 feature/JIRA-123-new-feature
 
 # 開發者：功能完成，建立 PR 供審查
-./git-auto-pr.sh  # 選擇選項 3，建立 PR
+./git-auto-pr.sh  # 選擇選項 2，建立 PR
 
 # 專案擁有者：審查並合併 PR
-./git-auto-pr.sh  # 選擇選項 6，審查 → 批准 → 合併
+./git-auto-pr.sh  # 選擇選項 3，審查 → 批准 → 合併
 ```
 
 #### 專案擁有者 PR 管理
 
 ```bash
 # 查看和審查待處理的 PR
-./git-auto-pr.sh  # 選擇選項 6
+./git-auto-pr.sh  # 選擇選項 3
 
 # 系統會自動：
 # 1. 列出所有待審查的 PR
@@ -662,8 +652,20 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理指導
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
 
+## 截圖展示
+
+| 功能            | 描述                            | 截圖                                             |
+| --------------- | ------------------------------- | ------------------------------------------------ |
+| 主選單介面      | git-auto-pr.sh 主要操作選單     | ![主選單](screenshots/main-menu.png)             |
+| AI 提交訊息生成 | AI 自動生成 Git 提交訊息        | ![AI 提交](screenshots/ai-commit-generation.png) |
+| 全自動模式      | git-auto-push.sh 全自動操作模式 | ![自動模式](screenshots/auto-mode.png)           |
+| PR 建立（CLI）  | 命令列 PR 建立流程              | ![PR CLI](screenshots/pr-screenshot-cli.png)     |
+| PR 建立（Web）  | GitHub 網頁 PR 建立結果         | ![PR Web](screenshots/pr-screenshot-web.png)     |
+
 ## 授權條款
 
-本專案採用 MIT License 授權條款。詳細內容請參閱 [LICENSE](LICENSE) 檔案。
-# 測試超時改進 2025年 9月15日 週一 00時08分43秒 CST
-# 測試調試功能改進 2025年 9月15日 週一 00時28分53秒 CST
+本專案採用 MIT 授權條款。詳細資訊請參閱 [LICENSE](LICENSE) 檔案。
+
+# 測試超時改進 2025 年 9 月 15 日 週一 00 時 08 分 43 秒 CST
+
+# 測試調試功能改進 2025 年 9 月 15 日 週一 00 時 28 分 53 秒 CST

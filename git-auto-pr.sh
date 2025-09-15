@@ -539,7 +539,7 @@ format_pr_content() {
             body="## 📝 功能變更
 $body
 
-## � 技術實作
+## 🔧 技術實作
 - [ ] 功能測試通過"
         else
             # 為較長內容添加簡化結構
@@ -789,7 +789,7 @@ show_operation_menu() {
     fi
     echo "==================================================" >&2
     printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
-    printf "\033[1;32m2.\033[0m � 建立 Pull Request\n" >&2
+    printf "\033[1;32m2.\033[0m 🔄 建立 Pull Request\n" >&2
     printf "\033[1;31m3.\033[0m ❌ 撤銷當前 PR\n" >&2
     printf "\033[1;35m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
     echo "==================================================" >&2
@@ -1477,7 +1477,7 @@ execute_cancel_pr() {
     merged_at=$(echo "$pr_info" | jq -r '.mergedAt')
     
     echo >&2
-    success_msg "找到 PR #$pr_number: $pr_title"
+    success_msg "找到 PR #${pr_number}: $pr_title"
     printf "\033[0;36m🔗 PR 連結: %s\033[0m\n" "$pr_url" >&2
     printf "\033[0;33m📊 PR 狀態: %s\033[0m\n" "$pr_state" >&2
     
@@ -1486,7 +1486,7 @@ execute_cancel_pr() {
     elif [ "$pr_state" = "OPEN" ]; then
         handle_open_pr "$pr_number" "$pr_title" "$pr_url"
     elif [ "$pr_state" = "CLOSED" ]; then
-        warning_msg "PR #$pr_number 已經被關閉"
+        warning_msg "PR #${pr_number} 已經被關閉"
         printf "PR 狀態: %s\n" "$pr_state" >&2
         printf "是否要重新打開此 PR？[y/N]: " >&2
         read -r reopen_confirm
@@ -1494,9 +1494,9 @@ execute_cancel_pr() {
         
         if [[ "$reopen_confirm" =~ ^(y|yes|是|確定)$ ]]; then
             if gh pr reopen "$pr_number"; then
-                success_msg "已重新打開 PR #$pr_number"
+                success_msg "已重新打開 PR #${pr_number}"
             else
-                handle_error "無法重新打開 PR #$pr_number"
+                handle_error "無法重新打開 PR #${pr_number}"
             fi
         fi
     else
@@ -1510,7 +1510,7 @@ handle_merged_pr() {
     local pr_title="$2"
     local merged_at="$3"
     
-    warning_msg "PR #$pr_number 已經合併"
+    warning_msg "PR #${pr_number} 已經合併"
     printf "\033[0;33m⏰ 合併時間: %s\033[0m\n" "$merged_at" >&2
     
     # 獲取 PR 合併後的 commit 資訊
@@ -1550,7 +1550,7 @@ handle_merged_pr() {
         if [ -n "$merge_commit" ] && [ "$merge_commit" != "null" ]; then
             info_msg "🔄 執行 revert 操作..."
             if git revert -m 1 "$merge_commit" --no-edit; then
-                success_msg "已成功 revert PR #$pr_number 的變更"
+                success_msg "已成功 revert PR #${pr_number} 的變更"
                 printf "\033[0;33m⚠️  請檢查 revert 結果並視需要推送變更\033[0m\n" >&2
                 printf "推送命令: \033[0;36mgit push origin %s\033[0m\n" "$(get_main_branch)" >&2
             else
@@ -1570,7 +1570,7 @@ handle_open_pr() {
     local pr_title="$2"
     local pr_url="$3"
     
-    warning_msg "PR #$pr_number 目前狀態為開放中"
+    warning_msg "PR #${pr_number} 目前狀態為開放中"
     
     echo >&2
     echo "==================================================" >&2
@@ -1612,25 +1612,31 @@ handle_open_pr() {
 handle_close_pr_keep_branch() {
     local pr_number="$1"
     
+    # 驗證 PR 編號是否有效
+    if [ -z "$pr_number" ] || [ "$pr_number" = "null" ]; then
+        handle_error "無效的 PR 編號"
+        return 1
+    fi
+    
     printf "請輸入關閉原因 (可選): " >&2
     read -r close_reason
     
-    info_msg "🚫 關閉 PR #$pr_number（保留分支）..."
+    info_msg "🚫 關閉 PR #${pr_number}（保留分支）..."
     
     if [ -n "$close_reason" ]; then
         if gh pr close "$pr_number" --comment "$close_reason"; then
-            success_msg "✅ 已成功關閉 PR #$pr_number"
+            success_msg "✅ 已成功關閉 PR #${pr_number}"
             printf "\033[0;33m💬 關閉原因: %s\033[0m\n" "$close_reason" >&2
             info_msg "📌 功能分支已保留，可稍後重新開啟 PR"
         else
-            handle_error "無法關閉 PR #$pr_number"
+            handle_error "無法關閉 PR #${pr_number}"
         fi
     else
         if gh pr close "$pr_number"; then
-            success_msg "✅ 已成功關閉 PR #$pr_number"
+            success_msg "✅ 已成功關閉 PR #${pr_number}"
             info_msg "📌 功能分支已保留，可稍後重新開啟 PR"
         else
-            handle_error "無法關閉 PR #$pr_number"
+            handle_error "無法關閉 PR #${pr_number}"
         fi
     fi
 }
@@ -1638,6 +1644,12 @@ handle_close_pr_keep_branch() {
 # 添加評論
 handle_add_comment() {
     local pr_number="$1"
+    
+    # 驗證 PR 編號是否有效
+    if [ -z "$pr_number" ] || [ "$pr_number" = "null" ]; then
+        handle_error "無效的 PR 編號"
+        return 1
+    fi
     
     printf "請輸入要添加的評論: " >&2
     read -r comment_text
@@ -1647,14 +1659,14 @@ handle_add_comment() {
         return 1
     fi
     
-    info_msg "💬 為 PR #$pr_number 添加評論..."
+    info_msg "💬 為 PR #${pr_number} 添加評論..."
     
     if gh pr comment "$pr_number" --body "$comment_text"; then
-        success_msg "✅ 已成功添加評論到 PR #$pr_number"
+        success_msg "✅ 已成功添加評論到 PR #${pr_number}"
         printf "\033[0;33m💬 評論內容: %s\033[0m\n" "$comment_text" >&2
         info_msg "📌 PR 保持開放狀態，可繼續開發或等待審查"
     else
-        handle_error "無法為 PR #$pr_number 添加評論"
+        handle_error "無法為 PR #${pr_number} 添加評論"
     fi
 }
 

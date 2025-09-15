@@ -10,6 +10,7 @@
 
 - 傳統 Git 工作流程完全自動化（添加、提交、推送）
 - GitHub Flow PR 流程端到端自動化（分支建立到 PR 建立）
+- **PR 生命週期完整管理**（建立、撤銷、審查、合併）
 - AI 驅動的智慧內容生成（commit 訊息、分支名稱、PR 內容）
 - 企業級錯誤處理與智慧修復建議
 - 多 AI 工具整合與自動容錯機制
@@ -20,8 +21,8 @@
 ### 核心組件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1054 行）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（1450 行）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1190 行）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（1876 行）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤檢測      # 認證過期、網路錯誤自動識別
 │   ├── 友善錯誤提示      # 提供具體解決方案
@@ -46,7 +47,8 @@
 │   └── instructions/              # 代碼生成規範
 │       └── copilot-readme.instructions.md
 ├── docs/                # 文件目錄
-│   └── github-flow.md   # GitHub Flow 流程說明
+│   ├── github-flow.md   # GitHub Flow 流程說明
+│   └── pr-cancel-feature.md  # PR 撤銷功能說明
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
@@ -160,6 +162,8 @@ git-auto-pr --auto
 
 - **Issue 整合**: 支援 JIRA、GitHub Issue 等多種編號格式
 - **AI 智慧生成**: 分支名稱、commit message、PR 標題和內容均可 AI 輔助
+- **PR 生命週期管理**: 建立 → 撤銷 → 審查 → 合併，完整覆蓋 PR 各階段操作
+- **智慧撤銷機制**: 自動檢測 PR 狀態，提供安全的關閉或 revert 選項
 - **完整驗證**: 檢查 Git 倉庫、gh CLI 登入狀態、分支狀態
 - **企業級錯誤處理**: 智慧錯誤檢測與友善修復建議
 - **中斷恢復**: 支援 Ctrl+C 中斷與優雅清理
@@ -325,10 +329,12 @@ git checkout main && git pull
 **GitHub Flow 流程（git-auto-pr.sh）**
 
 - 端到端 PR 流程自動化
+- **智慧 PR 撤銷系統** 🆕：自動檢測 PR 狀態，安全處理開放和已合併 PR
 - **智慧分支配置系統** ✨：可配置主分支候選清單，按優先順序自動檢測
 - 分支錯誤處理：找不到主分支時提供詳細解決建議和修復命令
 - 分支狀態智慧驗證
 - **PR 審查管理**：自動檢測用戶身份避免自我批准，提供團隊審查或直接合併選項
+- **安全保護機制**：revert 操作預設為否，顯示詳細影響分析
 
 ## 錯誤排除
 
@@ -386,6 +392,20 @@ GitHub 安全政策不允許開發者批准自己的 PR。解決方案：
 - 請其他團隊成員使用此工具進行審查
 - 如有權限可選擇直接合併
 - 或使用評論功能進行自我記錄
+
+**PR 撤銷相關錯誤**
+
+```bash
+❌ 當前分支沒有找到相關的 PR
+⚠️  PR 已經合併，執行 revert 會影響到後續變更
+```
+
+PR 撤銷功能的常見情況處理：
+
+- **找不到 PR**：確認在正確的功能分支上，或手動檢查其他分支
+- **已合併 PR**：系統會顯示影響範圍，revert 操作預設為否需明確確認
+- **revert 衝突**：按提示手動解決衝突後完成操作
+- **權限不足**：確保有關閉 PR 或推送到主分支的權限
 
 **主分支自動檢測**
 
@@ -638,6 +658,28 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
+### v1.3.0 - PR 撤銷功能與選單重構 (2025-09-15)
+
+**🆕 新功能**
+
+- **PR 撤銷系統**：新增智慧 PR 撤銷功能，支援開放中 PR 關閉和已合併 PR 的 revert
+- **安全檢查機制**：顯示合併後影響的 commit 數量，revert 操作預設為否
+- **選單結構優化**：將 PR 管理子選項提升為主選項，操作更直觀
+
+**🔧 改進**
+
+- 選單重構：從 3 選項擴展為 4 選項，移除子選單層級
+- 智慧分析：檢測 PR 狀態並提供對應操作選項（關閉/revert）
+- 安全設計：所有破壞性操作都需要用戶明確確認
+
+**📁 新增文檔**
+
+- `docs/pr-cancel-feature.md` - PR 撤銷功能詳細說明
+
+**📊 行數統計更新**
+
+- `git-auto-pr.sh`：1876 行（+426 行）
+
 ### v1.2.0 - 分支配置系統 (2025-09-14)
 
 **🆕 新功能**
@@ -669,6 +711,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - [AGENTS.md](AGENTS.md) - 詳細開發指引
 - [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理指導
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
+- [docs/pr-cancel-feature.md](docs/pr-cancel-feature.md) - PR 撤銷功能詳細說明
 
 ## 截圖展示
 

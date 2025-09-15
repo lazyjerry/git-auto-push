@@ -1573,69 +1573,90 @@ handle_open_pr() {
     warning_msg "PR #$pr_number 目前狀態為開放中"
     
     echo >&2
-    printf "\033[1;31m是否要關閉此 PR？[y/N]: \033[0m" >&2
-    read -r close_confirm
-    close_confirm=$(echo "$close_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+    echo "==================================================" >&2
+    info_msg "請選擇對開放中 PR 的處理方式:" >&2
+    echo "==================================================" >&2
+    printf "\033[1;32m1.\033[0m 🚫 關閉 PR（保留分支）\n" >&2
+    printf "\033[1;33m2.\033[0m  添加評論後保持開放\n" >&2
+    printf "\033[1;36m3.\033[0m ❌ 取消操作\n" >&2
+    echo "==================================================" >&2
+    printf "請輸入選項 [1-3]: " >&2
     
-    if [[ "$close_confirm" =~ ^(y|yes|是|確定)$ ]]; then
-        printf "請輸入關閉原因 (可選): " >&2
-        read -r close_reason
-        
-        info_msg "🔄 關閉 PR #$pr_number..."
-        
-        if [ -n "$close_reason" ]; then
-            if gh pr close "$pr_number" --comment "$close_reason"; then
-                success_msg "已成功關閉 PR #$pr_number"
-                printf "\033[0;33m💬 關閉原因: %s\033[0m\n" "$close_reason" >&2
-            else
-                handle_error "無法關閉 PR #$pr_number"
-            fi
+    local choice
+    read -r choice
+    choice=$(echo "$choice" | xargs)
+    
+    case "$choice" in
+        1)
+            # 關閉 PR（保留分支）
+            handle_close_pr_keep_branch "$pr_number"
+            ;;
+        2)
+            # 添加評論
+            handle_add_comment "$pr_number"
+            ;;
+        3)
+            # 取消操作
+            info_msg "已取消 PR 操作"
+            return 0
+            ;;
+        *)
+            warning_msg "無效的選項: $choice"
+            # 遞迴調用，重新選擇
+            handle_open_pr "$pr_number" "$pr_title" "$pr_url"
+            ;;
+    esac
+}
+
+# 關閉 PR（保留分支）
+handle_close_pr_keep_branch() {
+    local pr_number="$1"
+    
+    printf "請輸入關閉原因 (可選): " >&2
+    read -r close_reason
+    
+    info_msg "🚫 關閉 PR #$pr_number（保留分支）..."
+    
+    if [ -n "$close_reason" ]; then
+        if gh pr close "$pr_number" --comment "$close_reason"; then
+            success_msg "✅ 已成功關閉 PR #$pr_number"
+            printf "\033[0;33m💬 關閉原因: %s\033[0m\n" "$close_reason" >&2
+            info_msg "📌 功能分支已保留，可稍後重新開啟 PR"
         else
-            if gh pr close "$pr_number"; then
-                success_msg "已成功關閉 PR #$pr_number"
-            else
-                handle_error "無法關閉 PR #$pr_number"
-            fi
-        fi
-        
-        # 詢問是否要刪除分支
-        echo >&2
-        printf "是否要刪除本地和遠端的功能分支？[y/N]: " >&2
-        read -r delete_branch_confirm
-        delete_branch_confirm=$(echo "$delete_branch_confirm" | xargs | tr '[:upper:]' '[:lower:]')
-        
-        if [[ "$delete_branch_confirm" =~ ^(y|yes|是|確定)$ ]]; then
-            local current_branch
-            current_branch=$(get_current_branch)
-            local main_branch
-            main_branch=$(get_main_branch)
-            
-            # 切換到主分支
-            info_msg "切換到 $main_branch 分支..."
-            git checkout "$main_branch"
-            
-            # 刪除本地分支
-            info_msg "刪除本地分支 '$current_branch'..."
-            if git branch -D "$current_branch"; then
-                success_msg "已刪除本地分支 '$current_branch'"
-            else
-                warning_msg "無法刪除本地分支 '$current_branch'"
-            fi
-            
-            # 刪除遠端分支
-            info_msg "刪除遠端分支 '$current_branch'..."
-            if git push origin --delete "$current_branch"; then
-                success_msg "已刪除遠端分支 '$current_branch'"
-            else
-                warning_msg "無法刪除遠端分支 '$current_branch'"
-            fi
+            handle_error "無法關閉 PR #$pr_number"
         fi
     else
-        info_msg "已取消關閉 PR 操作"
+        if gh pr close "$pr_number"; then
+            success_msg "✅ 已成功關閉 PR #$pr_number"
+            info_msg "📌 功能分支已保留，可稍後重新開啟 PR"
+        else
+            handle_error "無法關閉 PR #$pr_number"
+        fi
     fi
 }
 
-
+# 添加評論
+handle_add_comment() {
+    local pr_number="$1"
+    
+    printf "請輸入要添加的評論: " >&2
+    read -r comment_text
+    
+    if [ -z "$comment_text" ]; then
+        warning_msg "評論內容不能為空"
+        return 1
+    fi
+    
+    info_msg "💬 為 PR #$pr_number 添加評論..."
+    
+    if gh pr comment "$pr_number" --body "$comment_text"; then
+        success_msg "✅ 已成功添加評論到 PR #$pr_number"
+        printf "\033[0;33m💬 評論內容: %s\033[0m\n" "$comment_text" >&2
+        info_msg "📌 PR 保持開放狀態，可繼續開發或等待審查"
+    else
+        handle_error "無法為 PR #$pr_number 添加評論"
+    fi
+}
 
 # 審查與合併 PR (專案擁有者功能)
 execute_review_and_merge() {

@@ -789,10 +789,11 @@ show_operation_menu() {
     fi
     echo "==================================================" >&2
     printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
-    printf "\033[1;35m2.\033[0m � 建立 Pull Request\n" >&2
-    printf "\033[1;31m3.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
+    printf "\033[1;32m2.\033[0m � 建立 Pull Request\n" >&2
+    printf "\033[1;31m3.\033[0m ❌ 撤銷當前 PR\n" >&2
+    printf "\033[1;35m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-3]: " >&2
+    printf "請輸入選項 [1-4]: " >&2
 }
 
 # 獲取用戶選擇的操作
@@ -821,12 +822,17 @@ get_operation_choice() {
                 return 0
                 ;;
             3)
+                info_msg "✅ 已選擇：撤銷當前 PR" >&2
+                echo "$choice"
+                return 0
+                ;;
+            4)
                 info_msg "✅ 已選擇：審查與合併 PR (專案擁有者)" >&2
                 echo "$choice"
                 return 0
                 ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2 或 3" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3 或 4" >&2
                 echo >&2
                 ;;
         esac
@@ -893,6 +899,9 @@ main() {
             execute_create_pr
             ;;
         3)
+            execute_cancel_pr
+            ;;
+        4)
             execute_review_and_merge
             ;;
     esac
@@ -1065,7 +1074,7 @@ execute_create_branch() {
     info_msg "📝 接下來您可以："
     printf "   1. 在 VS Code 中開始開發: \033[0;36mcode .\033[0m\n" >&2
     printf "   2. 執行測試: \033[0;36mnpm test\033[0m 或 \033[0;36mphp artisan test\033[0m\n" >&2
-    printf "   3. 完成開發後運行: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2 或 1)\n" >&2
+    printf "   3. 完成開發後運行: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2)\n" >&2
     echo >&2
 }
 
@@ -1141,7 +1150,7 @@ execute_commit_and_push() {
     
     echo >&2
     info_msg "📝 接下來您可以："
-    printf "   1. 建立 Pull Request: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2 或 1)\n" >&2
+    printf "   1. 建立 Pull Request: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2)\n" >&2
     printf "   2. 手動建立 PR: \033[0;36mgh pr create\033[0m\n" >&2
     echo >&2
 }
@@ -1410,6 +1419,219 @@ execute_create_pr() {
         printf "   2. 檢查 CI 狀態: \033[0;36mgh pr checks\033[0m\n" >&2
         printf "   3. 添加 reviewer: \033[0;36mgh pr edit --add-reviewer @team/leads\033[0m\n" >&2
         echo >&2
+    fi
+}
+
+# 撤銷當前 PR
+execute_cancel_pr() {
+    info_msg "❌ 撤銷當前 PR 流程..."
+    
+    # 檢查當前分支
+    local current_branch
+    current_branch=$(get_current_branch)
+    
+    local main_branch
+    main_branch=$(get_main_branch)
+    
+    # 顯示分支資訊
+    echo >&2
+    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
+    printf "\033[0;36m🎯 主分支: %s\033[0m\n" "$main_branch" >&2
+    echo >&2
+    
+    if [ "$current_branch" = "$main_branch" ]; then
+        handle_error "無法在主分支 ($main_branch) 上撤銷 PR"
+    fi
+    
+    # 檢查當前分支是否有 PR
+    info_msg "🔍 檢查當前分支的 PR 狀態..."
+    
+    local pr_info
+    pr_info=$(gh pr view --json number,state,mergeable,url,title,mergedAt 2>/dev/null)
+    
+    if [ -z "$pr_info" ]; then
+        warning_msg "當前分支 '$current_branch' 沒有找到相關的 PR"
+        printf "是否要檢查其他分支的 PR？[y/N]: " >&2
+        read -r check_other
+        check_other=$(echo "$check_other" | xargs | tr '[:upper:]' '[:lower:]')
+        
+        if [[ "$check_other" =~ ^(y|yes|是|確定)$ ]]; then
+            execute_review_and_merge
+        else
+            warning_msg "已取消操作"
+        fi
+        return 1
+    fi
+    
+    # 解析 PR 資訊
+    local pr_number
+    local pr_state
+    local pr_url
+    local pr_title
+    local merged_at
+    
+    pr_number=$(echo "$pr_info" | jq -r '.number')
+    pr_state=$(echo "$pr_info" | jq -r '.state')
+    pr_url=$(echo "$pr_info" | jq -r '.url')
+    pr_title=$(echo "$pr_info" | jq -r '.title')
+    merged_at=$(echo "$pr_info" | jq -r '.mergedAt')
+    
+    echo >&2
+    success_msg "找到 PR #$pr_number: $pr_title"
+    printf "\033[0;36m🔗 PR 連結: %s\033[0m\n" "$pr_url" >&2
+    printf "\033[0;33m📊 PR 狀態: %s\033[0m\n" "$pr_state" >&2
+    
+    if [ "$pr_state" = "MERGED" ]; then
+        handle_merged_pr "$pr_number" "$pr_title" "$merged_at"
+    elif [ "$pr_state" = "OPEN" ]; then
+        handle_open_pr "$pr_number" "$pr_title" "$pr_url"
+    elif [ "$pr_state" = "CLOSED" ]; then
+        warning_msg "PR #$pr_number 已經被關閉"
+        printf "PR 狀態: %s\n" "$pr_state" >&2
+        printf "是否要重新打開此 PR？[y/N]: " >&2
+        read -r reopen_confirm
+        reopen_confirm=$(echo "$reopen_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+        
+        if [[ "$reopen_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+            if gh pr reopen "$pr_number"; then
+                success_msg "已重新打開 PR #$pr_number"
+            else
+                handle_error "無法重新打開 PR #$pr_number"
+            fi
+        fi
+    else
+        warning_msg "未知的 PR 狀態: $pr_state"
+    fi
+}
+
+# 處理已合併的 PR
+handle_merged_pr() {
+    local pr_number="$1"
+    local pr_title="$2"
+    local merged_at="$3"
+    
+    warning_msg "PR #$pr_number 已經合併"
+    printf "\033[0;33m⏰ 合併時間: %s\033[0m\n" "$merged_at" >&2
+    
+    # 獲取 PR 合併後的 commit 資訊
+    info_msg "🔍 分析 PR 合併後的 commit 變更..."
+    
+    local merge_commit
+    merge_commit=$(gh pr view "$pr_number" --json mergeCommit --jq '.mergeCommit.oid' 2>/dev/null)
+    
+    if [ -n "$merge_commit" ] && [ "$merge_commit" != "null" ]; then
+        printf "\033[0;36m📝 合併 commit: %s\033[0m\n" "$merge_commit" >&2
+        
+        # 獲取合併後到現在的 commit 數量
+        local main_branch
+        main_branch=$(get_main_branch)
+        
+        local commits_after_pr
+        commits_after_pr=$(git rev-list --count "$merge_commit..$main_branch" 2>/dev/null || echo "0")
+        
+        printf "\033[0;33m📊 PR 合併後新增了 %s 個 commit\033[0m\n" "$commits_after_pr" >&2
+        
+        if [ "$commits_after_pr" -gt 0 ]; then
+            echo >&2
+            printf "\033[1;33m⚠️  注意: PR 合併後又有 %s 個新的 commit\033[0m\n" "$commits_after_pr" >&2
+            printf "執行 revert 會影響到這些新的變更\n" >&2
+            echo >&2
+            git log --oneline "$merge_commit..$main_branch" >&2
+            echo >&2
+        fi
+    fi
+    
+    echo >&2
+    printf "\033[1;31m是否要 revert 此 PR 的變更？[y/N]: \033[0m" >&2
+    read -r revert_confirm
+    revert_confirm=$(echo "$revert_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$revert_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+        if [ -n "$merge_commit" ] && [ "$merge_commit" != "null" ]; then
+            info_msg "🔄 執行 revert 操作..."
+            if git revert -m 1 "$merge_commit" --no-edit; then
+                success_msg "已成功 revert PR #$pr_number 的變更"
+                printf "\033[0;33m⚠️  請檢查 revert 結果並視需要推送變更\033[0m\n" >&2
+                printf "推送命令: \033[0;36mgit push origin %s\033[0m\n" "$(get_main_branch)" >&2
+            else
+                handle_error "revert 操作失敗，請手動處理衝突"
+            fi
+        else
+            handle_error "無法找到 PR 的合併 commit，無法執行 revert"
+        fi
+    else
+        info_msg "已取消 revert 操作"
+    fi
+}
+
+# 處理開放中的 PR
+handle_open_pr() {
+    local pr_number="$1"
+    local pr_title="$2"
+    local pr_url="$3"
+    
+    warning_msg "PR #$pr_number 目前狀態為開放中"
+    
+    echo >&2
+    printf "\033[1;31m是否要關閉此 PR？[y/N]: \033[0m" >&2
+    read -r close_confirm
+    close_confirm=$(echo "$close_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$close_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+        printf "請輸入關閉原因 (可選): " >&2
+        read -r close_reason
+        
+        info_msg "🔄 關閉 PR #$pr_number..."
+        
+        if [ -n "$close_reason" ]; then
+            if gh pr close "$pr_number" --comment "$close_reason"; then
+                success_msg "已成功關閉 PR #$pr_number"
+                printf "\033[0;33m💬 關閉原因: %s\033[0m\n" "$close_reason" >&2
+            else
+                handle_error "無法關閉 PR #$pr_number"
+            fi
+        else
+            if gh pr close "$pr_number"; then
+                success_msg "已成功關閉 PR #$pr_number"
+            else
+                handle_error "無法關閉 PR #$pr_number"
+            fi
+        fi
+        
+        # 詢問是否要刪除分支
+        echo >&2
+        printf "是否要刪除本地和遠端的功能分支？[y/N]: " >&2
+        read -r delete_branch_confirm
+        delete_branch_confirm=$(echo "$delete_branch_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+        
+        if [[ "$delete_branch_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+            local current_branch
+            current_branch=$(get_current_branch)
+            local main_branch
+            main_branch=$(get_main_branch)
+            
+            # 切換到主分支
+            info_msg "切換到 $main_branch 分支..."
+            git checkout "$main_branch"
+            
+            # 刪除本地分支
+            info_msg "刪除本地分支 '$current_branch'..."
+            if git branch -D "$current_branch"; then
+                success_msg "已刪除本地分支 '$current_branch'"
+            else
+                warning_msg "無法刪除本地分支 '$current_branch'"
+            fi
+            
+            # 刪除遠端分支
+            info_msg "刪除遠端分支 '$current_branch'..."
+            if git push origin --delete "$current_branch"; then
+                success_msg "已刪除遠端分支 '$current_branch'"
+            else
+                warning_msg "無法刪除遠端分支 '$current_branch'"
+            fi
+        fi
+    else
+        info_msg "已取消關閉 PR 操作"
     fi
 }
 

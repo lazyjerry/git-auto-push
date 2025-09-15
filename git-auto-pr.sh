@@ -790,10 +790,9 @@ show_operation_menu() {
     echo "==================================================" >&2
     printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
     printf "\033[1;35m2.\033[0m � 建立 Pull Request\n" >&2
-    printf "\033[1;32m3.\033[0m � 完整 PR 流程 (建立分支 → 開發 → 提交 → PR)\n" >&2
-    printf "\033[1;31m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
+    printf "\033[1;31m3.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-4]: " >&2
+    printf "請輸入選項 [1-3]: " >&2
 }
 
 # 獲取用戶選擇的操作
@@ -822,17 +821,12 @@ get_operation_choice() {
                 return 0
                 ;;
             3)
-                info_msg "✅ 已選擇：完整 PR 流程" >&2
-                echo "$choice"
-                return 0
-                ;;
-            4)
                 info_msg "✅ 已選擇：審查與合併 PR (專案擁有者)" >&2
                 echo "$choice"
                 return 0
                 ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3 或 4" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2 或 3" >&2
                 echo >&2
                 ;;
         esac
@@ -899,9 +893,6 @@ main() {
             execute_create_pr
             ;;
         3)
-            execute_full_pr_workflow
-            ;;
-        4)
             execute_review_and_merge
             ;;
     esac
@@ -1285,7 +1276,7 @@ execute_create_pr() {
                 printf "請輸入 issue key (例: ISSUE-123, JIRA_456, PROJ-001): " >&2
             fi
         fi
-    done
+    done  
     
     # 生成 PR 標題和內容
     local pr_title
@@ -1422,53 +1413,7 @@ execute_create_pr() {
     fi
 }
 
-# 完整 PR 流程
-execute_full_pr_workflow() {
-    info_msg "🚀 執行完整 GitHub Flow PR 流程..."
-    
-    # 顯示當前分支狀態
-    local current_branch
-    local main_branch
-    current_branch=$(get_current_branch)
-    main_branch=$(get_main_branch)
-    
-    echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
-    echo >&2
-    
-    info_msg "步驟 1: 建立功能分支"
-    if ! execute_create_branch; then
-        handle_error "建立分支步驟失敗"
-    fi
-    
-    echo >&2
-    success_msg "✅ 分支建立完成，請開始開發..."
-    warning_msg "⏸️  開發完成後，請再次執行此腳本選擇「完整 PR 流程」"
-    
-    # 提示用戶開發完成後的操作
-    printf "\n開發完成後是否繼續後續流程？[y/N]: " >&2
-    read -r continue_workflow
-    continue_workflow=$(echo "$continue_workflow" | xargs | tr '[:upper:]' '[:lower:]')
-    
-    if [[ "$continue_workflow" =~ ^(y|yes|是|確定)$ ]]; then
-        echo >&2
-        info_msg "步驟 2: 提交並推送變更"
-        if ! execute_commit_and_push; then
-            handle_error "提交推送步驟失敗"
-        fi
-        
-        echo >&2
-        info_msg "步驟 3: 建立 Pull Request"
-        if ! execute_create_pr; then
-            handle_error "建立 PR 步驟失敗"
-        fi
-        
-        success_msg "🎉 完整 PR 流程執行完成！"
-    else
-        info_msg "👋 流程暫停，開發完成後請繼續執行後續步驟"
-    fi
-}
+
 
 # 審查與合併 PR (專案擁有者功能)
 execute_review_and_merge() {

@@ -1717,37 +1717,6 @@ execute_review_and_merge() {
         handle_error "PR #$pr_number 不存在"
     fi
     
-    # 檢查 PR 狀態
-    info_msg "🔍 檢查 PR #$pr_number 的狀態..."
-    local pr_state
-    pr_state=$(gh pr view "$pr_number" --json state --jq '.state' 2>/dev/null)
-    
-    if [ "$pr_state" != "OPEN" ]; then
-        # 顯示 PR 詳細資訊
-        echo >&2
-        warning_msg "❌ PR #$pr_number 狀態不是 OPEN，無法進行審查操作"
-        echo >&2
-        info_msg "📝 PR #$pr_number 詳細資訊:"
-        gh pr view "$pr_number" >&2
-        echo >&2
-        
-        case "$pr_state" in
-            "CLOSED")
-                warning_msg "此 PR 已被關閉，如需重新審查請先重新開啟 PR"
-                ;;
-            "MERGED")
-                warning_msg "此 PR 已經合併完成，無需再次審查"
-                ;;
-            *)
-                warning_msg "PR 狀態: $pr_state - 只有狀態為 OPEN 的 PR 才能進行審查"
-                ;;
-        esac
-        
-        return 1
-    fi
-    
-    success_msg "✅ PR #$pr_number 狀態為 OPEN，可以進行審查"
-    
     # 顯示 PR 詳細資訊
     echo >&2
     info_msg "📝 PR #$pr_number 詳細資訊:"

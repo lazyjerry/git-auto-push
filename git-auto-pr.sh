@@ -794,8 +794,9 @@ show_operation_menu() {
     printf "\033[1;32m2.\033[0m 🔄 建立 Pull Request\n" >&2
     printf "\033[1;31m3.\033[0m ❌ 撤銷當前 PR\n" >&2
     printf "\033[1;35m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
+    printf "\033[1;36m5.\033[0m 🗑️ 刪除分支\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-4]: " >&2
+    printf "請輸入選項 [1-5]: " >&2
 }
 
 # 獲取用戶選擇的操作
@@ -833,8 +834,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            5)
+                info_msg "✅ 已選擇：刪除分支" >&2
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3 或 4" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3、4 或 5" >&2
                 echo >&2
                 ;;
         esac
@@ -906,6 +912,9 @@ main() {
         4)
             execute_review_and_merge
             ;;
+        5)
+            execute_delete_branch
+            ;;
     esac
     
     show_random_thanks
@@ -927,26 +936,36 @@ execute_create_branch() {
     
     # 顯示當前分支狀態
     echo >&2
+    # 顯示目前分支狀態資訊，使用彩色輸出提升可讀性
     printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
     printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
     echo >&2
     
+    # 檢查是否在主分支上，如果不在主分支則需要切換
     if ! check_main_branch; then
+        # 提示使用者目前不在主分支，詢問是否要切換
         printf "\033[1;33m當前不在主分支（當前: %s，主分支: %s）\033[0m\n" "$current_branch" "$main_branch" >&2
         printf "是否切換到 %s 分支？[Y/n]: " "$main_branch" >&2
         read -r switch_confirm
+        # 標準化使用者輸入（移除空白、轉換為小寫）
         switch_confirm=$(echo "$switch_confirm" | xargs | tr '[:upper:]' '[:lower:]')
         
+        # 如果使用者同意切換（空輸入或 y/yes/是/確定）
         if [[ -z "$switch_confirm" ]] || [[ "$switch_confirm" =~ ^(y|yes|是|確定)$ ]]; then
             info_msg "切換到 $main_branch 分支並更新..."
+            # 切換到主分支
             run_command "git checkout $main_branch" "切換到 $main_branch 分支失敗"
+            # 使用 fast-forward only 模式更新主分支，確保不會產生合併提交
             run_command "git pull --ff-only origin $main_branch" "更新 $main_branch 分支失敗"
         else
+            # 使用者拒絕切換，取消操作
             warning_msg "已取消操作"
             return 1
         fi
     else
+        # 已在主分支上，直接更新
         info_msg "更新 $main_branch 分支..."
+        # 使用 fast-forward only 模式確保主分支更新不會產生衝突
         run_command "git pull --ff-only origin $main_branch" "更新 $main_branch 分支失敗"
     fi
     
@@ -1934,6 +1953,155 @@ execute_review_and_merge() {
     
     echo >&2
     success_msg "🎉 PR 審查流程完成！"
+}
+
+# 刪除分支功能
+execute_delete_branch() {
+    info_msg "🗑️ 刪除分支流程..."
+    
+    # 獲取當前分支和主分支
+    local current_branch
+    local main_branch
+    current_branch=$(get_current_branch)
+    main_branch=$(get_main_branch)
+    
+    echo >&2
+    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
+    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    echo >&2
+    
+    # 列出所有本地分支（排除主分支）
+    info_msg "📋 列出可刪除的分支："
+    echo >&2
+    
+    # 獲取所有本地分支，排除主分支和當前分支的標記
+    local branches
+    branches=$(git branch --format='%(refname:short)' | grep -v -E "^($(IFS='|'; echo "${DEFAULT_MAIN_BRANCHES[*]}"))\$")
+    
+    if [ -z "$branches" ]; then
+        warning_msg "沒有找到可刪除的分支（排除主分支）"
+        return 1
+    fi
+    
+    # 顯示分支列表
+    local branch_num=1
+    echo "$branches" | while read -r branch; do
+        if [ "$branch" = "$current_branch" ]; then
+            printf "\033[1;33m%d. %s\033[0m \033[0;31m(當前分支)\033[0m\n" "$branch_num" "$branch" >&2
+        else
+            printf "\033[1;32m%d.\033[0m %s\n" "$branch_num" "$branch" >&2
+        fi
+        ((branch_num++))
+    done
+    
+    echo >&2
+    printf "請輸入要刪除的分支名稱 (或按 Enter 取消): " >&2
+    read -r target_branch
+    target_branch=$(echo "$target_branch" | xargs)  # 去除前後空白
+    
+    # 如果用戶按 Enter 取消操作
+    if [ -z "$target_branch" ]; then
+        info_msg "已取消刪除分支操作"
+        return 0
+    fi
+    
+    # 檢查輸入的分支是否存在
+    if ! git branch --list "$target_branch" | grep -q "$target_branch"; then
+        handle_error "分支 '$target_branch' 不存在"
+        return 1
+    fi
+    
+    # 檢查是否為主分支
+    for main_branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
+        if [ "$target_branch" = "$main_branch_candidate" ]; then
+            echo >&2
+            warning_msg "⚠️  禁止刪除主分支 '$target_branch'"
+            info_msg "💡 如需修改主分支設定，請編輯腳本中的 DEFAULT_MAIN_BRANCHES 變數"
+            info_msg "   當前設定: (${DEFAULT_MAIN_BRANCHES[*]})"
+            return 1
+        fi
+    done
+    
+    # 檢查是否為當前分支
+    if [ "$target_branch" = "$current_branch" ]; then
+        echo >&2
+        warning_msg "⚠️  無法刪除當前所在的分支 '$target_branch'"
+        printf "是否要先切換到主分支 '$main_branch' 再刪除？[Y/n]: " >&2
+        read -r switch_confirm
+        switch_confirm=$(echo "$switch_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+        
+        if [[ -z "$switch_confirm" ]] || [[ "$switch_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+            info_msg "正在切換到主分支 '$main_branch'..."
+            if ! git checkout "$main_branch"; then
+                handle_error "切換到主分支失敗"
+                return 1
+            fi
+            success_msg "✅ 已切換到主分支 '$main_branch'"
+        else
+            info_msg "已取消刪除分支操作"
+            return 0
+        fi
+    fi
+    
+    # 最終確認刪除
+    echo >&2
+    printf "\033[1;31m⚠️  確定要刪除分支 '%s'？[y/N]: \033[0m" "$target_branch" >&2
+    read -r delete_confirm
+    delete_confirm=$(echo "$delete_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$delete_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+        # 執行刪除操作
+        info_msg "🗑️ 正在刪除分支 '$target_branch'..."
+        
+        # 先嘗試安全刪除（已合併的分支）
+        if git branch -d "$target_branch" 2>/dev/null; then
+            success_msg "✅ 已成功刪除分支 '$target_branch'（已合併）"
+        else
+            # 如果安全刪除失敗，詢問是否強制刪除
+            echo >&2
+            warning_msg "⚠️  分支 '$target_branch' 包含未合併的變更"
+            printf "是否要強制刪除？這將永久丟失未合併的變更 [y/N]: " >&2
+            read -r force_confirm
+            force_confirm=$(echo "$force_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+            
+            if [[ "$force_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+                if git branch -D "$target_branch"; then
+                    success_msg "✅ 已強制刪除分支 '$target_branch'"
+                    warning_msg "⚠️  注意：未合併的變更已永久丟失"
+                else
+                    handle_error "強制刪除分支失敗"
+                    return 1
+                fi
+            else
+                info_msg "已取消強制刪除操作"
+                return 0
+            fi
+        fi
+        
+        # 詢問是否同時刪除遠端分支
+        if git ls-remote --heads origin "$target_branch" | grep -q "$target_branch"; then
+            echo >&2
+            printf "發現遠端分支 'origin/%s'，是否一併刪除？[Y/n]: " "$target_branch" >&2
+            read -r remote_delete_confirm
+            remote_delete_confirm=$(echo "$remote_delete_confirm" | xargs | tr '[:upper:]' '[:lower:]')
+            
+            if [[ -z "$remote_delete_confirm" ]] || [[ "$remote_delete_confirm" =~ ^(y|yes|是|確定)$ ]]; then
+                info_msg "🗑️ 正在刪除遠端分支 'origin/$target_branch'..."
+                if git push origin --delete "$target_branch"; then
+                    success_msg "✅ 已成功刪除遠端分支 'origin/$target_branch'"
+                else
+                    warning_msg "⚠️  刪除遠端分支失敗，可能需要檢查權限"
+                fi
+            fi
+        fi
+        
+    else
+        info_msg "已取消刪除分支操作"
+        return 0
+    fi
+    
+    echo >&2
+    success_msg "🎉 分支刪除流程完成！"
 }
 
 # 腳本入口點

@@ -1,6 +1,6 @@
 ---
-applyTo: "README.md" # Required: Specifies which files to apply instructions to
-description: "自動產生或更新 README.md 的指令模板" # Optional: Describes what the instructions do
+applyTo: "README.md"
+description: "自動產生或更新 README.md 的指令模板"
 ---
 
 # README.md 生成指令模板

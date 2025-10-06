@@ -61,14 +61,7 @@ readonly AI_TOOLS=(
 # AI 提示詞配置
 # 用於 commit message 生成的統一提示詞
 # 重點：描述功能變更、需求實現、行為改變，而非技術細節
-readonly AI_COMMIT_PROMPT="請分析以下 git 變更，直接輸出一行簡潔的中文 commit 標題：
-
-要求：
-- 動詞開頭（新增/修正/改善/更新/移除等）
-- 15-25字描述功能變更
-- 只輸出標題，無其他文字
-
-範例：新增用戶認證功能"
+readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標題，格式如：新增用戶登入功能、修正檔案上傳錯誤、改善搜尋效能。只輸出標題："
 
 # ==============================================
 # 工具函數區域
@@ -232,28 +225,24 @@ clean_ai_message() {
     # 移除開頭和結尾的引號
     message=$(echo "$message" | sed "s/^[\"'\`]//;s/[\"'\`]$//")
     
-    # 移除明顯的 AI 系統輸出和調試信息
+    # 移除 AI 系統輸出和調試信息
     message=$(echo "$message" | sed '/^thinking$/d' | sed '/^\*\*.*\*\*$/d' | sed '/^codex$/d' | sed '/^tokens used$/d' | sed '/^[0-9,]\+$/d' | sed '/^Reading prompt/d' | sed '/^OpenAI Codex/d' | sed '/^workdir:/d' | sed '/^model:/d' | sed '/^provider:/d' | sed '/^approval:/d' | sed '/^sandbox:/d' | sed '/^reasoning/d' | sed '/^session id:/d' | sed '/^user$/d' | sed '/^--------$/d')
     
-    # 提取最可能的 commit 訊息行
-    local best_line
+    # 移除空行
+    message=$(echo "$message" | grep -v '^[[:space:]]*$')
     
-    # 1. 優先找動詞開頭的中文行
-    best_line=$(echo "$message" | grep -E "^(新增|修正|改善|實現|更新|優化|調整|移除|刪除|增加|修改|完善|建立|建置)" | head -n 1)
+    # 提取最後一個看起來像 commit 訊息的行（通常是 codex 後面的行）
+    local commit_line
+    commit_line=$(echo "$message" | tail -n 1)
     
-    # 2. 如果沒找到，找包含常見動詞的行
-    if [ -z "$best_line" ]; then
-        best_line=$(echo "$message" | grep -E "(新增|修正|改善|更新|優化|調整)" | head -n 1)
+    # 如果最後一行是數字或太短，嘗試倒數第二行
+    if [[ "$commit_line" =~ ^[0-9,]+$ ]] || [ ${#commit_line} -lt 3 ]; then
+        commit_line=$(echo "$message" | tail -n 2 | head -n 1)
     fi
     
-    # 3. 最後找任何包含中文的行
-    if [ -z "$best_line" ]; then
-        best_line=$(echo "$message" | grep -E "[\u4e00-\u9fff]" | head -n 1 2>/dev/null || echo "$message" | grep -v '^$' | head -n 1)
-    fi
-    
-    # 使用找到的最佳行
-    if [ -n "$best_line" ]; then
-        message="$best_line"
+    # 使用找到的行
+    if [ -n "$commit_line" ]; then
+        message="$commit_line"
     fi
     
     # 移除常見的 AI 前綴和格式標記

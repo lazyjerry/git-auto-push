@@ -243,9 +243,9 @@ clean_ai_message() {
     local chinese_line
     chinese_line=$(echo "$message" | grep -E "^(新增|修正|改善|實現|更新|優化|調整|移除|刪除)" | head -n 1)
     
-    # 如果沒找到動詞開頭的行，嘗試找包含中文的行
+    # 如果沒找到動詞開頭的行，嘗試找包含中文的行（使用字符列表而非範圍）
     if [ -z "$chinese_line" ]; then
-        chinese_line=$(echo "$message" | grep -E "[一-龯]" | head -n 1)
+        chinese_line=$(echo "$message" | grep -E "(新|增|修|正|改|善|實|現|更|新|優|化|調|整|移|除|刪|的|了|是|要|會|能)" | head -n 1)
     fi
     
     # 使用找到的中文行，或保持原始訊息

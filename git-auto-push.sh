@@ -219,30 +219,8 @@ clean_ai_message() {
     # 顯示原始訊息
     printf "\033[0;90m🔍 AI 原始輸出: '%s'\033[0m\n" "$message" >&2
     
-    # 基本清理：移除前後空白
+    # 最簡化處理：只移除前後空白，保留完整內容
     message=$(echo "$message" | xargs)
-    
-    # 只移除明顯的系統輸出行，保留其他內容
-    message=$(echo "$message" | sed '
-        /^Reading prompt/d
-        /^OpenAI Codex/d
-        /^--------$/d
-        /^workdir:/d
-        /^model:/d
-        /^provider:/d
-        /^approval:/d
-        /^sandbox:/d
-        /^reasoning/d
-        /^session id:/d
-        /^user$/d
-        /^thinking$/d
-        /^codex$/d
-        /^tokens used$/d
-        /^[0-9,]\+$/d
-    ')
-    
-    # 取得最後一個非空行作為結果
-    message=$(echo "$message" | grep -v '^[[:space:]]*$' | tail -n 1)
     
     # 顯示清理結果
     printf "\033[0;90m🧹 清理後輸出: '%s'\033[0m\n" "$message" >&2
@@ -396,48 +374,39 @@ run_command_with_loading() {
 # 執行 codex 命令並處理輸出
 run_codex_command() {
     local prompt="$1"
-    local timeout=60  # 增加超時時間到 60 秒，給複雜分析更多時間
+    local timeout=60
     
     info_msg "正在調用 codex..." >&2
     
-    # 首先檢查 codex 是否可用
+    # 檢查 codex 是否可用
     if ! command -v codex >/dev/null 2>&1; then
         warning_msg "codex 工具未安裝" >&2
         return 1
     fi
     
-    # 檢查 git diff 大小，如果太大則增加超時
+    # 檢查 git diff 大小並調整超時
     local diff_size
     diff_size=$(git diff --cached 2>/dev/null | wc -l)
     if [ "$diff_size" -gt 500 ]; then
-        timeout=90  # 大型 diff 使用 90 秒超時
+        timeout=90
         info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
     fi
     
-    # 使用帶 loading 的命令執行
-    local output
-    local exit_code
-
-    # 準備完整的提示詞，包含 git diff 內容
+    # 準備 git diff 內容
     local git_diff
     git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
-
     if [ -z "$git_diff" ]; then
         warning_msg "沒有檢測到任何變更內容" >&2
         return 1
     fi
-
-    # 組合完整的提示詞
-    local full_prompt="${prompt}
-
-Git 變更內容:
-${git_diff}"
     
-    # 創建臨時檔案來傳遞提示詞
+    # 創建臨時檔案傳遞提示詞
     local temp_prompt
     temp_prompt=$(mktemp)
-    printf '%s' "$full_prompt" > "$temp_prompt"
+    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
     
+    # 執行 codex 命令
+    local output exit_code
     if command -v timeout >/dev/null 2>&1; then
         output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
@@ -447,132 +416,57 @@ ${git_diff}"
     fi
     
     # 清理臨時檔案
-    rm -f "$temp_prompt"    # 檢查認證相關錯誤 (從完整輸出中檢查)
-    if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]] || [[ "$output" == *"authentication token is expired"* ]]; then
-        printf "\033[0;31m❌ codex 認證錯誤: 認證令牌已過期\033[0m\n" >&2
-        printf "\033[1;33m💡 請執行以下命令重新登入 codex:\033[0m\n" >&2
-        printf "\033[0;36m   codex auth login\033[0m\n" >&2
-        return 1
-    fi
+    rm -f "$temp_prompt"
     
-    # 檢查其他網路或串流錯誤
-    if [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
-        printf "\033[0;31m❌ codex 網路錯誤: %s\033[0m\n" "$(echo "$output" | grep -E "(stream error|connection|network)" | head -n 1)" >&2
-        printf "\033[1;33m💡 請檢查網路連接或稍後重試\033[0m\n" >&2
-        return 1
-    fi
-    
-    if [ $exit_code -eq 124 ]; then
-        printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
-        printf "\033[1;33m💡 可能原因和解決方案：\033[0m\n" >&2
-        printf "   1. 網路連接緩慢 - 請檢查網路狀況\n" >&2
-        printf "   2. 變更內容過大 - 嘗試分批提交較小的變更\n" >&2
-        printf "   3. API 服務繁忙 - 稍後重試或使用其他 AI 工具\n" >&2
-        printf "\033[0;36m   🔄 腳本會自動嘗試下一個 AI 工具...\033[0m\n" >&2
-        
-        # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（超時錯誤）:\033[0m\n" >&2
-        printf "\033[0;90m執行的指令: codex exec '%s'\033[0m\n" "$prompt" >&2
-        printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
-        if [ -n "$output" ]; then
-            printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
-            echo "$output" | head -n 10 | sed 's/^/  /' >&2
-            if [ $(echo "$output" | wc -l) -gt 10 ]; then
-                printf "\033[0;90m  ... (輸出內容過長，已截斷)\033[0m\n" >&2
+    # 處理執行結果
+    case $exit_code in
+        0)
+            # 成功執行，處理輸出
+            if [ -n "$output" ]; then
+                local filtered_output
+                
+                # 方法1：精確提取 "codex" 和 "tokens used" 之間的內容
+                filtered_output=$(echo "$output" | \
+                    sed -n '/^codex$/,/^tokens used/p' | \
+                    sed '1d;$d' | \
+                    grep -E ".+" | \
+                    xargs)
+                
+                # 方法2：如果方法1沒有結果，使用備用過濾邏輯
+                if [ -z "$filtered_output" ]; then
+                    filtered_output=$(echo "$output" | \
+                        grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex|effort:|summaries:)" | \
+                        grep -E ".+" | \
+                        tail -n 1 | \
+                        xargs)
+                fi
+                
+                if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
+                    success_msg "codex 回應完成" >&2
+                    echo "$filtered_output"
+                    return 0
+                fi
             fi
-        else
-            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
-        fi
-        printf "\n" >&2
-        return 1
-    elif [ $exit_code -ne 0 ]; then
-        # 檢查輸出中是否包含錯誤訊息
-        local error_line
-        error_line=$(echo "$output" | grep -E "(error|Error|ERROR)" | head -n 1)
-        if [ -n "$error_line" ]; then
-            printf "\033[0;31mcodex 執行失敗: %s\033[0m\n" "$error_line" >&2
-        else
-            warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
-        fi
-        
-        # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（執行失敗）:\033[0m\n" >&2
-        printf "\033[0;90m執行的指令: codex exec '%s'\033[0m\n" "$prompt" >&2
-        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
-        if [ -n "$output" ]; then
-            printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
-            echo "$output" | sed 's/^/  /' >&2
-        else
-            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
-        fi
-        printf "\n" >&2
-        return 1
-    fi
+            warning_msg "codex 沒有返回有效內容" >&2
+            ;;
+        124)
+            printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
+            printf "\033[1;33m💡 建議：檢查網路連接或稍後重試\033[0m\n" >&2
+            ;;
+        *)
+            # 檢查特定錯誤類型
+            if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+                printf "\033[0;31m❌ codex 認證錯誤\033[0m\n" >&2
+                printf "\033[1;33m💡 請執行：codex auth login\033[0m\n" >&2
+            elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+                printf "\033[0;31m❌ codex 網路錯誤\033[0m\n" >&2
+                printf "\033[1;33m💡 請檢查網路連接\033[0m\n" >&2
+            else
+                warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+            fi
+            ;;
+    esac
     
-    # 改進的輸出過濾邏輯
-    local filtered_output
-    
-    # 記錄原始輸出用於調試（可選）
-    # printf "DEBUG - 原始 codex 輸出:\n%s\n" "$output" >&2
-    
-    # 多階段過濾：先移除系統輸出，再提取有效內容
-    filtered_output=$(echo "$output" | \
-        grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex)" | \
-        grep -v -E "^(effort:|summaries:)" | \
-        tail -n 5 | \
-        grep -E ".+" | \
-        head -n 1)
-    
-    # 如果第一次過濾失敗，嘗試更寬鬆的過濾
-    if [ -z "$filtered_output" ]; then
-        filtered_output=$(echo "$output" | \
-            sed '/^\[.*\]/d; /^workdir:/d; /^model:/d; /^provider:/d; /^approval:/d; /^sandbox:/d; /^reasoning/d; /^tokens used:/d; /^-------/d; /^User instructions:/d; /^codex$/d; /^$/d; /^OpenAI Codex/d' | \
-            tail -n 3 | \
-            head -n 1)
-    fi
-    
-    # 最終檢查和清理
-    if [ -n "$filtered_output" ]; then
-        # 移除可能的前後空白和特殊字符
-        filtered_output=$(echo "$filtered_output" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-        
-        # 檢查是否為有效的 commit message（長度大於 3 且不全是特殊字符）
-        if [ ${#filtered_output} -gt 3 ] && [[ "$filtered_output" =~ [a-zA-Z0-9\u4e00-\u9fff] ]]; then
-            success_msg "codex 回應完成" >&2
-            echo "$filtered_output"
-            return 0
-        fi
-    fi
-    
-    warning_msg "codex 沒有返回有效的 commit message 內容" >&2
-    
-    # 顯示詳細的調試信息
-    printf "\n\033[0;90m🔍 調試信息（過濾失敗）:\033[0m\n" >&2
-    printf "\033[0;90m執行的指令: codex exec '%s'\033[0m\n" "$prompt" >&2
-    printf "\033[0;90m過濾後內容: '%s'\033[0m\n" "$filtered_output" >&2
-    printf "\033[0;90m過濾後內容長度: %d 字符\033[0m\n" "${#filtered_output}" >&2
-    
-    if [ -n "$output" ]; then
-        printf "\033[0;90m原始完整輸出:\033[0m\n" >&2
-        echo "$output" | sed 's/^/  /' >&2
-        printf "\033[0;90m原始輸出總行數: %d 行\033[0m\n" "$(echo "$output" | wc -l)" >&2
-        
-        # 顯示過濾步驟的中間結果
-        printf "\033[0;90m第一階段過濾結果:\033[0m\n" >&2
-        local first_filter
-        first_filter=$(echo "$output" | \
-            grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex)" | \
-            grep -v -E "^(effort:|summaries:)" | \
-            tail -n 5)
-        if [ -n "$first_filter" ]; then
-            echo "$first_filter" | sed 's/^/  /' >&2
-        else
-            printf "\033[0;90m  (第一階段過濾結果為空)\033[0m\n" >&2
-        fi
-    else
-        printf "\033[0;90m原始輸出內容: (無)\033[0m\n" >&2
-    fi
-    printf "\n" >&2
     return 1
 }
 

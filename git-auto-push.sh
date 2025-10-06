@@ -53,7 +53,7 @@
 # AI 工具優先順序配置
 # 定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 readonly AI_TOOLS=(
-    # "gemini" 
+    "gemini" 
     "codex"     
     # "claude"
 )

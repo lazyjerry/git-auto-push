@@ -53,14 +53,24 @@
 # AI 工具優先順序配置
 # 定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 readonly AI_TOOLS=(
-    "gemini" 
+    # "gemini" 
     "codex"     
-    "claude"
+    # "claude"
 )
 
 # AI 提示詞配置
 # 用於 commit message 生成的統一提示詞
-readonly AI_COMMIT_PROMPT="請分析暫存區的 git 變更內容，並生成一個簡潔的中文 commit 訊息標題。只需回應標題，不要額外說明。"
+# 重點：描述功能變更、需求實現、行為改變，而非技術細節
+readonly AI_COMMIT_PROMPT="分析 git diff 內容，生成簡潔的中文 commit 標題。重點描述：
+1. 新增了什麼功能或特性
+2. 修正了什麼問題或錯誤  
+3. 改進了什麼行為或體驗
+4. 實現了什麼需求或目標
+
+避免技術細節如「修改第X行」或「更新變數名稱」。
+格式：動詞開頭，30字內，如「新增用戶登入功能」「修正檔案上傳錯誤」「改善搜尋效能」「實現自動備份機制」
+
+只回應標題，無需說明："
 
 # ==============================================
 # 工具函數區域
@@ -222,10 +232,28 @@ clean_ai_message() {
     message=$(echo "$message" | xargs)
     
     # 移除開頭和結尾的引號
-    message=$(echo "$message" | sed 's/^["\'"'"'`]//;s/["\'"'"'`]$//')
+    message=$(echo "$message" | sed "s/^[\"'\`]//;s/[\"'\`]$//")
     
-    # 移除常見的 AI 前綴
-    message=$(echo "$message" | sed 's/^[Cc]ommit [Mm]essage: *//;s/^[Tt]itle: *//;s/^[標題]: *//')
+    # 移除常見的 AI 前綴和格式標記
+    message=$(echo "$message" | sed -E '
+        s/^[Cc]ommit [Mm]essage:? *//
+        s/^[Tt]itle:? *//
+        s/^[標題]:? *//
+        s/^[建議]?標題:? *//
+        s/^git commit:? *//
+        s/^feat:? *//
+        s/^fix:? *//
+        s/^update:? *//
+        s/^add:? *//
+        s/^新增:? *//
+        s/^修正:? *//
+        s/^改善:? *//
+        s/^實現:? *//
+        s/^更新:? *//
+        s/^\*+ *//
+        s/^- *//
+        s/^[0-9]+\. *//
+    ')
     
     # 移除多餘的空白
     message=$(echo "$message" | sed 's/  */ /g' | xargs)
@@ -403,16 +431,39 @@ run_codex_command() {
     # 使用帶 loading 的命令執行
     local output
     local exit_code
+
+    # 準備完整的提示詞，包含 git diff 內容
+    local git_diff
+    git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
+
+    if [ -z "$git_diff" ]; then
+        warning_msg "沒有檢測到任何變更內容" >&2
+        return 1
+    fi
+
+    # 創建臨時檔案存儲完整提示詞，避免命令列參數問題
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    
+    cat > "$temp_prompt" << EOF
+${prompt}
+
+以下是 git 變更內容:
+${git_diff}
+
+請根據以上變更生成一個簡潔的中文 commit 標題:
+EOF
     
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec '$prompt'" "正在等待 codex 分析變更" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec '$prompt'" "正在等待 codex 分析變更" "$timeout")
+        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     fi
     
-    # 檢查認證相關錯誤 (從完整輸出中檢查)
+    # 清理臨時檔案
+    rm -f "$temp_prompt"    # 檢查認證相關錯誤 (從完整輸出中檢查)
     if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]] || [[ "$output" == *"authentication token is expired"* ]]; then
         printf "\033[0;31m❌ codex 認證錯誤: 認證令牌已過期\033[0m\n" >&2
         printf "\033[1;33m💡 請執行以下命令重新登入 codex:\033[0m\n" >&2

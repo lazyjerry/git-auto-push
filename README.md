@@ -1,6 +1,11 @@
 # Git 工作流程自動化工具集
 
-完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 GitHub Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
+完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 └── screenshots/ # 介面展示圖片
+├── ai-commit-generation.png
+├── auto-mode.png
+├── main-menu.png
+├── pr-screenshot-cli.png
+└── pr-screenshot-web.pngHub Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
 
 ## 專案簡介
 
@@ -15,7 +20,7 @@
 - AI 驅動的智慧內容產生（commit 訊息、分支名稱、PR 內容）
 - 企業級錯誤處理與智慧修復建議
 - 多 AI 工具整合與自動容錯機制
-- **專業級代碼文檔** 🆕（完整函數註解、使用指南、安全機制說明）
+- - **專業級程式碼文件** ✨：為所有主要函數加入企業級註解標準
 - 中斷復原和信號處理機制
 
 ## 系統架構
@@ -23,8 +28,8 @@
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1240+ 行，完整註解）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2200+ 行，企業級文檔）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1294 行，完整註解）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2263 行，企業級文件）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤偵測      # 認證過期、網路錯誤自動識別
 │   ├── 友善錯誤提示      # 提供具體解決方案
@@ -34,7 +39,7 @@
 ├── Loading 動畫系統      # 美觀的等待提示與進度顯示
 ├── 信號處理機制          # 多層級 trap cleanup 與中斷復原
 ├── 錯誤處理系統          # 完整的異常處理與修復引導
-└── 專業級代碼文檔 🆕     # 統一函數註解、詳細使用說明、安全機制文檔
+└── 專業級程式碼文件 🆕     # 統一函數註解、詳細使用說明、安全機制文件
 ```
 
 ### 專案結構
@@ -48,14 +53,17 @@
 ├── .github/             # GitHub 相關設定
 │   ├── copilot-instructions.md    # AI 代理開發指導
 │   └── instructions/              # 程式碼產生規範
-│       └── copilot-readme.instructions.md
+│       ├── copilot-readme.instructions.md
+│       └── copilot-bash-doc-tw-instructions.md
 ├── docs/                # 文件目錄
 │   ├── github-flow.md   # GitHub Flow 流程說明
 │   └── pr-cancel-feature.md  # PR 撤銷功能說明
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
-    └── main-menu.png
+    ├── main-menu.png
+    ├── pr-screenshot-cli.png
+    └── pr-screenshot-web.png
 ```
 
 ## 安裝與啟動
@@ -97,15 +105,16 @@ gh auth login  # 選擇 GitHub.com → HTTPS → Browser 登入
 
 ```bash
 # GitHub Copilot CLI (建議)
-npm install -g @openai/codex@latest
-# 或使用官方安裝方式
 gh extension install github/gh-copilot
 
 # Google Gemini CLI (需要 API Key)
-# 請參考 Google AI Studio 設定
+# 安裝方式請參考 Google AI Studio 官方文件
 
 # Anthropic Claude CLI (需要 API Key)
-# 請參考 Anthropic Console 設定
+# 安裝方式請參考 Anthropic Console 官方文件
+
+# 或其他相容的 AI CLI 工具
+# 工具會自動偵測可用的 AI 命令
 ```
 
 **注意**：AI 工具需要相應的 API 金鑰或訂閱服務。如未安裝，工具仍可正常使用，僅會跳過 AI 輔助功能。
@@ -580,7 +589,7 @@ CMD ["git-auto-push", "--auto"]
 # ============================================
 ```
 
-**文檔涵蓋範圍**：
+**文件涵蓋範圍**：
 
 - ✅ 所有工具函數（錯誤處理、訊息顯示、Git 操作）
 - ✅ 核心業務邏輯（分支管理、PR 處理、AI 整合）
@@ -700,8 +709,17 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
-### v1.4.0 - 分支管理系統與代碼文檔化 (2025-09-21)
+### ✨ 最新版本亮點 (v1.4.1)
 
+- **1294 行** git-auto-push.sh - 傳統 Git 工作流程自動化，含完整註解
+- **2263 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件
+- **5 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理
+- **智慧分支管理** - 安全刪除機制，主分支保護，多重確認
+- **專業文件標準** - 所有函數都有完整的企業級註解
+
+---
+
+### v1.4.1 - 分支管理系統與程式碼文件化 (2025-10-04)
 
 **🆕 新功能**
 
@@ -709,8 +727,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - **主分支保護機制**：絕對禁止刪除主分支，可設定 DEFAULT_MAIN_BRANCHES 變數
 - **當前分支智慧處理**：自動偵測當前分支，提供切換後刪除的安全流程
 - **多重確認機制**：分級確認系統，防止誤刪重要分支
-- **專業級代碼文檔** ✨：為所有主要函數添加企業級註解標準
-
+- **專業級程式碼文件** ✨：為所有主要函數加入企業級註解標準
 
 **🔧 改進**
 
@@ -719,17 +736,16 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - 遠端同步：可選擇同時刪除對應的遠端分支
 - 智慧偵測：自動識別分支狀態和合併情況
 
-- **代碼品質提升**：
+- **程式碼品質提升**：
   - 統一函數註解格式（功能、參數、返回值、使用範例）
-  - 完整的檔案頭部文檔（版本、作者、使用指南、系統需求）
+  - 完整的檔案標頭文件（版本、作者、使用指南、系統需求）
   - 詳細的安全機制和錯誤處理說明
-  - 企業級代碼標準實施
+  - 企業級程式碼標準實施
 
 **📊 行數統計更新**
 
-- `git-auto-push.sh`：1240+ 行（+50 行註解）
-- `git-auto-pr.sh`：2200+ 行（+100 行註解）
-
+- `git-auto-push.sh`：1294 行（+54 行註解）
+- `git-auto-pr.sh`：2263 行（+163 行註解）
 
 ### v1.3.0 - PR 撤銷功能與選單重構 (2025-09-15)
 

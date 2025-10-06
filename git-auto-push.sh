@@ -236,15 +236,21 @@ clean_ai_message() {
     # 移除開頭和結尾的引號
     message=$(echo "$message" | sed "s/^[\"'\`]//;s/[\"'\`]$//")
     
-    # 移除 codex 的額外輸出內容
-    message=$(echo "$message" | grep -v "^thinking$" | grep -v "^\*\*.*\*\*$" | grep -v "^codex$" | grep -v "^tokens used$" | grep -v "^[0-9,]+$")
+    # 首先移除明顯的 AI 系統輸出
+    message=$(echo "$message" | sed '/^thinking$/d' | sed '/^\*\*.*\*\*$/d' | sed '/^codex$/d' | sed '/^tokens used$/d' | sed '/^[0-9,]\+$/d')
     
-    # 提取最可能的 commit 訊息行（通常是中文開頭的行）
-    message=$(echo "$message" | grep -E "^[新修改增實更優][a-zA-Z0-9\u4e00-\u9fff]" | head -n 1)
+    # 提取可能的 commit 訊息行（包含常見中文動詞開頭的行）
+    local chinese_line
+    chinese_line=$(echo "$message" | grep -E "^(新增|修正|改善|實現|更新|優化|調整|移除|刪除)" | head -n 1)
     
-    # 如果沒找到符合格式的行，嘗試提取任何中文內容
-    if [ -z "$message" ]; then
-        message=$(echo "$message" | grep -E "[\u4e00-\u9fff]" | head -n 1)
+    # 如果沒找到動詞開頭的行，嘗試找包含中文的行
+    if [ -z "$chinese_line" ]; then
+        chinese_line=$(echo "$message" | grep -E "[一-龯]" | head -n 1)
+    fi
+    
+    # 使用找到的中文行，或保持原始訊息
+    if [ -n "$chinese_line" ]; then
+        message="$chinese_line"
     fi
     
     # 移除常見的 AI 前綴和格式標記

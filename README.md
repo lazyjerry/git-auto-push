@@ -85,8 +85,11 @@ chmod +x git-auto-pr.sh
 ### 3. 全域安裝（選擇性）
 
 ```bash
-# 安裝兩個工具到系統路徑（一行指令）
-sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push && sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
+# 安裝 git-auto-push 到系統路徑
+sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push
+
+# 安裝 git-auto-pr 到系統路徑
+sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
 ```
 
 ### 4. 相依工具安裝

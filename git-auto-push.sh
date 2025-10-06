@@ -61,18 +61,14 @@ readonly AI_TOOLS=(
 # AI 提示詞配置
 # 用於 commit message 生成的統一提示詞
 # 重點：描述功能變更、需求實現、行為改變，而非技術細節
-readonly AI_COMMIT_PROMPT="請分析以下 git diff 內容，直接生成一個簡潔的中文 commit 標題。
+readonly AI_COMMIT_PROMPT="請分析以下 git 變更，直接輸出一行簡潔的中文 commit 標題：
 
 要求：
-1. 描述實際的功能變更（新增功能、修正問題、改善體驗、實現需求）
-2. 避免技術細節（如「修改第X行」、「更新變數」等）  
-3. 格式：動詞開頭，15-25字，例如「新增用戶登入功能」「修正檔案上傳錯誤」
-4. 只輸出標題本身，不要任何解釋或前綴
+- 動詞開頭（新增/修正/改善/更新/移除等）
+- 15-25字描述功能變更
+- 只輸出標題，無其他文字
 
-範例輸出：
-新增用戶認證功能
-修正資料庫連接問題
-改善頁面載入效能"
+範例：新增用戶認證功能"
 
 # ==============================================
 # 工具函數區域
@@ -236,21 +232,28 @@ clean_ai_message() {
     # 移除開頭和結尾的引號
     message=$(echo "$message" | sed "s/^[\"'\`]//;s/[\"'\`]$//")
     
-    # 首先移除明顯的 AI 系統輸出
-    message=$(echo "$message" | sed '/^thinking$/d' | sed '/^\*\*.*\*\*$/d' | sed '/^codex$/d' | sed '/^tokens used$/d' | sed '/^[0-9,]\+$/d')
+    # 移除明顯的 AI 系統輸出和調試信息
+    message=$(echo "$message" | sed '/^thinking$/d' | sed '/^\*\*.*\*\*$/d' | sed '/^codex$/d' | sed '/^tokens used$/d' | sed '/^[0-9,]\+$/d' | sed '/^Reading prompt/d' | sed '/^OpenAI Codex/d' | sed '/^workdir:/d' | sed '/^model:/d' | sed '/^provider:/d' | sed '/^approval:/d' | sed '/^sandbox:/d' | sed '/^reasoning/d' | sed '/^session id:/d' | sed '/^user$/d' | sed '/^--------$/d')
     
-    # 提取可能的 commit 訊息行（包含常見中文動詞開頭的行）
-    local chinese_line
-    chinese_line=$(echo "$message" | grep -E "^(新增|修正|改善|實現|更新|優化|調整|移除|刪除)" | head -n 1)
+    # 提取最可能的 commit 訊息行
+    local best_line
     
-    # 如果沒找到動詞開頭的行，嘗試找包含中文的行（使用字符列表而非範圍）
-    if [ -z "$chinese_line" ]; then
-        chinese_line=$(echo "$message" | grep -E "(新|增|修|正|改|善|實|現|更|新|優|化|調|整|移|除|刪|的|了|是|要|會|能)" | head -n 1)
+    # 1. 優先找動詞開頭的中文行
+    best_line=$(echo "$message" | grep -E "^(新增|修正|改善|實現|更新|優化|調整|移除|刪除|增加|修改|完善|建立|建置)" | head -n 1)
+    
+    # 2. 如果沒找到，找包含常見動詞的行
+    if [ -z "$best_line" ]; then
+        best_line=$(echo "$message" | grep -E "(新增|修正|改善|更新|優化|調整)" | head -n 1)
     fi
     
-    # 使用找到的中文行，或保持原始訊息
-    if [ -n "$chinese_line" ]; then
-        message="$chinese_line"
+    # 3. 最後找任何包含中文的行
+    if [ -z "$best_line" ]; then
+        best_line=$(echo "$message" | grep -E "[\u4e00-\u9fff]" | head -n 1 2>/dev/null || echo "$message" | grep -v '^$' | head -n 1)
+    fi
+    
+    # 使用找到的最佳行
+    if [ -n "$best_line" ]; then
+        message="$best_line"
     fi
     
     # 移除常見的 AI 前綴和格式標記

@@ -455,14 +455,21 @@ run_codex_command() {
 Git 變更內容:
 ${git_diff}"
     
-    # 使用 printf 避免引號問題，並通過管道傳遞給 codex
+    # 創建臨時檔案來傳遞提示詞
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s' "$full_prompt" > "$temp_prompt"
+    
     if command -v timeout >/dev/null 2>&1; then
-        output=$(printf '%s' "$full_prompt" | run_command_with_loading "timeout $timeout codex exec" "正在等待 codex 分析變更" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     else
-        output=$(printf '%s' "$full_prompt" | run_command_with_loading "codex exec" "正在等待 codex 分析變更" "$timeout")
+        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
-    fi    # 檢查認證相關錯誤 (從完整輸出中檢查)
+    fi
+    
+    # 清理臨時檔案
+    rm -f "$temp_prompt"    # 檢查認證相關錯誤 (從完整輸出中檢查)
     if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]] || [[ "$output" == *"authentication token is expired"* ]]; then
         printf "\033[0;31m❌ codex 認證錯誤: 認證令牌已過期\033[0m\n" >&2
         printf "\033[1;33m💡 請執行以下命令重新登入 codex:\033[0m\n" >&2

@@ -216,55 +216,35 @@ add_all_files() {
 clean_ai_message() {
     local message="$1"
     
-    # 顯示原始訊息用於比較
+    # 顯示原始訊息
     printf "\033[0;90m🔍 AI 原始輸出: '%s'\033[0m\n" "$message" >&2
     
-    # 移除前後空白、換行符號
+    # 基本清理：移除前後空白
     message=$(echo "$message" | xargs)
     
-    # 移除開頭和結尾的引號
-    message=$(echo "$message" | sed "s/^[\"'\`]//;s/[\"'\`]$//")
-    
-    # 移除 AI 系統輸出和調試信息
-    message=$(echo "$message" | sed '/^thinking$/d' | sed '/^\*\*.*\*\*$/d' | sed '/^codex$/d' | sed '/^tokens used$/d' | sed '/^[0-9,]\+$/d' | sed '/^Reading prompt/d' | sed '/^OpenAI Codex/d' | sed '/^workdir:/d' | sed '/^model:/d' | sed '/^provider:/d' | sed '/^approval:/d' | sed '/^sandbox:/d' | sed '/^reasoning/d' | sed '/^session id:/d' | sed '/^user$/d' | sed '/^--------$/d')
-    
-    # 移除空行
-    message=$(echo "$message" | grep -v '^[[:space:]]*$')
-    
-    # 提取最後一個看起來像 commit 訊息的行（通常是 codex 後面的行）
-    local commit_line
-    commit_line=$(echo "$message" | tail -n 1)
-    
-    # 如果最後一行是數字或太短，嘗試倒數第二行
-    if [[ "$commit_line" =~ ^[0-9,]+$ ]] || [ ${#commit_line} -lt 3 ]; then
-        commit_line=$(echo "$message" | tail -n 2 | head -n 1)
-    fi
-    
-    # 使用找到的行
-    if [ -n "$commit_line" ]; then
-        message="$commit_line"
-    fi
-    
-    # 移除常見的 AI 前綴和格式標記
-    message=$(echo "$message" | sed -E '
-        s/^[Cc]ommit [Mm]essage:? *//
-        s/^[Tt]itle:? *//
-        s/^[標題]:? *//
-        s/^[建議]?標題:? *//
-        s/^git commit:? *//
-        s/^feat:? *//
-        s/^fix:? *//
-        s/^update:? *//
-        s/^add:? *//
-        s/^\*+ *//
-        s/^- *//
-        s/^[0-9]+\. *//
+    # 只移除明顯的系統輸出行，保留其他內容
+    message=$(echo "$message" | sed '
+        /^Reading prompt/d
+        /^OpenAI Codex/d
+        /^--------$/d
+        /^workdir:/d
+        /^model:/d
+        /^provider:/d
+        /^approval:/d
+        /^sandbox:/d
+        /^reasoning/d
+        /^session id:/d
+        /^user$/d
+        /^thinking$/d
+        /^codex$/d
+        /^tokens used$/d
+        /^[0-9,]\+$/d
     ')
     
-    # 移除多餘的空白
-    message=$(echo "$message" | sed 's/  */ /g' | xargs)
+    # 取得最後一個非空行作為結果
+    message=$(echo "$message" | grep -v '^[[:space:]]*$' | tail -n 1)
     
-    # 顯示清理後的訊息用於比較
+    # 顯示清理結果
     printf "\033[0;90m🧹 清理後輸出: '%s'\033[0m\n" "$message" >&2
     
     echo "$message"

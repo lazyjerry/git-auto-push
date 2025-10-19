@@ -10,7 +10,7 @@
 #
 # 主要功能：
 # ├── Git 工作流程自動化：add → commit → push
-# ├── 5 種操作模式：完整流程、本地提交、僅添加、僅提交、全自動
+# ├── 6 種操作模式：完整流程、本地提交、僅添加、全自動、僅提交、顯示資訊
 # ├── AI 智慧功能：自動生成 commit message (支援 codex/gemini/claude)
 # ├── 錯誤處理：智慧錯誤偵測與修復建議
 # ├── 互動體驗：彩色輸出、loading 動畫、中斷處理
@@ -861,8 +861,9 @@ show_operation_menu() {
     printf "\033[1;34m3.\033[0m 📦 僅添加檔案 (add)\n" >&2
     printf "\033[1;35m4.\033[0m 🤖 全自動模式 (add → AI commit → push)\n" >&2
     printf "\033[1;36m5.\033[0m 💾 僅提交 (commit)\n" >&2
+    printf "\033[1;37m6.\033[0m 📊 顯示 Git 倉庫資訊\n" >&2
     echo "==================================================" >&2
-    printf "請輸入選項 [1-5] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
+    printf "請輸入選項 [1-6] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
 
 # 獲取用戶選擇的操作
@@ -904,8 +905,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            6)
+                info_msg "✅ 已選擇：顯示 Git 倉庫資訊" >&2
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4 或 5" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6" >&2
                 echo >&2
                 ;;
         esac
@@ -938,6 +944,7 @@ get_operation_choice() {
 #   3. 僅添加檔案 - execute_add_only() (add)
 #   4. 全自動模式 - execute_auto_workflow() (AI commit)
 #   5. 僅提交 - execute_commit_only() (commit)
+#   6. 顯示資訊 - show_git_info() (顯示 Git 倉庫資訊)
 # ============================================
 main() {
     # 設置全局信號處理
@@ -1037,6 +1044,10 @@ main() {
         5)
             # 僅提交：commit
             execute_commit_only
+            ;;
+        6)
+            # 顯示 Git 倉庫資訊
+            show_git_info
             ;;
     esac
     
@@ -1166,6 +1177,144 @@ execute_commit_only() {
     echo "==================================================" >&2
     success_msg "💾 提交完成！" >&2
     info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1" >&2
+    echo "==================================================" >&2
+    
+    # 顯示隨機感謝訊息
+    show_random_thanks
+}
+
+# ============================================
+# 顯示 Git 倉庫資訊函數
+# 功能：顯示當前 Git 倉庫的詳細資訊
+# 參數：無
+# 返回：0 (總是成功)
+# 
+# 顯示內容包括：
+#   - 當前分支名稱
+#   - 遠端倉庫 URL（所有 remotes）
+#   - 最近一次 commit 的資訊
+#   - 本地與遠端的同步狀態
+#   - 當前分支追蹤的遠端分支
+#   - 倉庫根目錄路徑
+#   - 工作區狀態（已修改/未追蹤檔案）
+# ============================================
+show_git_info() {
+    info_msg "📊 正在收集 Git 倉庫資訊..." >&2
+    echo >&2
+    echo "==================================================" >&2
+    success_msg "📍 Git 倉庫資訊" >&2
+    echo "==================================================" >&2
+    
+    # 1. 當前分支
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || echo "未知")
+    printf "\033[1;36m🌿 當前分支:\033[0m %s\n" "$current_branch" >&2
+    
+    # 2. 倉庫根目錄
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "未知")
+    printf "\033[1;36m📂 倉庫路徑:\033[0m %s\n" "$repo_root" >&2
+    
+    echo >&2
+    
+    # 3. 遠端倉庫資訊
+    info_msg "🌐 遠端倉庫:" >&2
+    local remotes
+    remotes=$(git remote -v 2>/dev/null)
+    if [ -n "$remotes" ]; then
+        echo "$remotes" | while IFS= read -r line; do
+            printf "   %s\n" "$line" >&2
+        done
+    else
+        printf "   \033[1;33m⚠️  未配置遠端倉庫\033[0m\n" >&2
+    fi
+    
+    echo >&2
+    
+    # 4. 當前分支的上游追蹤資訊
+    local upstream_branch
+    upstream_branch=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
+    if [ -n "$upstream_branch" ]; then
+        printf "\033[1;36m🔗 追蹤分支:\033[0m %s\n" "$upstream_branch" >&2
+        
+        # 檢查本地與遠端的同步狀態
+        local ahead behind
+        ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "0")
+        behind=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo "0")
+        
+        printf "\033[1;36m📈 同步狀態:\033[0m" >&2
+        if [ "$ahead" -eq 0 ] && [ "$behind" -eq 0 ]; then
+            printf " \033[1;32m✅ 已同步\033[0m\n" >&2
+        else
+            if [ "$ahead" -gt 0 ]; then
+                printf " \033[1;33m⬆️  領先 %d 個提交\033[0m" "$ahead" >&2
+            fi
+            if [ "$behind" -gt 0 ]; then
+                printf " \033[1;33m⬇️  落後 %d 個提交\033[0m" "$behind" >&2
+            fi
+            printf "\n" >&2
+        fi
+    else
+        printf "\033[1;33m🔗 追蹤分支: ⚠️  未設置上游分支\033[0m\n" >&2
+    fi
+    
+    echo >&2
+    
+    # 5. 分支來源資訊（如果有的話）
+    info_msg "🌳 分支歷史:" >&2
+    local branch_point
+    # 嘗試找出當前分支是從哪個分支分出來的
+    if [ "$current_branch" != "master" ] && [ "$current_branch" != "main" ]; then
+        # 找出最近的共同祖先
+        local main_branch
+        if git show-ref --verify --quiet refs/heads/main; then
+            main_branch="main"
+        elif git show-ref --verify --quiet refs/heads/master; then
+            main_branch="master"
+        fi
+        
+        if [ -n "$main_branch" ]; then
+            branch_point=$(git merge-base "$current_branch" "$main_branch" 2>/dev/null)
+            if [ -n "$branch_point" ]; then
+                local branch_commit_msg
+                branch_commit_msg=$(git log --oneline -1 "$branch_point" 2>/dev/null)
+                printf "   從 \033[1;32m%s\033[0m 分支分出\n" "$main_branch" >&2
+                printf "   分支點: %s\n" "$branch_commit_msg" >&2
+            fi
+        fi
+    else
+        printf "   當前在主分支上\n" >&2
+    fi
+    
+    echo >&2
+    
+    # 6. 最近的 commit
+    info_msg "📝 最近提交:" >&2
+    local recent_commits
+    recent_commits=$(git log --oneline -5 --decorate --color=always 2>/dev/null)
+    if [ -n "$recent_commits" ]; then
+        echo "$recent_commits" | while IFS= read -r line; do
+            printf "   %s\n" "$line" >&2
+        done
+    else
+        printf "   \033[1;33m⚠️  尚無提交記錄\033[0m\n" >&2
+    fi
+    
+    echo >&2
+    
+    # 7. 工作區狀態
+    info_msg "📋 工作區狀態:" >&2
+    local status_output
+    status_output=$(git status --short 2>/dev/null)
+    if [ -n "$status_output" ]; then
+        printf "   \033[1;33m有未提交的變更:\033[0m\n" >&2
+        echo "$status_output" | while IFS= read -r line; do
+            printf "   %s\n" "$line" >&2
+        done
+    else
+        printf "   \033[1;32m✅ 工作區乾淨\033[0m\n" >&2
+    fi
+    
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息

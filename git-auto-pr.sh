@@ -62,11 +62,10 @@ generate_ai_branch_prompt() {
 }
 
 # AI Commit 訊息生成提示詞模板  
-# 參數：$1=short_diff (截斷的變更內容)
 # 輸出：符合 Conventional Commits 規範的中文訊息
+# 注意：實際的 git diff 內容會通過 content 參數傳遞，不包含在 prompt 中
 generate_ai_commit_prompt() {
-    local short_diff="$1"
-    echo "根據以下變更生成簡潔的中文 commit 訊息（格式：feat/fix/docs: 描述）：$short_diff"
+    echo "根據以下 Git 變更內容生成簡潔的中文 commit 訊息。要求：1) 使用 Conventional Commits 格式（feat/fix/docs/refactor/style/test/chore: 描述）；2) 描述功能變更而非技術細節；3) 一行完成，不超過 72 字元；4) 使用繁體中文。"
 }
 
 # AI PR 內容生成提示詞模板
@@ -77,7 +76,7 @@ generate_ai_pr_prompt() {
     local branch_name="$2"
     local commits="$3"
     local file_changes="$4"
-    echo "生成PR標題和內容，格式：標題|||內容。Issue: $issue_key, 分支: $branch_name, 變更: $commits $file_changes。要求：標題10-20字簡潔描述功能，內容包含功能變更和技術實作細節。使用繁體中文。"
+    echo "根據以下 commit 訊息摘要生成 PR 標題和內容。格式：標題|||內容（使用 ||| 分隔）。Issue: $issue_key, 分支: $branch_name。要求：1) 標題10-20字簡潔描述主要功能；2) 內容基於 commit 訊息整理功能變更要點；3) 使用繁體中文；4) 不要描述技術細節或 diff。Commits: $commits。檔案變更參考: $file_changes"
 }
 
 # AI 工具優先順序配置
@@ -432,9 +431,14 @@ run_command_with_loading() {
 }
 
 # 執行 codex 命令並處理輸出
+# 參數：
+#   $1 - prompt 提示詞
+#   $2 - content 要分析的內容（透過臨時文件傳遞）
+#   $3 - timeout 超時時間（可選，預設 60 秒）
 run_codex_command() {
     local prompt="$1"
-    local timeout=60
+    local content="$2"
+    local timeout="${3:-60}"
     
     info_msg "正在調用 codex..." >&2
     
@@ -444,34 +448,24 @@ run_codex_command() {
         return 1
     fi
     
-    # 檢查 git diff 大小並調整超時
-    local diff_size
-    diff_size=$(git diff --cached 2>/dev/null | wc -l)
-    if [ "$diff_size" -gt 500 ]; then
-        timeout=90
-        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
-    fi
-    
-    # 準備 git diff 內容
-    local git_diff
-    git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
-    if [ -z "$git_diff" ]; then
-        warning_msg "沒有檢測到任何變更內容" >&2
+    # 檢查內容是否為空
+    if [ -z "$content" ]; then
+        warning_msg "沒有內容可供分析" >&2
         return 1
     fi
     
-    # 創建臨時檔案傳遞提示詞
+    # 創建臨時檔案傳遞提示詞和內容
     local temp_prompt
     temp_prompt=$(mktemp)
-    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
+    printf '%s\n\n%s' "$prompt" "$content" > "$temp_prompt"
     
     # 執行 codex 命令
     local output exit_code
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
+        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     fi
     
@@ -531,10 +525,16 @@ run_codex_command() {
 }
 
 # 執行基於 stdin 的 AI 命令
+# 參數：
+#   $1 - tool_name AI 工具名稱 (gemini/claude)
+#   $2 - prompt 提示詞
+#   $3 - content 要分析的內容（透過臨時文件傳遞）
+#   $4 - timeout 超時時間（可選，預設 45 秒）
 run_stdin_ai_command() {
     local tool_name="$1"
     local prompt="$2"
-    local timeout=45  # 增加超時時間到 45 秒
+    local content="$3"
+    local timeout="${4:-45}"
     
     info_msg "正在調用 $tool_name..." >&2
     
@@ -544,46 +544,40 @@ run_stdin_ai_command() {
         return 1
     fi
     
-    # 檢查認證狀態
-    # FIXED 不要檢查，因為可能需要用戶手動登入或是有發送頻率限制。
-    
-    # 獲取 git diff 內容
-    local diff_content
-    diff_content=$(git diff --cached 2>/dev/null)
-    
-    if [ -z "$diff_content" ]; then
-        warning_msg "沒有暫存區變更可供 $tool_name 分析" >&2
+    # 檢查內容是否為空
+    if [ -z "$content" ]; then
+        warning_msg "沒有內容可供 $tool_name 分析" >&2
         return 1
     fi
     
     local output
     local exit_code
     
-    # 創建臨時檔案存儲 diff 內容
-    local temp_diff
-    temp_diff=$(mktemp)
-    echo "$diff_content" > "$temp_diff"
+    # 創建臨時檔案存儲內容
+    local temp_content
+    temp_content=$(mktemp)
+    echo "$content" > "$temp_content"
     
     # 使用帶 loading 的命令執行
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
     # 清理臨時檔案
-    rm -f "$temp_diff"
+    rm -f "$temp_content"
     
     if [ $exit_code -eq 124 ]; then
         printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
         
         # 顯示調試信息
         printf "\n\033[0;90m🔍 調試信息（%s 超時錯誤）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [content_file]\033[0m\n" "$tool_name" "$prompt" >&2
         printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
-        printf "\033[0;90m diff 內容大小: %d 行\033[0m\n" "$(echo "$diff_content" | wc -l)" >&2
+        printf "\033[0;90m內容大小: %d 行\033[0m\n" "$(echo "$content" | wc -l)" >&2
         if [ -n "$output" ]; then
             printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
             echo "$output" | head -n 5 | sed 's/^/  /' >&2
@@ -597,7 +591,7 @@ run_stdin_ai_command() {
         
         # 顯示調試信息
         printf "\n\033[0;90m🔍 調試信息（%s 執行失敗）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [content_file]\033[0m\n" "$tool_name" "$prompt" >&2
         printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
         if [ -n "$output" ]; then
             printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
@@ -614,10 +608,10 @@ run_stdin_ai_command() {
         
         # 顯示調試信息
         printf "\n\033[0;90m🔍 調試信息（%s 無輸出）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [content_file]\033[0m\n" "$tool_name" "$prompt" >&2
         printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
-        printf "\033[0;90m diff 內容預覽:\033[0m\n" >&2
-        echo "$diff_content" | head -n 5 | sed 's/^/  /' >&2
+        printf "\033[0;90m內容預覽:\033[0m\n" >&2
+        echo "$content" | head -n 5 | sed 's/^/  /' >&2
         printf "\n" >&2
         return 1
     fi
@@ -799,6 +793,9 @@ generate_branch_name_with_ai() {
     local prompt
     prompt=$(generate_ai_branch_prompt "$issue_key" "$description_hint")
     
+    # 準備分支生成的上下文內容
+    local content="Issue Key: ${issue_key}\nDescription: ${description_hint}"
+    
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
     
     # 嘗試使用不同的 AI 工具
@@ -808,7 +805,8 @@ generate_branch_name_with_ai() {
         local result
         case "$tool" in
             "codex")
-                if result=$(run_codex_command "$prompt"); then
+                # 為分支名稱生成使用較短的超時時間（30秒）
+                if result=$(run_codex_command "$prompt" "$content" 30); then
                     result=$(clean_branch_name "$result")
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
@@ -818,7 +816,8 @@ generate_branch_name_with_ai() {
                 fi
                 ;;
             "gemini"|"claude")
-                if result=$(run_stdin_ai_command "$tool" "$prompt"); then
+                # 為分支名稱生成使用較短的超時時間（30秒）
+                if result=$(run_stdin_ai_command "$tool" "$prompt" "$content" 30); then
                     result=$(clean_branch_name "$result")
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
@@ -847,11 +846,22 @@ generate_commit_message_with_ai() {
         return 1
     fi
     
-    # 截斷過長的 diff 內容並簡化 prompt
-    local short_diff
-    short_diff=$(echo "$diff_content" | head -20 | tr '\n' ' ')
+    # 檢查 diff 大小並調整超時
+    local diff_size
+    local timeout=60
+    diff_size=$(echo "$diff_content" | wc -l)
+    if [ "$diff_size" -gt 500 ]; then
+        timeout=90
+        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
+    fi
+    
+    # 準備 prompt（只包含指令，不包含 diff 內容）
     local prompt
-    prompt=$(generate_ai_commit_prompt "$short_diff")
+    prompt=$(generate_ai_commit_prompt "")
+    
+    # 準備完整的 diff 內容用於 AI 分析
+    local full_content
+    full_content="Git 變更內容:\n${diff_content}"
     
     info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
     
@@ -879,7 +889,8 @@ generate_commit_message_with_ai() {
         local result
         case "$tool" in
             "codex")
-                if result=$(run_codex_command "$prompt"); then
+                # 傳遞 prompt、內容和超時時間給 codex
+                if result=$(run_codex_command "$prompt" "$full_content" "$timeout"); then
                     result=$(clean_ai_message "$result")
                     if [ -n "$result" ] && [ ${#result} -gt 3 ]; then
                         success_msg "✅ $tool 生成 commit message 成功" >&2
@@ -889,7 +900,8 @@ generate_commit_message_with_ai() {
                 fi
                 ;;
             "gemini"|"claude")
-                if result=$(run_stdin_ai_command "$tool" "$prompt"); then
+                # 傳遞工具名、prompt、內容和超時時間
+                if result=$(run_stdin_ai_command "$tool" "$prompt" "$full_content" 45); then
                     result=$(clean_ai_message "$result")
                     if [ -n "$result" ] && [ ${#result} -gt 3 ]; then
                         success_msg "✅ $tool 生成 commit message 成功" >&2
@@ -912,52 +924,143 @@ generate_pr_content_with_ai() {
     local issue_key="$1"
     local branch_name="$2"
     
-    # 獲取分支的 commit 歷史
+    # 獲取分支的 commit 歷史（完整訊息）
     local commits
     local main_branch
     main_branch=$(get_main_branch)
-    commits=$(git log --oneline "$main_branch".."$branch_name" 2>/dev/null | head -10)
     
-    # 獲取檔案變更摘要
+    # 獲取完整的 commit 訊息（不只是 oneline）
+    commits=$(git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
+    
+    if [ -z "$commits" ]; then
+        warning_msg "分支 '$branch_name' 沒有新的 commit" >&2
+        return 1
+    fi
+    
+    # 獲取檔案變更摘要（僅用於參考）
     local file_changes
-    file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null)
+    file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null | head -20)
+    
+    # 計算 commit 數量
+    local commit_count
+    commit_count=$(echo "$commits" | wc -l | xargs)
+    
+    info_msg "📊 分析分支資訊：" >&2
+    info_msg "   - Issue Key: $issue_key" >&2
+    info_msg "   - 分支名稱: $branch_name" >&2
+    info_msg "   - Commit 數量: $commit_count" >&2
+    info_msg "   - 檔案變更: $(echo "$file_changes" | wc -l | xargs) 個檔案" >&2
+    echo >&2
     
     # 使用提示詞模板生成 prompt
     local prompt
     prompt=$(generate_ai_pr_prompt "$issue_key" "$branch_name" "$commits" "$file_changes")
     
-    info_msg "🤖 使用 AI 生成 PR 內容..." >&2
+    info_msg "🤖 使用 AI 根據 commit 訊息生成 PR 內容..." >&2
+    
+    # 創建臨時檔案存儲 commit 訊息和檔案變更
+    local temp_content
+    temp_content=$(mktemp)
+    cat > "$temp_content" <<EOF
+Issue Key: $issue_key
+分支名稱: $branch_name
+Commit 數量: $commit_count
+
+Commit 訊息摘要:
+$commits
+
+檔案變更摘要:
+$file_changes
+EOF
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
         printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
         
         local result
+        local output
+        local exit_code
+        local timeout=60
+        
         case "$tool" in
             "codex")
-                if result=$(run_codex_command "$prompt"); then
+                # 檢查 codex 是否可用
+                if ! command -v codex >/dev/null 2>&1; then
+                    warning_msg "codex 工具未安裝" >&2
+                    continue
+                fi
+                
+                # 創建包含 prompt 和內容的臨時文件
+                local temp_prompt
+                temp_prompt=$(mktemp)
+                printf '%s\n\n' "$prompt" > "$temp_prompt"
+                cat "$temp_content" >> "$temp_prompt"
+                
+                # 執行 codex
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
+                    exit_code=$?
+                else
+                    output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
+                    exit_code=$?
+                fi
+                
+                rm -f "$temp_prompt"
+                
+                if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
+                    # 清理 codex 輸出
+                    result=$(echo "$output" | \
+                        sed -n '/^codex$/,/^tokens used/p' | \
+                        sed '1d;$d' | \
+                        grep -E ".+" | \
+                        xargs)
+                    
+                    if [ -z "$result" ]; then
+                        result=$(echo "$output" | \
+                            grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex|effort:|summaries:)" | \
+                            grep -E ".+" | \
+                            tail -n 1 | \
+                            xargs)
+                    fi
+                    
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成 PR 內容成功" >&2
-                        success_msg "$result" >&2
+                        rm -f "$temp_content"
                         echo "$result"
                         return 0
                     fi
                 fi
                 ;;
             "gemini"|"claude")
-                if result=$(run_stdin_ai_command "$tool" "$prompt"); then
-                    if [ -n "$result" ]; then
-                        success_msg "✅ $tool 生成 PR 內容成功" >&2
-                        success_msg "$result" >&2
-                        echo "$result"
-                        return 0
-                    fi
+                # 檢查工具是否可用
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                    warning_msg "$tool 工具未安裝" >&2
+                    continue
+                fi
+                
+                # 使用帶 loading 的命令執行
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(run_command_with_loading "timeout $timeout $tool -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool 分析 commit 訊息" "$timeout")
+                    exit_code=$?
+                else
+                    output=$(run_command_with_loading "$tool -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool 分析 commit 訊息" "$timeout")
+                    exit_code=$?
+                fi
+                
+                if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
+                    success_msg "✅ $tool 生成 PR 內容成功" >&2
+                    rm -f "$temp_content"
+                    echo "$output"
+                    return 0
                 fi
                 ;;
         esac
         
         warning_msg "⚠️  $tool 無法生成 PR 內容，嘗試下一個工具..." >&2
     done
+    
+    # 清理臨時文件
+    rm -f "$temp_content"
     
     warning_msg "所有 AI 工具都無法生成 PR 內容" >&2
     return 1

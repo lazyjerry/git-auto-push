@@ -83,7 +83,7 @@ generate_ai_pr_prompt() {
 # AI 工具優先順序配置
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 # 修改此陣列可以調整工具優先級或新增其他 AI 工具
-readonly AI_TOOLS=( "gemini" "codex" "claude")
+readonly AI_TOOLS=( "codex" "gemini" "claude")
 
 # ==============================================
 # 分支配置區域
@@ -434,78 +434,107 @@ run_command_with_loading() {
 # 執行 codex 命令並處理輸出
 run_codex_command() {
     local prompt="$1"
-    local timeout=45  # 增加超時時間到 45 秒
+    local timeout=60
     
     info_msg "正在調用 codex..." >&2
     
-    # 首先檢查 codex 是否可用
+    # 檢查 codex 是否可用
     if ! command -v codex >/dev/null 2>&1; then
         warning_msg "codex 工具未安裝" >&2
         return 1
     fi
     
-    # 使用 printf 安全地處理 prompt，避免特殊字符問題
-    local escaped_prompt
-    # 將 prompt 中的單引號替換為安全的格式
-    escaped_prompt=$(printf '%s' "$prompt" | sed "s/'/'\\\\''/g")
+    # 檢查 git diff 大小並調整超時
+    local diff_size
+    diff_size=$(git diff --cached 2>/dev/null | wc -l)
+    if [ "$diff_size" -gt 500 ]; then
+        timeout=90
+        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
+    fi
     
-    local output
-    local exit_code
+    # 準備 git diff 內容
+    local git_diff
+    git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
+    if [ -z "$git_diff" ]; then
+        warning_msg "沒有檢測到任何變更內容" >&2
+        return 1
+    fi
     
-    # 使用 codex exec 命令
+    # 創建臨時檔案傳遞提示詞
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
+    
+    # 執行 codex 命令
+    local output exit_code
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec '$escaped_prompt'" "正在等待 codex 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec '$escaped_prompt'" "正在等待 codex 回應" "$timeout")
+        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     fi
     
-    # 檢查認證相關錯誤 (從完整輸出中檢查)
-    if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]] || [[ "$output" == *"authentication token is expired"* ]]; then
-        printf "\033[0;31m❌ codex 認證錯誤: 認證令牌已過期\033[0m\n" >&2
-        printf "\033[1;33m💡 請執行以下命令重新登入 codex:\033[0m\n" >&2
-        printf "\033[0;36m   codex auth login\033[0m\n" >&2
-        return 1
-    fi
+    # 清理臨時檔案
+    rm -f "$temp_prompt"
     
-    # 檢查其他網路或串流錯誤
-    if [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
-        printf "\033[0;31m❌ codex 網路錯誤: %s\033[0m\n" "$(echo "$output" | grep -E "(stream error|connection|network)" | head -n 1)" >&2
-        printf "\033[1;33m💡 請檢查網路連接或稍後重試\033[0m\n" >&2
-        return 1
-    fi
+    # 處理執行結果
+    case $exit_code in
+        0)
+            # 成功執行，處理輸出
+            if [ -n "$output" ]; then
+                local filtered_output
+                
+                # 方法1：精確提取 "codex" 和 "tokens used" 之間的內容
+                filtered_output=$(echo "$output" | \
+                    sed -n '/^codex$/,/^tokens used/p' | \
+                    sed '1d;$d' | \
+                    grep -E ".+" | \
+                    xargs)
+                
+                # 方法2：如果方法1沒有結果，使用備用過濾邏輯
+                if [ -z "$filtered_output" ]; then
+                    filtered_output=$(echo "$output" | \
+                        grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex|effort:|summaries:)" | \
+                        grep -E ".+" | \
+                        tail -n 1 | \
+                        xargs)
+                fi
+                
+                if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
+                    success_msg "codex 回應完成" >&2
+                    echo "$filtered_output"
+                    return 0
+                fi
+            fi
+            warning_msg "codex 沒有返回有效內容" >&2
+            ;;
+        124)
+            printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
+            printf "\033[1;33m💡 建議：檢查網路連接或稍後重試\033[0m\n" >&2
+            ;;
+        *)
+            # 檢查特定錯誤類型
+            if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+                printf "\033[0;31m❌ codex 認證錯誤\033[0m\n" >&2
+                printf "\033[1;33m💡 請執行：codex auth login\033[0m\n" >&2
+            elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+                printf "\033[0;31m❌ codex 網路錯誤\033[0m\n" >&2
+                printf "\033[1;33m💡 請檢查網路連接\033[0m\n" >&2
+            else
+                warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+            fi
+            ;;
+    esac
     
-    if [ $exit_code -eq 124 ]; then
-        warning_msg "codex 執行超時（${timeout}秒）" >&2
-        return 1
-    elif [ $exit_code -ne 0 ]; then
-        # 檢查輸出中是否包含錯誤訊息
-        local error_line
-        error_line=$(echo "$output" | grep -E "(error|Error|ERROR)" | head -n 1)
-        if [ -n "$error_line" ]; then
-            printf "\033[0;31mcodex 執行失敗: %s\033[0m\n" "$error_line" >&2
-        else
-            warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
-        fi
-        return 1
-    fi
-    
-    if [ -z "$output" ]; then
-        warning_msg "codex 沒有返回內容" >&2
-        return 1
-    fi
-    
-    success_msg "codex 回應完成" >&2
-    echo "$output"
-    return 0
+    return 1
 }
 
-# 執行其他 AI 工具命令 (gemini, claude)
-run_ai_tool_command() {
+# 執行基於 stdin 的 AI 命令
+run_stdin_ai_command() {
     local tool_name="$1"
     local prompt="$2"
-    local timeout=45  # 45 秒超時
+    local timeout=45  # 增加超時時間到 45 秒
     
     info_msg "正在調用 $tool_name..." >&2
     
@@ -515,28 +544,81 @@ run_ai_tool_command() {
         return 1
     fi
     
+    # 檢查認證狀態
+    # FIXED 不要檢查，因為可能需要用戶手動登入或是有發送頻率限制。
+    
+    # 獲取 git diff 內容
+    local diff_content
+    diff_content=$(git diff --cached 2>/dev/null)
+    
+    if [ -z "$diff_content" ]; then
+        warning_msg "沒有暫存區變更可供 $tool_name 分析" >&2
+        return 1
+    fi
+    
     local output
     local exit_code
     
+    # 創建臨時檔案存儲 diff 內容
+    local temp_diff
+    temp_diff=$(mktemp)
+    echo "$diff_content" > "$temp_diff"
+    
     # 使用帶 loading 的命令執行
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout echo '$prompt' | $tool_name 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "echo '$prompt' | $tool_name 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
+    # 清理臨時檔案
+    rm -f "$temp_diff"
+    
     if [ $exit_code -eq 124 ]; then
-        warning_msg "$tool_name 執行超時（${timeout}秒）" >&2
+        printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（%s 超時錯誤）:\033[0m\n" "$tool_name" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
+        printf "\033[0;90m diff 內容大小: %d 行\033[0m\n" "$(echo "$diff_content" | wc -l)" >&2
+        if [ -n "$output" ]; then
+            printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
+            echo "$output" | head -n 5 | sed 's/^/  /' >&2
+        else
+            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+        fi
+        printf "\n" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        warning_msg "$tool_name 執行失敗（退出碼: $exit_code）" >&2
+        printf "\033[0;31m❌ %s 執行失敗（退出碼: %d）\033[0m\n" "$tool_name" "$exit_code" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（%s 執行失敗）:\033[0m\n" "$tool_name" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        if [ -n "$output" ]; then
+            printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
+            echo "$output" | sed 's/^/  /' >&2
+        else
+            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+        fi
+        printf "\n" >&2
         return 1
     fi
     
     if [ -z "$output" ]; then
-        warning_msg "$tool_name 沒有返回內容" >&2
+        printf "\033[0;31m❌ %s 沒有返回內容\033[0m\n" "$tool_name" >&2
+        
+        # 顯示調試信息
+        printf "\n\033[0;90m🔍 調試信息（%s 無輸出）:\033[0m\n" "$tool_name" >&2
+        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
+        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        printf "\033[0;90m diff 內容預覽:\033[0m\n" >&2
+        echo "$diff_content" | head -n 5 | sed 's/^/  /' >&2
+        printf "\n" >&2
         return 1
     fi
     
@@ -545,34 +627,18 @@ run_ai_tool_command() {
     return 0
 }
 
-# 清理 AI 工具返回的訊息格式
+# 清理 AI 生成的訊息
 clean_ai_message() {
     local message="$1"
     
-    # 移除 codex 的日誌輸出行
-    message=$(echo "$message" | grep -v "^\[.*\] OpenAI Codex" | grep -v "^--------" | grep -v "^workdir:" | grep -v "^model:" | grep -v "^provider:" | grep -v "^approval:" | grep -v "^sandbox:" | grep -v "^reasoning" | grep -v "^\[.*\] User instructions:" | grep -v "^\[.*\] codex$" | grep -v "^\[.*\] tokens used:")
+    # 顯示原始訊息
+    printf "\033[0;90m🔍 AI 原始輸出: '%s'\033[0m\n" "$message" >&2
     
-    # 移除 prompt 回音（AI 工具有時會重複 prompt 內容）
-    message=$(echo "$message" | grep -v "^請分析以下" | grep -v "^變更內容：" | grep -v "^要求：" | grep -v "^專案資訊：" | grep -v "^請為.*生成" | grep -v "^Issue:" | grep -v "^分支:" | grep -v "^提交記錄:" | grep -v "^檔案變更:" | grep -v "^功能描述:")
+    # 最簡化處理：只移除前後空白，保留完整內容
+    message=$(echo "$message" | xargs)
     
-    # 移除空行和只有空格的行
-    message=$(echo "$message" | sed '/^[[:space:]]*$/d')
-    
-    # 移除常見的 AI 工具前綴和後綴
-    message=$(echo "$message" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    message=$(echo "$message" | sed 's/^[「『"'"'"']//' | sed 's/[」』"'"'"']$//')
-    
-    # 移除 diff 輸出和其他技術細節
-    message=$(echo "$message" | sed 's/diff:.*$//' | sed 's/。diff.*$//')
-    message=$(echo "$message" | grep -v "^- " | grep -v "^\* ")
-    
-    # 只取第一個看起來像實際回應的行，並限制長度
-    message=$(echo "$message" | grep -v "^$" | head -n 1 | cut -c1-72)
-    
-    # 如果結果為空，返回預設訊息
-    if [ -z "$message" ]; then
-        message="更新程式碼"
-    fi
+    # 顯示清理結果
+    printf "\033[0;90m🧹 清理後輸出: '%s'\033[0m\n" "$message" >&2
     
     echo "$message"
 }
@@ -751,8 +817,8 @@ generate_branch_name_with_ai() {
                     fi
                 fi
                 ;;
-            *)
-                if result=$(run_ai_tool_command "$tool" "$prompt"); then
+            "gemini"|"claude")
+                if result=$(run_stdin_ai_command "$tool" "$prompt"); then
                     result=$(clean_branch_name "$result")
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
@@ -787,28 +853,45 @@ generate_commit_message_with_ai() {
     local prompt
     prompt=$(generate_ai_commit_prompt "$short_diff")
     
-    info_msg "🤖 使用 AI 生成 commit message..." >&2
+    info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
-        printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
+        # 提示用戶即將使用 AI 工具，並提供狀態提醒
+        echo >&2
+        info_msg "🤖 即將嘗試使用 AI 工具: $tool" >&2
+        
+        # 根據不同工具提供特定的狀態提醒
+        case "$tool" in
+            "gemini")
+                warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試" >&2
+                ;;
+            "claude")
+                warning_msg "💡 提醒: Claude 需要登入付費帳號登入或 API 參數設定，如未登入請執行 'claude /login'" >&2
+                ;;
+            "codex")
+                info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定" >&2
+                ;;
+        esac
+        
+        info_msg "🔄 正在使用 AI 工具: $tool" >&2
         
         local result
         case "$tool" in
             "codex")
                 if result=$(run_codex_command "$prompt"); then
                     result=$(clean_ai_message "$result")
-                    if [ -n "$result" ]; then
+                    if [ -n "$result" ] && [ ${#result} -gt 3 ]; then
                         success_msg "✅ $tool 生成 commit message 成功" >&2
                         echo "$result"
                         return 0
                     fi
                 fi
                 ;;
-            *)
-                if result=$(run_ai_tool_command "$tool" "$prompt"); then
+            "gemini"|"claude")
+                if result=$(run_stdin_ai_command "$tool" "$prompt"); then
                     result=$(clean_ai_message "$result")
-                    if [ -n "$result" ]; then
+                    if [ -n "$result" ] && [ ${#result} -gt 3 ]; then
                         success_msg "✅ $tool 生成 commit message 成功" >&2
                         echo "$result"
                         return 0
@@ -817,7 +900,7 @@ generate_commit_message_with_ai() {
                 ;;
         esac
         
-        warning_msg "⚠️  $tool 無法生成 commit message，嘗試下一個工具..." >&2
+        warning_msg "$tool 執行失敗，嘗試下一個工具..." >&2
     done
     
     warning_msg "所有 AI 工具都無法生成 commit message" >&2
@@ -861,8 +944,8 @@ generate_pr_content_with_ai() {
                     fi
                 fi
                 ;;
-            *)
-                if result=$(run_ai_tool_command "$tool" "$prompt"); then
+            "gemini"|"claude")
+                if result=$(run_stdin_ai_command "$tool" "$prompt"); then
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成 PR 內容成功" >&2
                         success_msg "$result" >&2

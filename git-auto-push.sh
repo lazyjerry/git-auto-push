@@ -372,7 +372,9 @@ run_command_with_loading() {
         echo "$output"
     fi
     
-    return "$exit_code"
+    # 確保 exit_code 是整數再返回
+    exit_code=$((exit_code + 0))
+    return $exit_code
 }
 
 # 執行 codex 命令並處理輸出
@@ -407,7 +409,15 @@ run_codex_command() {
     # 創建臨時檔案傳遞提示詞
     local temp_prompt
     temp_prompt=$(mktemp)
-    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
+    
+    # 安全地寫入臨時文件，確保 UTF-8 編碼
+    {
+        printf "%s\n\nGit 變更內容:\n%s" "$prompt" "$git_diff"
+    } > "$temp_prompt" 2>/dev/null || {
+        warning_msg "無法寫入臨時文件" >&2
+        rm -f "$temp_prompt"
+        return 1
+    }
     
     # 執行 codex 命令
     local output exit_code

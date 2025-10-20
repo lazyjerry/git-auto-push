@@ -427,7 +427,9 @@ run_command_with_loading() {
         echo "$output"
     fi
     
-    return "$exit_code"
+    # 確保 exit_code 是整數再返回
+    exit_code=$((exit_code + 0))
+    return $exit_code
 }
 
 # 執行 codex 命令並處理輸出
@@ -877,17 +879,13 @@ generate_pr_content_with_ai() {
     # 創建臨時檔案存儲 commit 訊息和檔案變更
     local temp_content
     temp_content=$(mktemp)
-    cat > "$temp_content" <<EOF
-Issue Key: $issue_key
-分支名稱: $branch_name
-Commit 數量: $commit_count
-
-Commit 訊息摘要:
-$commits
-
-檔案變更摘要:
-$file_changes
-EOF
+    {
+        printf "Issue Key: %s\n" "$issue_key"
+        printf "分支名稱: %s\n" "$branch_name"
+        printf "Commit 數量: %s\n\n" "$commit_count"
+        printf "Commit 訊息摘要:\n%s\n\n" "$commits"
+        printf "檔案變更摘要:\n%s\n" "$file_changes"
+    } > "$temp_content"
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
@@ -909,16 +907,28 @@ EOF
                 # 創建包含 prompt 和內容的臨時文件
                 local temp_prompt
                 temp_prompt=$(mktemp)
-                printf '%s\n\n' "$prompt" > "$temp_prompt"
-                cat "$temp_content" >> "$temp_prompt"
+                
+                # 確保使用 UTF-8 編碼寫入
+                {
+                    printf "%s\n\n" "$prompt"
+                    cat "$temp_content"
+                } > "$temp_prompt" 2>/dev/null || {
+                    warning_msg "無法寫入臨時文件" >&2
+                    rm -f "$temp_prompt"
+                    continue
+                }
                 
                 # 執行 codex
                 if command -v timeout >/dev/null 2>&1; then
                     output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
-                    exit_code=$?
                 else
                     output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
-                    exit_code=$?
+                fi
+                exit_code=$?
+                
+                # 確保 exit_code 是有效的整數
+                if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+                    exit_code=1
                 fi
                 
                 rm -f "$temp_prompt"
@@ -950,6 +960,10 @@ EOF
                 else
                     if [ $exit_code -ne 0 ]; then
                         warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+                        if [ -n "$output" ]; then
+                            printf "\033[0;90m💬 codex 輸出：\033[0m\n" >&2
+                            echo "$output" | sed 's/^/  /' >&2
+                        fi
                     elif [ -z "$output" ]; then
                         warning_msg "codex 沒有產生輸出" >&2
                     fi
@@ -965,10 +979,14 @@ EOF
                 # 使用帶 loading 的命令執行
                 if command -v timeout >/dev/null 2>&1; then
                     output=$(run_command_with_loading "timeout $timeout $tool -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool 分析 commit 訊息" "$timeout")
-                    exit_code=$?
                 else
                     output=$(run_command_with_loading "$tool -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool 分析 commit 訊息" "$timeout")
-                    exit_code=$?
+                fi
+                exit_code=$?
+                
+                # 確保 exit_code 是有效的整數
+                if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+                    exit_code=1
                 fi
                 
                 if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
@@ -979,8 +997,16 @@ EOF
                 else
                     if [ $exit_code -eq 124 ]; then
                         warning_msg "$tool 執行超時（${timeout}秒）" >&2
+                        if [ -n "$output" ]; then
+                            printf "\033[0;90m💬 $tool 部分輸出：\033[0m\n" >&2
+                            echo "$output" | head -n 10 | sed 's/^/  /' >&2
+                        fi
                     elif [ $exit_code -ne 0 ]; then
                         warning_msg "$tool 執行失敗（退出碼: $exit_code）" >&2
+                        if [ -n "$output" ]; then
+                            printf "\033[0;90m💬 $tool 輸出：\033[0m\n" >&2
+                            echo "$output" | sed 's/^/  /' >&2
+                        fi
                     elif [ -z "$output" ]; then
                         warning_msg "$tool 沒有產生輸出" >&2
                     fi

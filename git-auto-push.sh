@@ -355,7 +355,11 @@ run_command_with_loading() {
     fi
     
     if [ -f "${temp_file}.exit_code" ]; then
-        exit_code=$(cat "${temp_file}.exit_code" 2>/dev/null)
+        exit_code=$(cat "${temp_file}.exit_code" 2>/dev/null | xargs)
+        # 驗證退出碼是否為數字
+        if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+            exit_code=1
+        fi
     else
         exit_code=1
     fi
@@ -368,7 +372,9 @@ run_command_with_loading() {
         echo "$output"
     fi
     
-    return "$exit_code"
+    # 確保 exit_code 是整數再返回
+    exit_code=$((exit_code + 0))
+    return $exit_code
 }
 
 # 執行 codex 命令並處理輸出

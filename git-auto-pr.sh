@@ -64,10 +64,6 @@ generate_ai_branch_prompt() {
 # AI Commit 訊息生成提示詞模板  
 # 輸出：符合 Conventional Commits 規範的中文訊息
 # 注意：實際的 git diff 內容會通過 content 參數傳遞，不包含在 prompt 中
-generate_ai_commit_prompt() {
-    echo "根據以下 Git 變更內容生成簡潔的中文 commit 訊息。要求：1) 使用 Conventional Commits 格式（feat/fix/docs/refactor/style/test/chore: 描述）；2) 描述功能變更而非技術細節；3) 一行完成，不超過 72 字元；4) 使用繁體中文。"
-}
-
 # AI PR 內容生成提示詞模板
 # 參數：$1=issue_key, $2=branch_name, $3=commits, $4=file_changes  
 # 輸出：PR標題|||PR內容 格式，使用 ||| 分隔標題和內容
@@ -414,7 +410,11 @@ run_command_with_loading() {
     fi
     
     if [ -f "${temp_file}.exit_code" ]; then
-        exit_code=$(cat "${temp_file}.exit_code" 2>/dev/null)
+        exit_code=$(cat "${temp_file}.exit_code" 2>/dev/null | xargs)
+        # 驗證退出碼是否為數字
+        if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+            exit_code=1
+        fi
     else
         exit_code=1
     fi
@@ -835,90 +835,6 @@ generate_branch_name_with_ai() {
     return 1
 }
 
-# 使用 AI 生成 commit message
-generate_commit_message_with_ai() {
-    # 獲取 git diff 內容
-    local diff_content
-    diff_content=$(git diff --cached 2>/dev/null)
-    
-    if [ -z "$diff_content" ]; then
-        warning_msg "沒有暫存區變更可供 AI 分析" >&2
-        return 1
-    fi
-    
-    # 檢查 diff 大小並調整超時
-    local diff_size
-    local timeout=60
-    diff_size=$(echo "$diff_content" | wc -l)
-    if [ "$diff_size" -gt 500 ]; then
-        timeout=90
-        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
-    fi
-    
-    # 準備 prompt（只包含指令，不包含 diff 內容）
-    local prompt
-    prompt=$(generate_ai_commit_prompt "")
-    
-    # 準備完整的 diff 內容用於 AI 分析
-    local full_content
-    full_content="Git 變更內容:\n${diff_content}"
-    
-    info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
-    
-    # 嘗試使用不同的 AI 工具
-    for tool in "${AI_TOOLS[@]}"; do
-        # 提示用戶即將使用 AI 工具，並提供狀態提醒
-        echo >&2
-        info_msg "🤖 即將嘗試使用 AI 工具: $tool" >&2
-        
-        # 根據不同工具提供特定的狀態提醒
-        case "$tool" in
-            "gemini")
-                warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試" >&2
-                ;;
-            "claude")
-                warning_msg "💡 提醒: Claude 需要登入付費帳號登入或 API 參數設定，如未登入請執行 'claude /login'" >&2
-                ;;
-            "codex")
-                info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定" >&2
-                ;;
-        esac
-        
-        info_msg "🔄 正在使用 AI 工具: $tool" >&2
-        
-        local result
-        case "$tool" in
-            "codex")
-                # 傳遞 prompt、內容和超時時間給 codex
-                if result=$(run_codex_command "$prompt" "$full_content" "$timeout"); then
-                    result=$(clean_ai_message "$result")
-                    if [ -n "$result" ] && [ ${#result} -gt 3 ]; then
-                        success_msg "✅ $tool 生成 commit message 成功" >&2
-                        echo "$result"
-                        return 0
-                    fi
-                fi
-                ;;
-            "gemini"|"claude")
-                # 傳遞工具名、prompt、內容和超時時間
-                if result=$(run_stdin_ai_command "$tool" "$prompt" "$full_content" 45); then
-                    result=$(clean_ai_message "$result")
-                    if [ -n "$result" ] && [ ${#result} -gt 3 ]; then
-                        success_msg "✅ $tool 生成 commit message 成功" >&2
-                        echo "$result"
-                        return 0
-                    fi
-                fi
-                ;;
-        esac
-        
-        warning_msg "$tool 執行失敗，嘗試下一個工具..." >&2
-    done
-    
-    warning_msg "所有 AI 工具都無法生成 commit message" >&2
-    return 1
-}
-
 # 使用 AI 生成 PR 標題和內容
 generate_pr_content_with_ai() {
     local issue_key="$1"
@@ -1028,6 +944,14 @@ EOF
                         rm -f "$temp_content"
                         echo "$result"
                         return 0
+                    else
+                        warning_msg "codex 輸出解析後為空（退出碼: $exit_code，輸出長度: ${#output}）" >&2
+                    fi
+                else
+                    if [ $exit_code -ne 0 ]; then
+                        warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+                    elif [ -z "$output" ]; then
+                        warning_msg "codex 沒有產生輸出" >&2
                     fi
                 fi
                 ;;
@@ -1052,6 +976,14 @@ EOF
                     rm -f "$temp_content"
                     echo "$output"
                     return 0
+                else
+                    if [ $exit_code -eq 124 ]; then
+                        warning_msg "$tool 執行超時（${timeout}秒）" >&2
+                    elif [ $exit_code -ne 0 ]; then
+                        warning_msg "$tool 執行失敗（退出碼: $exit_code）" >&2
+                    elif [ -z "$output" ]; then
+                        warning_msg "$tool 沒有產生輸出" >&2
+                    fi
                 fi
                 ;;
         esac
@@ -1421,81 +1353,9 @@ execute_create_branch() {
 }
 
 # 提交並推送變更
-execute_commit_and_push() {
-    info_msg "📝 提交並推送變更流程..."
-    
-    # 檢查是否有變更
-    local status
-    status=$(git status --porcelain 2>/dev/null)
-    
-    if [ -z "$status" ]; then
-        warning_msg "沒有需要提交的變更"
-        return 1
-    fi
-    
-    # 顯示變更狀態
-    info_msg "檢測到以下變更:"
-    git status --short
-    echo
-    
-    # 添加所有變更
-    info_msg "正在添加所有變更的檔案..."
-    run_command "git add ." "添加檔案失敗"
-    success_msg "檔案添加成功！"
-    
-    # 生成 commit message
-    local commit_message
-    printf "\n請輸入 commit message (直接按 Enter 可使用 AI 自動生成): " >&2
-    read -r commit_input
-    commit_input=$(echo "$commit_input" | xargs)
-    
-    if [ -z "$commit_input" ]; then
-        info_msg "🤖 使用 AI 生成 commit message..."
-        commit_message=$(generate_commit_message_with_ai)
-        if [ $? -eq 0 ] && [ -n "$commit_message" ]; then
-            info_msg "AI 生成的 commit message: $commit_message"
-            printf "是否使用此 commit message？[Y/n]: " >&2
-            read -r confirm_commit
-            confirm_commit=$(echo "$confirm_commit" | xargs | tr '[:upper:]' '[:lower:]')
-            
-            if [[ -n "$confirm_commit" ]] && [[ ! "$confirm_commit" =~ ^(y|yes|是|確定)$ ]]; then
-                printf "請手動輸入 commit message: " >&2
-                read -r commit_message
-                commit_message=$(echo "$commit_message" | xargs)
-            fi
-        else
-            warning_msg "AI 生成失敗，請手動輸入"
-            printf "請輸入 commit message: " >&2
-            read -r commit_message
-            commit_message=$(echo "$commit_message" | xargs)
-        fi
-    else
-        commit_message="$commit_input"
-    fi
-    
-    if [ -z "$commit_message" ]; then
-        handle_error "Commit message 不能為空"
-    fi
-    
-    # 提交變更
-    info_msg "正在提交變更..."
-    run_command "git commit -m '$commit_message'" "提交失敗"
-    success_msg "提交成功！"
-    
-    # 推送到遠端
-    local current_branch
-    current_branch=$(get_current_branch)
-    
-    info_msg "正在推送到遠端分支: $current_branch"
-    run_command "git push -u origin '$current_branch'" "推送失敗"
-    success_msg "✅ 成功推送到遠端分支: $current_branch"
-    
-    echo >&2
-    info_msg "📝 接下來您可以："
-    printf "   1. 建立 Pull Request: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2)\n" >&2
-    printf "   2. 手動建立 PR: \033[0;36mgh pr create\033[0m\n" >&2
-    echo >&2
-}
+# 函式：execute_commit_and_push
+# 功能說明：此函式已移除。請使用 git-auto-push.sh 來提交並推送變更。
+# 注意事項：建立 PR 前必須先推送分支變更到遠端。
 
 # 建立 Pull Request
 execute_create_pr() {
@@ -1520,17 +1380,7 @@ execute_create_pr() {
     
     # 檢查分支是否已推送
     if ! git ls-remote --heads origin "$current_branch" | grep -q "$current_branch"; then
-        warning_msg "分支 '$current_branch' 尚未推送到遠端"
-        printf "是否先推送分支？[Y/n]: " >&2
-        read -r push_confirm
-        push_confirm=$(echo "$push_confirm" | xargs | tr '[:upper:]' '[:lower:]')
-        
-        if [[ -z "$push_confirm" ]] || [[ "$push_confirm" =~ ^(y|yes|是|確定)$ ]]; then
-            execute_commit_and_push
-        else
-            warning_msg "已取消操作"
-            return 1
-        fi
+        handle_error "分支 '$current_branch' 尚未推送到遠端，請先使用 git-auto-push.sh 推送變更"
     fi
     
     # 獲取 issue key（從分支名稱提取或手動輸入）

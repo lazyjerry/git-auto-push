@@ -1,11 +1,6 @@
 # Git 工作流程自動化工具集
 
-完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 └── screenshots/ # 介面展示圖片
-├── ai-commit-generation.png
-├── auto-mode.png
-├── main-menu.png
-├── pr-screenshot-cli.png
-└── pr-screenshot-web.pngHub Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
+完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
 
 ## 專案簡介
 

@@ -58,7 +58,7 @@
 generate_ai_branch_prompt() {
     local issue_key="$1"
     local description_hint="$2"
-    echo "Generate branch name: feature/$issue_key-description. Issue: $issue_key, Description: $description_hint. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+    LC_ALL=zh_TW.UTF-8 printf '%s' "Generate branch name: feature/$issue_key-description. Issue: $issue_key, Description: $description_hint. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
 }
 
 # AI Commit 訊息生成提示詞模板  
@@ -72,13 +72,17 @@ generate_ai_pr_prompt() {
     local branch_name="$2"
     local commits="$3"
     local file_changes="$4"
-    echo "根據以下 commit 訊息摘要生成 PR 標題和內容。格式：標題|||內容（使用 ||| 分隔）。Issue: $issue_key, 分支: $branch_name。要求：1) 標題10-20字簡潔描述主要功能；2) 內容基於 commit 訊息整理功能變更要點；3) 使用繁體中文；4) 不要描述技術細節或 diff。Commits: $commits。檔案變更參考: $file_changes"
+    
+    # 使用 printf 確保 UTF-8 編碼輸出
+    LC_ALL=zh_TW.UTF-8 printf '%s' "根據以下 commit 訊息摘要生成 PR 標題和內容。格式：標題|||內容（使用 ||| 分隔）。Issue: $issue_key, 分支: $branch_name。要求：1) 標題10-20字簡潔描述主要功能；2) 內容基於 commit 訊息整理功能變更要點；3) 使用繁體中文；4) 不要描述技術細節或 diff。Commits: $commits。檔案變更參考: $file_changes"
 }
 
 # AI 工具優先順序配置
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 # 修改此陣列可以調整工具優先級或新增其他 AI 工具
-readonly AI_TOOLS=( "codex" "gemini" "claude")
+# readonly AI_TOOLS=( "codex" "gemini" "claude")
+# codex 會有語系的問題取得的 commit 訊息變成亂碼造成失敗
+readonly AI_TOOLS=( "gemini" "claude")
 
 # ==============================================
 # 分支配置區域
@@ -457,17 +461,48 @@ run_codex_command() {
     fi
     
     # 創建臨時檔案傳遞提示詞和內容
+    # 確保使用 UTF-8 編碼以避免編碼轉換問題
     local temp_prompt
     temp_prompt=$(mktemp)
-    printf '%s\n\n%s' "$prompt" "$content" > "$temp_prompt"
     
-    # 執行 codex 命令
+    # 使用 printf 確保 UTF-8 編碼，並設置環境變數保證編碼一致
+    {
+        LC_ALL=zh_TW.UTF-8 printf '%s\n\n%s' "$prompt" "$content"
+    } > "$temp_prompt" || {
+        rm -f "$temp_prompt"
+        warning_msg "寫入臨時檔案失敗" >&2
+        return 1
+    }
+    
+    # 驗證臨時檔案是否為有效的 UTF-8
+    if ! file "$temp_prompt" | grep -q "UTF-8\|ASCII"; then
+        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")" >&2
+    fi
+    
+    # 🔍 調試輸出：印出即將傳遞給 codex 的內容
+    info_msg "🔍 調試: run_codex_command() - 即將傳遞給 codex 的內容" >&2
+    printf "\033[0;90m" >&2
+    printf "─────────────────────────────────────────\n" >&2
+    printf "📄 文件內容（編碼: UTF-8）:\n" >&2
+    printf "─────────────────────────────────────────\n" >&2
+    file -b "$temp_prompt" >&2
+    printf "\n📊 內容統計:\n" >&2
+    printf "   - 總行數: $(wc -l < "$temp_prompt") 行\n" >&2
+    printf "   - 總位元組: $(wc -c < "$temp_prompt") 位元組\n" >&2
+    printf "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)\n" >&2
+    printf "\n📝 前 500 個位元組內容:\n" >&2
+    printf "─────────────────────────────────────────\n" >&2
+    head -c 500 "$temp_prompt" | cat -v >&2
+    printf "\n─────────────────────────────────────────\033[0m\n" >&2
+    echo >&2
+    
+    # 執行 codex 命令，設定 UTF-8 環境變數
     local output exit_code
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     fi
     
@@ -848,7 +883,8 @@ generate_pr_content_with_ai() {
     main_branch=$(get_main_branch)
     
     # 獲取完整的 commit 訊息（不只是 oneline）
-    commits=$(git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
+    # 使用 LC_ALL=zh_TW.UTF-8 確保 git 輸出為 UTF-8 編碼
+    commits=$(LC_ALL=zh_TW.UTF-8 git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
     
     if [ -z "$commits" ]; then
         warning_msg "分支 '$branch_name' 沒有新的 commit" >&2
@@ -857,7 +893,8 @@ generate_pr_content_with_ai() {
     
     # 獲取檔案變更摘要（僅用於參考）
     local file_changes
-    file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null | head -20)
+    # 使用 LC_ALL=zh_TW.UTF-8 確保 git 輸出為 UTF-8 編碼
+    file_changes=$(LC_ALL=zh_TW.UTF-8 git diff --name-status "$main_branch".."$branch_name" 2>/dev/null | head -20)
     
     # 計算 commit 數量
     local commit_count
@@ -880,11 +917,14 @@ generate_pr_content_with_ai() {
     local temp_content
     temp_content=$(mktemp)
     {
-        printf "Issue Key: %s\n" "$issue_key"
-        printf "分支名稱: %s\n" "$branch_name"
-        printf "Commit 數量: %s\n\n" "$commit_count"
-        printf "Commit 訊息摘要:\n%s\n\n" "$commits"
-        printf "檔案變更摘要:\n%s\n" "$file_changes"
+        LC_ALL=zh_TW.UTF-8 printf "Issue Key: %s\n" "$issue_key"
+        LC_ALL=zh_TW.UTF-8 printf "分支名稱: %s\n" "$branch_name"
+        LC_ALL=zh_TW.UTF-8 printf "Commit 數量: %s\n\n" "$commit_count"
+        LC_ALL=zh_TW.UTF-8 printf "Commit 訊息摘要:\n"
+        LC_ALL=zh_TW.UTF-8 printf "%s" "$commits"
+        LC_ALL=zh_TW.UTF-8 printf "\n\n檔案變更摘要:\n"
+        LC_ALL=zh_TW.UTF-8 printf "%s" "$file_changes"
+        LC_ALL=zh_TW.UTF-8 printf "\n"
     } > "$temp_content"
     
     # 嘗試使用不同的 AI 工具
@@ -910,7 +950,7 @@ generate_pr_content_with_ai() {
                 
                 # 確保使用 UTF-8 編碼寫入
                 {
-                    printf "%s\n\n" "$prompt"
+                    LC_ALL=zh_TW.UTF-8 printf "%s\n\n" "$prompt"
                     cat "$temp_content"
                 } > "$temp_prompt" 2>/dev/null || {
                     warning_msg "無法寫入臨時文件" >&2
@@ -918,11 +958,28 @@ generate_pr_content_with_ai() {
                     continue
                 }
                 
-                # 執行 codex
+                # 🔍 調試輸出：印出即將傳遞給 codex 的內容
+                info_msg "🔍 調試: 即將傳遞給 codex 的內容" >&2
+                printf "\033[0;90m" >&2
+                printf "─────────────────────────────────────────\n" >&2
+                printf "📄 文件內容（編碼: UTF-8）:\n" >&2
+                printf "─────────────────────────────────────────\n" >&2
+                file -b "$temp_prompt" >&2
+                printf "\n📊 內容統計:\n" >&2
+                printf "   - 總行數: $(wc -l < "$temp_prompt") 行\n" >&2
+                printf "   - 總位元組: $(wc -c < "$temp_prompt") 位元組\n" >&2
+                printf "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)\n" >&2
+                printf "\n📝 前 500 個位元組內容:\n" >&2
+                printf "─────────────────────────────────────────\n" >&2
+                head -c 500 "$temp_prompt" | cat -v >&2
+                printf "\n─────────────────────────────────────────\033[0m\n" >&2
+                echo >&2
+                
+                # 執行 codex（確保 UTF-8 編碼）
                 if command -v timeout >/dev/null 2>&1; then
-                    output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
+                    output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
                 else
-                    output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
+                    output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
                 fi
                 exit_code=$?
                 

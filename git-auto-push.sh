@@ -409,15 +409,7 @@ run_codex_command() {
     # 創建臨時檔案傳遞提示詞
     local temp_prompt
     temp_prompt=$(mktemp)
-    
-    # 安全地寫入臨時文件，確保 UTF-8 編碼
-    {
-        printf "%s\n\nGit 變更內容:\n%s" "$prompt" "$git_diff"
-    } > "$temp_prompt" 2>/dev/null || {
-        warning_msg "無法寫入臨時文件" >&2
-        rm -f "$temp_prompt"
-        return 1
-    }
+    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
     
     # 執行 codex 命令
     local output exit_code

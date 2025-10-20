@@ -34,7 +34,6 @@
 ```bash
 # 調用順序：codex → gemini → claude → fallback
 readonly AI_TOOLS=("codex" "gemini" "claude")
-local ai_tools=("codex" "gemini" "claude")
 
 # Prompt 生成函數（調整 AI 行為）
 generate_ai_commit_prompt()   # commit 訊息（兩腳本）
@@ -52,18 +51,35 @@ generate_ai_pr_prompt()       # PR 標題與內容（僅 git-auto-pr.sh）
 
 ## ⚙️ 關鍵配置點
 
+### 🚨 開發協作規則
+
+**重要**：涉及兩個主腳本的修改必須遵循以下隔離原則：
+
+- **`git-auto-push.sh` 為穩定版本，除非特別需求，否則不應隨意修改**
+
+  - 僅允許在 bug 修復或架構調整時修改
+  - 任何新增功能或實驗應優先在 `git-auto-pr.sh` 中進行
+  - 若必須修改，需明確理由並更新版本號與 CHANGELOG
+
+- **`git-auto-pr.sh` 為開發版本，新功能和測試優先集中於此**
+  - 新增 AI 工具、提示詞調整、工作流程改進都在此進行
+  - 功能驗證完成且穩定後，方可複製至 `git-auto-push.sh`
+  - 保持與 `git-auto-push.sh` 的一致性（相同配置區間、AI 工具優先順序）
+
 ### git-auto-push.sh
 
 - `AI_TOOLS` 與 `AI_COMMIT_PROMPT` 定義於檔案開頭（約 28–52 行）。
 - `DEFAULT_OPTION=1`（約 674 行）控制互動介面預設執行模式。
 - 超時策略：基準 45 秒，可依 diff 大小調整；在 `run_codex_command()` 中設置。
 - Loading 動畫：`show_loading()` 以背景進程顯示 spinner，需配合 `trap` 清理。
+- ⚠️ **限制事項**：涉及 UTF-8 編碼、檔案寫入等底層操作時，需確保與 `git-auto-pr.sh` 同步。
 
 ### git-auto-pr.sh
 
 - `AI_TOOLS` 具有不同預設順序 `("gemini" "codex" "claude")`。
 - `DEFAULT_MAIN_BRANCHES=("main" "master")`，可擴充例如新增 `develop`。
 - 安全防護涵蓋主分支保護、CI 狀態檢查與分支刪除多重確認。
+- ✅ **主要實驗場所**：新增 AI 工具、編碼修復、功能改進應優先在此進行。
 
 ## 🚀 命令列接口與操作模式
 
@@ -75,7 +91,7 @@ generate_ai_pr_prompt()       # PR 標題與內容（僅 git-auto-pr.sh）
 | 2    | `execute_local_commit()`  | add → commit           | 離線開發     |
 | 3    | `execute_add_only()`      | add                    | 暫存變更     |
 | 4    | `execute_auto_workflow()` | add → AI commit → push | CI/CD 整合   |
-| 5    | `execute_commit_only()`   | commit（已暫存）      | 分階段提交   |
+| 5    | `execute_commit_only()`   | commit（已暫存）       | 分階段提交   |
 | 6    | `show_git_info()`         | 顯示倉庫資訊           | 狀態查看診斷 |
 
 常用指令：
@@ -85,13 +101,13 @@ generate_ai_pr_prompt()       # PR 標題與內容（僅 git-auto-pr.sh）
 
 ### git-auto-pr.sh（5 種模式）
 
-| 模式 | 關鍵函數                    | 特殊邏輯                                   | 安全機制           |
-| ---- | --------------------------- | ------------------------------------------ | ------------------ |
-| 1    | 建立功能分支                | AI 生成分支名稱並驗證格式                  | 必須以 main 為基底 |
-| 2    | 建立 PR                     | AI 生成標題／內容，使用 `|||` 分隔欄位     | 檢查 CI 狀態       |
-| 3    | 撤銷 PR（智慧）             | `open→close`，`merged→revert`（預設「否」） | 顯示 commit 影響範圍 |
-| 4    | 審查合併                    | 雙向審查與自我批准限制                     | 採用 squash 策略   |
-| 5    | 刪除分支（安全）            | 主分支保護與多重確認                       | 禁止刪除當前分支   |
+| 模式 | 關鍵函數         | 特殊邏輯                                    | 安全機制             |
+| ---- | ---------------- | ------------------------------------------- | -------------------- | --- | ---------- | ------------ |
+| 1    | 建立功能分支     | AI 生成分支名稱並驗證格式                   | 必須以 main 為基底   |
+| 2    | 建立 PR          | AI 生成標題／內容，使用 `                   |                      |     | ` 分隔欄位 | 檢查 CI 狀態 |
+| 3    | 撤銷 PR（智慧）  | `open→close`，`merged→revert`（預設「否」） | 顯示 commit 影響範圍 |
+| 4    | 審查合併         | 雙向審查與自我批准限制                      | 採用 squash 策略     |
+| 5    | 刪除分支（安全） | 主分支保護與多重確認                        | 禁止刪除當前分支     |
 
 **模式 3（撤銷 PR）示例邏輯：**
 
@@ -231,6 +247,17 @@ info_msg "🔄 正在處理..."
 3. **輸入緩衝**：長流程後使用 `read -r -t 0.1 dummy` 清空殘留輸入。
 4. **路徑假設**：腳本預設從 Git 倉庫根目錄執行。
 5. **主分支檢測**：依序遍歷 `DEFAULT_MAIN_BRANCHES`，不可只硬編碼 `main`。
+6. **穩定版本保護**：**`git-auto-push.sh` 為穩定生產版本，禁止隨意修改**
+   - 所有實驗性功能、bug 修復、編碼改進應優先在 `git-auto-pr.sh` 進行
+   - 除非涉及明確的共用函數（如 `run_command_with_loading()` 等基礎工具）且兩邊需保持同步，否則禁止修改 `git-auto-push.sh`
+   - 修改時需明確說明理由並同步更新 CHANGELOG
+
+## 📋 禁止事項
+
+- 禁止隨意修改 `git-auto-push.sh`，該檔案為穩定版本
+- 禁止新增功能到 `git-auto-push.sh`，應優先在 `git-auto-pr.sh` 驗證
+- 禁止未同步的修改（如只改 `git-auto-pr.sh` 而忘記同步共用函數到 `git-auto-push.sh`）
+- 禁止在不清楚影響範圍的情況下修改配置區（`AI_TOOLS`、Prompt 函數等）
 
 ## 🧪 測試與驗證
 

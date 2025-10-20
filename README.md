@@ -1,6 +1,6 @@
 # Git 工作流程自動化工具集
 
-完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
+完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 Github Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
 
 ## 專案簡介
 
@@ -9,13 +9,14 @@
 主要功能亮點：
 
 - 傳統 Git 工作流程完全自動化（新增、提交、推送）
+- **Git 倉庫資訊查看** 🆕（分支狀態、遠端配置、同步狀態、提交歷史一覽）
 - GitHub Flow PR 流程端到端自動化（分支建立到 PR 建立）
 - **PR 生命週期完整管理**（建立、撤銷、審查、合併）
 - **智慧分支管理系統** 🆕（安全刪除、主分支保護、多重確認）
 - AI 驅動的智慧內容產生（commit 訊息、分支名稱、PR 內容）
 - 企業級錯誤處理與智慧修復建議
 - 多 AI 工具整合與自動容錯機制
-- - **專業級程式碼文件** ✨：為所有主要函數加入企業級註解標準
+- **專業級程式碼文件** ✨：為所有主要函數加入企業級註解標準
 - 中斷復原和信號處理機制
 
 ## 系統架構
@@ -23,7 +24,7 @@
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1294 行，完整註解）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1372 行，完整註解）
 ├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2263 行，企業級文件）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤偵測      # 認證過期、網路錯誤自動識別
@@ -42,17 +43,17 @@
 ```
 ├── git-auto-push.sh      # 傳統 Git 自動化工具
 ├── git-auto-pr.sh        # GitHub Flow PR 自動化工具
-├── AGENTS.md            # 專案開發指引與規範
 ├── LICENSE              # MIT 授權條款
 ├── README.md            # 專案說明文件
 ├── .github/             # GitHub 相關設定
 │   ├── copilot-instructions.md    # AI 代理開發指導
 │   └── instructions/              # 程式碼產生規範
 │       ├── copilot-readme.instructions.md
-│       └── copilot-bash-doc-tw-instructions.md
+│       └── copilot-bash-doc-tw.instructions.md
 ├── docs/                # 文件目錄
-│   ├── github-flow.md   # GitHub Flow 流程說明
-│   └── pr-cancel-feature.md  # PR 撤銷功能說明
+│   ├── github-flow.md           # GitHub Flow 流程說明
+│   ├── pr-cancel-feature.md     # PR 撤銷功能說明
+│   └── git-info-feature.md      # Git 倉庫資訊顯示功能說明
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
@@ -136,13 +137,14 @@ git-auto-push --auto
 
 #### git-auto-push.sh 操作模式
 
-| 模式          | 功能描述                     | 使用情境           |
-| ------------- | ---------------------------- | ------------------ |
-| 1. 完整流程   | add → 互動輸入 commit → push | 日常開發提交       |
-| 2. 本機提交   | add → 互動輸入 commit        | 離線開發或測試提交 |
-| 3. 僅新增檔案 | add                          | 暫存檔案變更       |
-| 4. 全自動模式 | add → AI 產生 commit → push  | CI/CD 或快速提交   |
-| 5. 僅提交     | commit                       | 提交已暫存的檔案   |
+| 模式            | 功能描述                     | 使用情境           |
+| --------------- | ---------------------------- | ------------------ |
+| 1. 完整流程     | add → 互動輸入 commit → push | 日常開發提交       |
+| 2. 本機提交     | add → 互動輸入 commit        | 離線開發或測試提交 |
+| 3. 僅新增檔案   | add                          | 暫存檔案變更       |
+| 4. 全自動模式   | add → AI 產生 commit → push  | CI/CD 或快速提交   |
+| 5. 僅提交       | commit                       | 提交已暫存的檔案   |
+| 6. 顯示倉庫資訊 | 顯示 Git 倉庫詳細資訊        | 查看倉庫狀態與配置 |
 
 ### git-auto-pr.sh - GitHub Flow PR 自動化 ✨
 
@@ -215,6 +217,21 @@ git-auto-pr --auto
 
 # 稍後提交
 ./git-auto-push.sh  # 選擇選項 5
+```
+
+#### 查看 Git 倉庫資訊
+
+```bash
+# 快速查看倉庫狀態、分支、遠端配置等資訊
+./git-auto-push.sh
+# 選擇選項 6
+# 顯示內容包括：
+# - 當前分支和追蹤狀態
+# - 遠端倉庫 URL
+# - 最近 5 筆 commit
+# - 分支來源分析
+# - 同步狀態（領先/落後）
+# - 工作區狀態
 ```
 
 ### git-auto-pr.sh 使用情境 ✨
@@ -347,7 +364,8 @@ git checkout main && git pull
 
 **傳統 Git 流程（git-auto-push.sh）**
 
-- 5 種操作模式滿足不同開發場景
+- 6 種操作模式滿足不同開發場景
+- **Git 倉庫資訊查看** 🆕：快速瀏覽分支、遠端、同步狀態、提交歷史
 - 支援離線開發和 CI/CD 整合
 - 分階段操作支援：添加 → 提交 → 推送
 
@@ -707,13 +725,44 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
-### ✨ 最新版本亮點 (v1.4.1)
+### ✨ 最新版本亮點 (v1.5.0)
 
-- **1294 行** git-auto-push.sh - 傳統 Git 工作流程自動化，含完整註解
+- **1372 行** git-auto-push.sh - 傳統 Git 工作流程自動化，含完整註解
 - **2263 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件
-- **5 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理
+- **6 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理
+- **Git 倉庫資訊查看** 🆕 - 一鍵瀏覽倉庫完整狀態
 - **智慧分支管理** - 安全刪除機制，主分支保護，多重確認
 - **專業文件標準** - 所有函數都有完整的企業級註解
+
+---
+
+### v1.5.0 - Git 倉庫資訊查看功能 (2025-10-21)
+
+**🆕 新功能**
+
+- **Git 倉庫資訊顯示** 🆕：新增選項 6，提供完整的 Git 倉庫狀態概覽
+  - 🌿 當前分支名稱和倉庫路徑
+  - 🌐 所有遠端倉庫 URL（fetch 和 push）
+  - 🔗 追蹤分支資訊和設定狀態
+  - 📈 同步狀態分析（領先/落後提交數）
+  - 🌳 分支來源追蹤（從哪個主分支分出）
+  - 📝 最近 5 筆 commit 歷史記錄
+  - 📋 工作區狀態檢查（未提交變更）
+
+**🔧 改進**
+
+- 選單擴展：從 5 選項擴展為 6 選項，新增倉庫資訊查看
+- 智慧分析：自動判斷分支來源和與主分支的關係
+- 彩色輸出：使用顏色和 emoji 增強資訊可讀性
+- 安全設計：純查詢操作，不會修改任何 Git 狀態
+
+**📁 新增文檔**
+
+- `docs/git-info-feature.md` - Git 倉庫資訊功能詳細說明
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：1372 行（+78 行新功能）
 
 ---
 
@@ -795,10 +844,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ### 📚 參考資源
 
-- [AGENTS.md](AGENTS.md) - 詳細開發指引
-- [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理指導
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理開發指導
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
 - [docs/pr-cancel-feature.md](docs/pr-cancel-feature.md) - PR 撤銷功能詳細說明
+- [docs/git-info-feature.md](docs/git-info-feature.md) - Git 倉庫資訊功能說明
 
 ## 截圖展示
 

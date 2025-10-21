@@ -831,6 +831,7 @@ generate_branch_name_with_ai() {
     prompt=$(generate_ai_branch_prompt "$issue_key" "$description_hint")
     
     # 準備分支生成的上下文內容
+    # TODO 請確認這個內容 codex 是否會有問題
     local content="Issue Key: ${issue_key}\nDescription: ${description_hint}"
     
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
@@ -944,86 +945,18 @@ generate_pr_content_with_ai() {
                     continue
                 fi
                 
-                # 創建包含 prompt 和內容的臨時文件
-                local temp_prompt
-                temp_prompt=$(mktemp)
+                # 讀取臨時文件內容
+                local content_text
+                content_text=$(cat "$temp_content")
                 
-                # 確保使用 UTF-8 編碼寫入
-                {
-                    LC_ALL=zh_TW.UTF-8 printf "%s\n\n" "$prompt"
-                    cat "$temp_content"
-                } > "$temp_prompt" 2>/dev/null || {
-                    warning_msg "無法寫入臨時文件" >&2
-                    rm -f "$temp_prompt"
-                    continue
-                }
-                
-                # 🔍 調試輸出：印出即將傳遞給 codex 的內容
-                info_msg "🔍 調試: 即將傳遞給 codex 的內容" >&2
-                printf "\033[0;90m" >&2
-                printf "─────────────────────────────────────────\n" >&2
-                printf "📄 文件內容（編碼: UTF-8）:\n" >&2
-                printf "─────────────────────────────────────────\n" >&2
-                file -b "$temp_prompt" >&2
-                printf "\n📊 內容統計:\n" >&2
-                printf "   - 總行數: $(wc -l < "$temp_prompt") 行\n" >&2
-                printf "   - 總位元組: $(wc -c < "$temp_prompt") 位元組\n" >&2
-                printf "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)\n" >&2
-                printf "\n📝 前 500 個位元組內容:\n" >&2
-                printf "─────────────────────────────────────────\n" >&2
-                head -c 500 "$temp_prompt" | cat -v >&2
-                printf "\n─────────────────────────────────────────\033[0m\n" >&2
-                echo >&2
-                
-                # 執行 codex（確保 UTF-8 編碼）
-                if command -v timeout >/dev/null 2>&1; then
-                    output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
+                # 調用統一的 run_codex_command 函數
+                if result=$(run_codex_command "$prompt" "$content_text" "$timeout"); then
+                    success_msg "✅ $tool 生成 PR 內容成功" >&2
+                    rm -f "$temp_content"
+                    echo "$result"
+                    return 0
                 else
-                    output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析 commit 訊息" "$timeout")
-                fi
-                exit_code=$?
-                
-                # 確保 exit_code 是有效的整數
-                if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
-                    exit_code=1
-                fi
-                
-                rm -f "$temp_prompt"
-                
-                if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
-                    # 清理 codex 輸出
-                    result=$(echo "$output" | \
-                        sed -n '/^codex$/,/^tokens used/p' | \
-                        sed '1d;$d' | \
-                        grep -E ".+" | \
-                        xargs)
-                    
-                    if [ -z "$result" ]; then
-                        result=$(echo "$output" | \
-                            grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex|effort:|summaries:)" | \
-                            grep -E ".+" | \
-                            tail -n 1 | \
-                            xargs)
-                    fi
-                    
-                    if [ -n "$result" ]; then
-                        success_msg "✅ $tool 生成 PR 內容成功" >&2
-                        rm -f "$temp_content"
-                        echo "$result"
-                        return 0
-                    else
-                        warning_msg "codex 輸出解析後為空（退出碼: $exit_code，輸出長度: ${#output}）" >&2
-                    fi
-                else
-                    if [ $exit_code -ne 0 ]; then
-                        warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
-                        if [ -n "$output" ]; then
-                            printf "\033[0;90m💬 codex 輸出：\033[0m\n" >&2
-                            echo "$output" | sed 's/^/  /' >&2
-                        fi
-                    elif [ -z "$output" ]; then
-                        warning_msg "codex 沒有產生輸出" >&2
-                    fi
+                    warning_msg "$tool 無法生成 PR 內容" >&2
                 fi
                 ;;
             "gemini"|"claude")

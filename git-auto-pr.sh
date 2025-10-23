@@ -1651,11 +1651,33 @@ main() {
     show_random_thanks
 }
 
-# 建立功能分支
+# 函式：execute_create_branch
+# 功能說明：執行功能分支建立流程，基於主分支建立標準化命名的功能分支。
+# 輸入參數：無（透過互動式輸入獲取）
+# 輸出結果：
+#   STDERR 輸出各階段進度訊息、輸入提示與結果
+# 例外/失敗：
+#   1=使用者取消、主分支切換失敗、分支建立失敗
+# 流程：
+#   1. 檢測當前分支與主分支，若不在主分支則詢問是否切換
+#   2. 更新主分支至最新狀態（git pull --ff-only）
+#   3. 互動輸入 issue key 並驗證格式（支援多種格式：ISSUE-123、JIRA_456 等）
+#   4. 輸入擁有者名字（預設使用 DEFAULT_USERNAME）
+#   5. 選擇分支類型（issue、bug、feature、enhancement、blocker）
+#   6. 基於 AI 或手動輸入生成分支名稱（格式：username/type/issue-key-description）
+#   7. 驗證分支名稱格式並建立分支
+#   8. 切換到新建立的分支
+#   9. 顯示完成訊息與後續建議
+# 副作用：
+#   - 可能切換當前分支
+#   - 更新主分支（git pull）
+#   - 建立新的本地分支
+#   - 輸出至 stderr
+# 參考：get_main_branch()、check_main_branch()、validate_and_standardize_issue_key()、generate_ai_branch_name()
 execute_create_branch() {
     info_msg "🌿 建立功能分支流程..."
     
-    # 確保在主分支 - 先獲取所有需要的變數
+    # 步驟 1: 檢測當前分支與主分支狀態
     local main_branch
     local current_branch
     main_branch=$(get_main_branch)
@@ -1871,11 +1893,33 @@ execute_create_branch() {
 # 功能說明：此函式已移除。請使用 git-auto-push.sh 來提交並推送變更。
 # 注意事項：建立 PR 前必須先推送分支變更到遠端。
 
-# 建立 Pull Request
+# 函式：execute_create_pr
+# 功能說明：執行 Pull Request 建立流程，基於當前分支向主分支提交 PR。
+# 輸入參數：無（透過互動式輸入獲取）
+# 輸出結果：
+#   STDERR 輸出各階段進度訊息、輸入提示與結果
+#   在 GitHub 上建立新的 Pull Request
+# 例外/失敗：
+#   1=在主分支上無法建立 PR、分支未推送、PR 建立失敗
+# 流程：
+#   1. 檢測當前分支與主分支，驗證不在主分支上
+#   2. 檢查分支是否已推送到遠端（必須先推送才能建立 PR）
+#   3. 從分支名稱提取或手動輸入 issue key
+#   4. 收集分支的 commit 訊息與檔案變更
+#   5. 使用 AI 生成或手動輸入 PR 標題與內容
+#   6. 解析 AI 輸出（格式：標題。內容，以句號分隔）
+#   7. 確認 PR 資訊
+#   8. 使用 gh pr create 建立 PR
+#   9. 顯示 PR URL 與後續建議
+# 副作用：
+#   - 在 GitHub 上建立新的 Pull Request
+#   - 輸出至 stderr
+#   - 不修改本地 Git 狀態
+# 參考：get_current_branch()、get_main_branch()、generate_pr_content_with_ai()
 execute_create_pr() {
     info_msg "🔄 建立 Pull Request 流程..."
     
-    # 檢查當前分支
+    # 步驟 1: 檢測當前分支與主分支
     local current_branch
     current_branch=$(get_current_branch)
     

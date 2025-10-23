@@ -13,73 +13,97 @@
 
 ### 核心組件
 
-- **配置區**：集中管理 AI 工具與提示詞（`AI_TOOLS`、`AI_COMMIT_PROMPT`、`DEFAULT_MAIN_BRANCHES` 等）。
-- **AI 工具整合**：以 `run_*_command()` 函數封裝各 AI 工具。
-- **操作模式**：`execute_*_workflow()` 函數群涵蓋多種工作流程（push 端 6 種、PR 端 5 種）。
-- **Loading 動畫系統**：`show_loading()` 與背景進程協作展示執行狀態。
-- **信號處理機制**：多層級 `trap` 保證長任務中斷時的清理。
-- **同步點**：`generate_auto_commit_message()` 與 `generate_auto_commit_message_silent()` 必須同步維護。
+- **配置區**：集中管理 AI 工具與提示詞（`AI_TOOLS`、`AI_COMMIT_PROMPT`、`DEFAULT_MAIN_BRANCHES` 等）
+- **AI 工具整合**：以 `run_*_command()` 函數封裝各 AI 工具
+- **操作模式**：`execute_*_workflow()` 函數群涵蓋多種工作流程（push 端 6 種、PR 端 5 種）
+- **Loading 動畫系統**：`show_loading()` 與背景進程協作展示執行狀態
+- **信號處理機制**：多層級 `trap` 保證長任務中斷時的清理
 
 ## 🤖 AI 工具鏈整合架構
 
 ### 關鍵函數
 
-- `generate_auto_commit_message()`（互動模式，約 444 行）。
-- `generate_auto_commit_message_silent()`（自動模式，約 377 行）。
+每個腳本獨立維護自己的 AI 工具整合：
 
-兩者皆依 `AI_TOOLS` 順序遍歷，屬於硬編碼優先權邏輯；調整工具順序時務必同步修改。
+**git-auto-push.sh：**
+
+- `generate_auto_commit_message()`（互動模式，約 444 行）
+- `generate_auto_commit_message_silent()`（自動模式，約 377 行）
+
+**git-auto-pr.sh：**
+
+- 可以有自己獨立的 AI 整合函數
+- 不需要與 `git-auto-push.sh` 保持一致
+
+兩個腳本各自依 `AI_TOOLS` 順序遍歷，可以有不同的配置和邏輯。
 
 ### 統一配置模式（修改入口）
 
+每個腳本有自己獨立的配置區：
+
 ```bash
-# 調用順序：codex → gemini → claude → fallback
+# 每個腳本可以有不同的調用順序
+# git-auto-push.sh 範例
 readonly AI_TOOLS=("codex" "gemini" "claude")
 
-# Prompt 生成函數（調整 AI 行為）
-generate_ai_commit_prompt()   # commit 訊息（兩腳本）
-generate_ai_branch_prompt()   # 分支名稱（僅 git-auto-pr.sh）
-generate_ai_pr_prompt()       # PR 標題與內容（僅 git-auto-pr.sh）
+# git-auto-pr.sh 範例（可以不同）
+readonly AI_TOOLS=("gemini" "codex" "claude")
+
+# Prompt 生成函數（各腳本獨立）
+generate_ai_commit_prompt()   # commit 訊息（git-auto-push.sh）
+generate_ai_branch_prompt()   # 分支名稱（git-auto-pr.sh）
+generate_ai_pr_prompt()       # PR 標題與內容（git-auto-pr.sh）
 ```
 
 ### AI 調用模式差異
 
-- `run_codex_command()`：使用 `codex exec "$prompt"`，需額外的輸出清理與統一 45 秒超時機制。
-- `run_ai_tool_command()`：以 `echo "$prompt" | $tool_name` 管道呼叫 Gemini／Claude，重用相同結構。
-- `clean_ai_message()`：標準化所有 AI 輸出格式。
+- `run_codex_command()`：使用 `codex exec "$prompt"`，需額外的輸出清理與統一 45 秒超時機制
+- `run_ai_tool_command()`：以 `echo "$prompt" | $tool_name` 管道呼叫 Gemini／Claude，重用相同結構
+- `clean_ai_message()`：標準化所有 AI 輸出格式
 
-> **重要**：任何 AI 工具優先順序或遍歷邏輯更新，都必須同步修改兩個 `generate_*_commit_message*()` 函數。
+> **注意**：每個腳本獨立維護自己的 AI 工具整合邏輯，不需要同步。
 
 ## ⚙️ 關鍵配置點
 
 ### 🚨 開發協作規則
 
-**重要**：涉及兩個主腳本的修改必須遵循以下隔離原則：
+**重要**：兩個主腳本採用完全隔離的開發模式：
 
-- **`git-auto-push.sh` 為穩定版本，除非特別需求，否則不應隨意修改**
+- **`git-auto-push.sh` 為獨立穩定版本**
 
-  - 僅允許在 bug 修復或架構調整時修改
-  - 任何新增功能或實驗應優先在 `git-auto-pr.sh` 中進行
-  - 若必須修改，需明確理由並更新版本號與 CHANGELOG
+  - 禁止修改此檔案，除非有明確的 bug 修復需求
+  - 任何功能改進或實驗性變更都不應觸及此檔案
+  - 此檔案與其他檔案完全隔離，不與任何檔案連動
+  - 修改時需明確理由並更新版本號與 CHANGELOG
 
-- **`git-auto-pr.sh` 為開發版本，新功能和測試優先集中於此**
-  - 新增 AI 工具、提示詞調整、工作流程改進都在此進行
-  - 功能驗證完成且穩定後，方可複製至 `git-auto-push.sh`
-  - 保持與 `git-auto-push.sh` 的一致性（相同配置區間、AI 工具優先順序）
+- **`git-auto-pr.sh` 為獨立開發版本**
+  - 所有新功能、提示詞調整、工作流程改進都在此進行
+  - 此檔案與其他檔案完全隔離，不與任何檔案連動
+  - 不需要考慮與 `git-auto-push.sh` 的同步問題
+  - 可以自由修改配置、AI 工具優先順序等
+
+**檔案隔離原則**：
+
+- 每個檔案獨立維護，不需要同步修改
+- 修改任一檔案時，不需考慮對其他檔案的影響
+- 兩個腳本可以有不同的 AI 工具配置、提示詞模板和執行邏輯
 
 ### git-auto-push.sh
 
-- `AI_TOOLS` 與 `AI_COMMIT_PROMPT` 定義於檔案開頭（約 28–52 行）。
-- `DEFAULT_OPTION=1`（約 674 行）控制互動介面預設執行模式。
-- 超時策略：基準 45 秒，可依 diff 大小調整；在 `run_codex_command()` 中設置。
-- Loading 動畫：`show_loading()` 以背景進程顯示 spinner，需配合 `trap` 清理。
-- ⚠️ **限制事項**：涉及 UTF-8 編碼、檔案寫入等底層操作時，需確保與 `git-auto-pr.sh` 同步。
+- `AI_TOOLS` 與 `AI_COMMIT_PROMPT` 定義於檔案開頭（約 28–52 行）
+- `DEFAULT_OPTION=1`（約 674 行）控制互動介面預設執行模式
+- 超時策略：基準 45 秒，可依 diff 大小調整；在 `run_codex_command()` 中設置
+- Loading 動畫：`show_loading()` 以背景進程顯示 spinner，需配合 `trap` 清理
+- ⚠️ **獨立檔案**：此檔案獨立運作，不與其他檔案連動
 
 ### git-auto-pr.sh
 
-- `AI_TOOLS` 具有不同預設順序 `("gemini" "codex" "claude")`。
-- `DEFAULT_MAIN_BRANCHES=("main" "master")`，可擴充例如新增 `develop`。
-- 安全防護涵蓋主分支保護、CI 狀態檢查與分支刪除多重確認。
-- ✅ **主要實驗場所**：新增 AI 工具、編碼修復、功能改進應優先在此進行。
+- `AI_TOOLS` 可設定不同的預設順序（如 `("gemini" "codex" "claude")`）
+- `DEFAULT_MAIN_BRANCHES=("main" "master")`，可擴充例如新增 `develop`
+- `DEFAULT_USERNAME="jerry"`，可自訂預設使用者名稱
+- 安全防護涵蓋主分支保護、CI 狀態檢查與分支刪除多重確認
+- ✅ **獨立檔案**：此檔案獨立運作，不與其他檔案連動
+- ✅ **實驗場所**：可自由修改 AI 工具、編碼、功能，無需考慮同步
 
 ## 🚀 命令列接口與操作模式
 
@@ -166,7 +190,8 @@ loading_cleanup() {
 ### 場景 1：新增 AI 工具（如 `gpt`）
 
 ```bash
-# 步驟 1：更新配置（兩個檔案頂部）
+# 步驟 1：只更新需要修改的腳本配置
+# 例如只修改 git-auto-pr.sh
 readonly AI_TOOLS=("gpt" "codex" "gemini" "claude")
 
 # 步驟 2：實作調用函數（依工具特性選擇模式）
@@ -175,18 +200,8 @@ run_gpt_command() {
     # 特殊處理可參考 run_codex_command
 }
 
-# 步驟 3：更新 git-auto-push.sh 兩個函數
-generate_auto_commit_message() {
-    for tool in "${AI_TOOLS[@]}"; do
-        case "$tool" in
-            "gpt") run_gpt_command "$prompt" && break ;;
-        esac
-    done
-}
-
-generate_auto_commit_message_silent() {
-    # 同步添加相同邏輯
-}
+# 步驟 3：只更新當前腳本的相關函數
+# 不需要同步修改其他腳本
 ```
 
 ### 場景 2：調整 AI Prompt 提示詞
@@ -242,11 +257,11 @@ info_msg "🔄 正在處理..."
 
 ## ⚠️ 常見陷阱與最佳實踐
 
-1. **AI 工具同步**：同時更新兩個 `generate_*_commit_message*()` 函數。
-2. **信號處理**：暫時性 `trap` 結束前務必還原，避免洩漏到其他流程。
-3. **輸入緩衝**：長流程後使用 `read -r -t 0.1 dummy` 清空殘留輸入。
-4. **路徑假設**：腳本預設從 Git 倉庫根目錄執行。
-5. **主分支檢測**：依序遍歷 `DEFAULT_MAIN_BRANCHES`，不可只硬編碼 `main`。
+1. **檔案隔離**：每個腳本獨立維護，修改時不需考慮其他檔案
+2. **信號處理**：暫時性 `trap` 結束前務必還原，避免洩漏到其他流程
+3. **輸入緩衝**：長流程後使用 `read -r -t 0.1 dummy` 清空殘留輸入
+4. **路徑假設**：腳本預設從 Git 倉庫根目錄執行
+5. **主分支檢測**：依序遍歷 `DEFAULT_MAIN_BRANCHES`，不可只硬編碼 `main`
 6. **穩定版本保護**：**`git-auto-push.sh` 為穩定生產版本，禁止隨意修改**
    - 所有實驗性功能、bug 修復、編碼改進應優先在 `git-auto-pr.sh` 進行
    - 除非涉及明確的共用函數（如 `run_command_with_loading()` 等基礎工具）且兩邊需保持同步，否則禁止修改 `git-auto-push.sh`
@@ -256,7 +271,7 @@ info_msg "🔄 正在處理..."
 
 - 禁止隨意修改 `git-auto-push.sh`，該檔案為穩定版本
 - 禁止新增功能到 `git-auto-push.sh`，應優先在 `git-auto-pr.sh` 驗證
-- 禁止未同步的修改（如只改 `git-auto-pr.sh` 而忘記同步共用函數到 `git-auto-push.sh`）
+- 禁止修改一個檔案時連動修改其他檔案（每個檔案完全獨立）
 - 禁止在不清楚影響範圍的情況下修改配置區（`AI_TOOLS`、Prompt 函數等）
 
 ## 🧪 測試與驗證

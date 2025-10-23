@@ -105,7 +105,7 @@ EOF
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 # 修改此陣列可以調整工具優先級或新增其他 AI 工具
 # codex 會有語系的問題取得的 commit 訊息變成亂碼造成失敗
-readonly AI_TOOLS=( "codex")
+readonly AI_TOOLS=( "gemini")
 # readonly AI_TOOLS=( "codex" "gemini" "claude")
 
 # ==============================================
@@ -115,7 +115,7 @@ readonly AI_TOOLS=( "codex")
 # 主分支候選清單：依優先順序自動檢測
 # 可自行添加更多分支名稱，腳本會按順序檢測第一個存在的分支
 # 格式：("分支1" "分支2" "分支3" ...)
-readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
 
 # 預設使用者名稱：用於分支名稱前綴
 # 可修改為您的名稱或團隊慣例

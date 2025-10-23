@@ -582,7 +582,7 @@ get_main_branch() {
     
     # 如果都沒找到，顯示錯誤訊息並退出程式
     if [ -z "$found_branch" ]; then
-        handle_error "❌ 錯誤：找不到任何配置的主分支"
+        error_msg "❌ 錯誤：找不到任何配置的主分支"
         warning_msg "📋 配置的主分支候選清單: ${DEFAULT_MAIN_BRANCHES[*]}"
         cyan_msg "💡 解決方法："
         printf "   1. 檢查 Git 倉庫是否已初始化\n" >&2
@@ -926,17 +926,17 @@ run_codex_command() {
             warning_msg "codex 沒有返回有效內容"
             ;;
         124)
-            handle_error "❌ codex 執行超時（${timeout}秒）"
+            error_msg "❌ codex 執行超時（${timeout}秒）"
             warning_msg "💡 建議：檢查網路連接或稍後重試"
             ;;
         *)
             # 檢查特定錯誤類型
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
-                handle_error "❌ codex 認證錯誤"
+                error_msg "❌ codex 認證錯誤"
                 warning_msg "💡 請執行：codex auth login"
                 show_ai_debug_info "codex" "$prompt" "$content" "$output"
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
-                handle_error "❌ codex 網路錯誤"
+                error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
                 show_ai_debug_info "codex" "$prompt" "$content" "$output"
             else
@@ -1005,7 +1005,7 @@ run_stdin_ai_command() {
     rm -f "$temp_content"
     
     if [ $exit_code -eq 124 ]; then
-        handle_error "❌ $tool_name 執行超時（${timeout}秒）"
+        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
         
         # 顯示調試信息
         echo >&2
@@ -1023,7 +1023,7 @@ run_stdin_ai_command() {
         echo >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        handle_error "❌ $tool_name 執行失敗"
+        error_msg "❌ $tool_name 執行失敗"
         
         # 顯示調試信息
         echo >&2
@@ -1042,7 +1042,7 @@ run_stdin_ai_command() {
     fi
     
     if [ -z "$output" ]; then
-        handle_error "❌ $tool_name 沒有返回內容"
+        error_msg "❌ $tool_name 沒有返回內容"
         
         # 顯示調試信息
         echo >&2
@@ -2838,7 +2838,7 @@ execute_delete_branch() {
     
     # 最終確認刪除
     echo >&2
-    handle_error "⚠️  確定要刪除分支 '$target_branch'？[y/N]: "
+    error_msg "⚠️  確定要刪除分支 '$target_branch'？[y/N]: "
     read -r delete_confirm
     delete_confirm=$(echo "$delete_confirm" | xargs | tr '[:upper:]' '[:lower:]')
     

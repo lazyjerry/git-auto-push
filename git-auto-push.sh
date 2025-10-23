@@ -68,6 +68,17 @@ readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標�
 # ==============================================
 
 # ============================================
+# 錯誤訊息函數
+# 功能：顯示紅色錯誤訊息（不終止程式）
+# 參數：$1 - 錯誤訊息內容
+# 返回：0 (總是成功)
+# 使用：error_msg "發生錯誤"
+# ============================================
+error_msg() {
+    printf "\033[0;31m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
 # 錯誤處理函數
 # 功能：顯示紅色錯誤訊息並終止腳本執行
 # 參數：$1 - 錯誤訊息內容
@@ -75,7 +86,7 @@ readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標�
 # 使用：handle_error "發生嚴重錯誤"
 # ============================================
 handle_error() {
-    printf "\033[0;31m錯誤: %s\033[0m\n" "$1" >&2
+    error_msg "錯誤: $1"
     exit 1
 }
 
@@ -87,7 +98,7 @@ handle_error() {
 # 使用：success_msg "操作完成！"
 # ============================================
 success_msg() {
-    printf "\033[0;32m%s\033[0m\n" "$1"
+    printf "\033[0;32m%s\033[0m\n" "$1" >&2
 }
 
 # ============================================
@@ -98,7 +109,7 @@ success_msg() {
 # 使用：warning_msg "注意：檔案已存在"
 # ============================================
 warning_msg() {
-    printf "\033[1;33m%s\033[0m\n" "$1"
+    printf "\033[1;33m%s\033[0m\n" "$1" >&2
 }
 
 # ============================================
@@ -109,7 +120,74 @@ warning_msg() {
 # 使用：info_msg "正在執行操作..."
 # ============================================
 info_msg() {
-    printf "\033[0;34m%s\033[0m\n" "$1"
+    printf "\033[0;34m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 紫色訊息函數
+# 功能：顯示亮紫色訊息（用於特殊提示或感謝訊息）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：purple_msg "💝 感謝訊息"
+# ============================================
+purple_msg() {
+    printf "\033[1;35m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 青色訊息函數
+# 功能：顯示亮青色訊息（用於標籤或重要提示）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：cyan_msg "🤖 AI 生成的訊息"
+# ============================================
+cyan_msg() {
+    printf "\033[1;36m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 灰色訊息函數（調試用）
+# 功能：顯示灰色訊息（用於調試信息）
+# 參數：$1 - 調試訊息內容
+# 返回：0 (總是成功)
+# 使用：debug_msg "🔍 調試信息"
+# ============================================
+debug_msg() {
+    printf "\033[0;90m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 亮綠色訊息函數
+# 功能：顯示亮綠色訊息（用於高亮的成功訊息）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：highlight_success_msg "✅ 操作成功"
+# ============================================
+highlight_success_msg() {
+    printf "\033[1;32m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 白色訊息函數
+# 功能：顯示亮白色訊息（用於選單選項）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：white_msg "選項說明"
+# ============================================
+white_msg() {
+    printf "\033[1;37m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 帶標籤的青色訊息函數
+# 功能：顯示青色標籤加一般文字的格式（用於資訊標籤）
+# 參數：$1 - 標籤內容（青色）
+#      $2 - 標籤後的文字內容（一般顏色）
+# 返回：0 (總是成功)
+# 使用：cyan_label_msg "🌿 當前分支:" "main"
+# ============================================
+cyan_label_msg() {
+    printf "\033[1;36m%s\033[0m %s\n" "$1" "$2" >&2
 }
 
 # ============================================
@@ -137,7 +215,7 @@ show_random_thanks() {
     local selected_message="${messages[$random_index]}"
     
     echo >&2
-    printf "\033[1;35m💝 %s\033[0m\n" "$selected_message" >&2
+    purple_msg "💝 $selected_message"
 }
 
 # ============================================
@@ -207,7 +285,7 @@ add_all_files() {
         success_msg "檔案添加成功！"
         return 0
     else
-        printf "\033[0;31m添加檔案失敗\033[0m\n" >&2
+        error_msg "添加檔案失敗"
         return 1
     fi
 }
@@ -217,13 +295,13 @@ clean_ai_message() {
     local message="$1"
     
     # 顯示原始訊息
-    printf "\033[0;90m🔍 AI 原始輸出: '%s'\033[0m\n" "$message" >&2
+    debug_msg "🔍 AI 原始輸出: '$message'"
     
     # 最簡化處理：只移除前後空白，保留完整內容
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果
-    printf "\033[0;90m🧹 清理後輸出: '%s'\033[0m\n" "$message" >&2
+    debug_msg "🧹 清理後輸出: '$message'"
     
     echo "$message"
 }
@@ -456,17 +534,17 @@ run_codex_command() {
             warning_msg "codex 沒有返回有效內容" >&2
             ;;
         124)
-            printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
-            printf "\033[1;33m💡 建議：檢查網路連接或稍後重試\033[0m\n" >&2
+            error_msg "❌ codex 執行超時（${timeout}秒）"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
             ;;
         *)
             # 檢查特定錯誤類型
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
-                printf "\033[0;31m❌ codex 認證錯誤\033[0m\n" >&2
-                printf "\033[1;33m💡 請執行：codex auth login\033[0m\n" >&2
+                error_msg "❌ codex 認證錯誤"
+                warning_msg "💡 請執行：codex auth login"
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
-                printf "\033[0;31m❌ codex 網路錯誤\033[0m\n" >&2
-                printf "\033[1;33m💡 請檢查網路連接\033[0m\n" >&2
+                error_msg "❌ codex 網路錯誤"
+                warning_msg "💡 請檢查網路連接"
             else
                 warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
             fi
@@ -523,46 +601,49 @@ run_stdin_ai_command() {
     rm -f "$temp_diff"
     
     if [ $exit_code -eq 124 ]; then
-        printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
+        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
         
         # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（%s 超時錯誤）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
-        printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
-        printf "\033[0;90m diff 內容大小: %d 行\033[0m\n" "$(echo "$diff_content" | wc -l)" >&2
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
+        debug_msg "執行的指令: $tool_name -p '$prompt' < [diff_file]"
+        debug_msg "超時設定: $timeout 秒"
+        debug_msg "diff 內容大小: $(echo "$diff_content" | wc -l) 行"
         if [ -n "$output" ]; then
-            printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
+            debug_msg "部分輸出內容:"
             echo "$output" | head -n 5 | sed 's/^/  /' >&2
         else
-            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+            debug_msg "輸出內容: (無)"
         fi
         printf "\n" >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        printf "\033[0;31m❌ %s 執行失敗（退出碼: %d）\033[0m\n" "$tool_name" "$exit_code" >&2
+        error_msg "❌ $tool_name 執行失敗（退出碼: $exit_code）"
         
         # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（%s 執行失敗）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
-        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
+        debug_msg "執行的指令: $tool_name -p '$prompt' < [diff_file]"
+        debug_msg "退出碼: $exit_code"
         if [ -n "$output" ]; then
-            printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
+            debug_msg "完整輸出內容:"
             echo "$output" | sed 's/^/  /' >&2
         else
-            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+            debug_msg "輸出內容: (無)"
         fi
         printf "\n" >&2
         return 1
     fi
     
     if [ -z "$output" ]; then
-        printf "\033[0;31m❌ %s 沒有返回內容\033[0m\n" "$tool_name" >&2
+        error_msg "❌ $tool_name 沒有返回內容"
         
         # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（%s 無輸出）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [diff_file]\033[0m\n" "$tool_name" "$prompt" >&2
-        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
-        printf "\033[0;90m diff 內容預覽:\033[0m\n" >&2
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
+        debug_msg "執行的指令: $tool_name -p '$prompt' < [diff_file]"
+        debug_msg "退出碼: $exit_code"
+        debug_msg "diff 內容預覽:"
         echo "$diff_content" | head -n 5 | sed 's/^/  /' >&2
         printf "\n" >&2
         return 1
@@ -617,7 +698,7 @@ generate_auto_commit_message_silent() {
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
             info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:" >&2
-            printf "\033[1;32m%s\033[0m\n" "🔖 $generated_message" >&2
+            highlight_success_msg "🔖 $generated_message"
             echo "$generated_message"
             return 0
         else
@@ -694,7 +775,7 @@ generate_auto_commit_message() {
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
             info_msg "✅ 使用 $ai_tool_used 生成的 commit message:" >&2
-            printf "\033[1;32m%s\033[0m\n" "🔖 $generated_message" >&2
+            highlight_success_msg "🔖 $generated_message"
             echo "$generated_message"
             return 0
         else
@@ -730,8 +811,8 @@ get_commit_message() {
     
     if auto_message=$(generate_auto_commit_message); then
         echo >&2
-        printf "\033[1;36m%s\033[0m\n" "🤖 AI 生成的 commit message:" >&2
-        printf "\033[1;32m%s\033[0m\n" "🔖 $auto_message" >&2
+        cyan_msg "🤖 AI 生成的 commit message:"
+        highlight_success_msg "🔖 $auto_message"
         printf "是否使用此訊息？[Y/n]: " >&2
         read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
@@ -757,8 +838,8 @@ get_commit_message() {
             # 重新嘗試 AI 生成
             if auto_message=$(generate_auto_commit_message); then
                 echo >&2
-                printf "\033[1;36m%s\033[0m\n" "🔄 AI 重新生成的 commit message:" >&2
-                printf "\033[1;32m%s\033[0m\n" "🔖 $auto_message" >&2
+                cyan_msg "🔄 AI 重新生成的 commit message:"
+                highlight_success_msg "🔖 $auto_message"
                 printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
                 read -r confirm
                 confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
@@ -822,7 +903,7 @@ commit_changes() {
         success_msg "提交成功！"
         return 0
     else
-        printf "\033[0;31m提交失敗\033[0m\n" >&2
+        error_msg "提交失敗"
         return 1
     fi
 }
@@ -836,7 +917,7 @@ push_to_remote() {
     branch=$(git branch --show-current 2>/dev/null)
     
     if [ $? -ne 0 ] || [ -z "$branch" ]; then
-        printf "\033[0;31m獲取分支名稱失敗\033[0m\n" >&2
+        error_msg "獲取分支名稱失敗"
         return 1
     fi
     
@@ -848,7 +929,7 @@ push_to_remote() {
         success_msg "成功推送到遠端分支: $branch"
         return 0
     else
-        printf "\033[0;31m推送失敗\033[0m\n" >&2
+        error_msg "推送失敗"
         return 1
     fi
 }
@@ -862,12 +943,12 @@ show_operation_menu() {
     echo "==================================================" >&2
     info_msg "請選擇要執行的 Git 操作:" >&2
     echo "==================================================" >&2
-    printf "\033[1;32m1.\033[0m 🚀 完整流程 (add → commit → push)\n" >&2
-    printf "\033[1;33m2.\033[0m 📝 本地提交 (add → commit)\n" >&2
-    printf "\033[1;34m3.\033[0m 📦 僅添加檔案 (add)\n" >&2
-    printf "\033[1;35m4.\033[0m 🤖 全自動模式 (add → AI commit → push)\n" >&2
-    printf "\033[1;36m5.\033[0m 💾 僅提交 (commit)\n" >&2
-    printf "\033[1;37m6.\033[0m 📊 顯示 Git 倉庫資訊\n" >&2
+    highlight_success_msg "1. 🚀 完整流程 (add → commit → push)"
+    warning_msg "2. 📝 本地提交 (add → commit)"
+    info_msg "3. 📦 僅添加檔案 (add)"
+    purple_msg "4. 🤖 全自動模式 (add → AI commit → push)"
+    cyan_msg "5. 💾 僅提交 (commit)"
+    white_msg "6. 📊 顯示 Git 倉庫資訊"
     echo "==================================================" >&2
     printf "請輸入選項 [1-6] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
@@ -1214,12 +1295,12 @@ show_git_info() {
     # 1. 當前分支
     local current_branch
     current_branch=$(git branch --show-current 2>/dev/null || echo "未知")
-    printf "\033[1;36m🌿 當前分支:\033[0m %s\n" "$current_branch" >&2
+    cyan_label_msg "🌿 當前分支:" "$current_branch"
     
     # 2. 倉庫根目錄
     local repo_root
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "未知")
-    printf "\033[1;36m📂 倉庫路徑:\033[0m %s\n" "$repo_root" >&2
+    cyan_label_msg "📂 倉庫路徑:" "$repo_root"
     
     echo >&2
     
@@ -1232,7 +1313,7 @@ show_git_info() {
             printf "   %s\n" "$line" >&2
         done
     else
-        printf "   \033[1;33m⚠️  未配置遠端倉庫\033[0m\n" >&2
+        warning_msg "   ⚠️  未配置遠端倉庫"
     fi
     
     echo >&2
@@ -1241,27 +1322,26 @@ show_git_info() {
     local upstream_branch
     upstream_branch=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
     if [ -n "$upstream_branch" ]; then
-        printf "\033[1;36m🔗 追蹤分支:\033[0m %s\n" "$upstream_branch" >&2
+        cyan_label_msg "🔗 追蹤分支:" "$upstream_branch"
         
         # 檢查本地與遠端的同步狀態
         local ahead behind
         ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "0")
         behind=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo "0")
         
-        printf "\033[1;36m📈 同步狀態:\033[0m" >&2
+        highlight_success_msg "📈 同步狀態:\033[0m "
         if [ "$ahead" -eq 0 ] && [ "$behind" -eq 0 ]; then
-            printf " \033[1;32m✅ 已同步\033[0m\n" >&2
+            highlight_success_msg "✅ 已同步"
         else
             if [ "$ahead" -gt 0 ]; then
-                printf " \033[1;33m⬆️  領先 %d 個提交\033[0m" "$ahead" >&2
+                warning_msg "⬆️  領先 $ahead 個提交"
             fi
             if [ "$behind" -gt 0 ]; then
-                printf " \033[1;33m⬇️  落後 %d 個提交\033[0m" "$behind" >&2
+                warning_msg "⬇️  落後 $behind 個提交"
             fi
-            printf "\n" >&2
         fi
     else
-        printf "\033[1;33m🔗 追蹤分支: ⚠️  未設置上游分支\033[0m\n" >&2
+        warning_msg "🔗 追蹤分支: ⚠️  未設置上游分支"
     fi
     
     echo >&2
@@ -1284,7 +1364,7 @@ show_git_info() {
             if [ -n "$branch_point" ]; then
                 local branch_commit_msg
                 branch_commit_msg=$(git log --oneline -1 "$branch_point" 2>/dev/null)
-                printf "   從 \033[1;32m%s\033[0m 分支分出\n" "$main_branch" >&2
+                highlight_success_msg "   從 $main_branch 分支分出"
                 printf "   分支點: %s\n" "$branch_commit_msg" >&2
             fi
         fi
@@ -1303,7 +1383,7 @@ show_git_info() {
             printf "   %s\n" "$line" >&2
         done
     else
-        printf "   \033[1;33m⚠️  尚無提交記錄\033[0m\n" >&2
+        warning_msg "   ⚠️  尚無提交記錄"
     fi
     
     echo >&2
@@ -1313,12 +1393,12 @@ show_git_info() {
     local status_output
     status_output=$(git status --short 2>/dev/null)
     if [ -n "$status_output" ]; then
-        printf "   \033[1;33m有未提交的變更:\033[0m\n" >&2
+        warning_msg "   有未提交的變更:"
         echo "$status_output" | while IFS= read -r line; do
             printf "   %s\n" "$line" >&2
         done
     else
-        printf "   \033[1;32m✅ 工作區乾淨\033[0m\n" >&2
+        highlight_success_msg "   ✅ 工作區乾淨"
     fi
     
     echo "==================================================" >&2
@@ -1344,7 +1424,7 @@ execute_auto_workflow() {
     echo >&2
     echo "==================================================" >&2
     info_msg "🤖 全自動提交資訊:" >&2
-    printf "\033[1;36m%s\033[0m\n" "📝 Commit Message: $message" >&2
+    cyan_msg "📝 Commit Message: $message"
     echo "==================================================" >&2
     
     # 步驟 5: 自動提交（無需用戶確認）

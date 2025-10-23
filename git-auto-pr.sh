@@ -61,9 +61,9 @@ generate_ai_branch_prompt() {
     
     # 如果描述為空，使用更通用的提示詞
     if [ -z "$description_hint" ]; then
-        LC_ALL=zh_TW.UTF-8 printf '%s' "Generate a Git branch name for issue $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/issue-001-add-feature"
+        printf '%s' "Generate a Git branch name for issue $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/issue-001-add-feature"
     else
-        LC_ALL=zh_TW.UTF-8 printf '%s' "Generate branch name for: $description_hint. Issue: $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+        printf '%s' "Generate branch name for: $description_hint. Issue: $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
     fi
 }
 
@@ -76,18 +76,35 @@ generate_ai_branch_prompt() {
 generate_ai_pr_prompt() {
     local issue_key="$1"
     local branch_name="$2"
-    local commits="$3"
-    local file_changes="$4"
     
-    # 使用 printf 確保 UTF-8 編碼輸出
-    LC_ALL=zh_TW.UTF-8 printf '%s' "根據以下 commit 訊息摘要生成 PR 標題和內容。格式：標題|||內容（使用 ||| 分隔）。Issue: $issue_key, 分支: $branch_name。要求：1) 標題10-20字簡潔描述主要功能；2) 內容基於 commit 訊息整理功能變更要點；3) 使用繁體中文；4) 不要描述技術細節或 diff。Commits: $commits。檔案變更參考: $file_changes"
+    # Prompt 只包含指令和格式說明，不包含實際的 commits 和 file_changes
+    # 實際數據會透過 content 參數（臨時檔案）傳遞
+    cat <<EOF
+根據以下 commit 訊息摘要生成 PR 內容。
+
+Issue Key: $issue_key
+分支名稱: $branch_name
+
+格式要求：
+1) 使用繁體中文撰寫
+2) 第一句話為簡潔標題（10-20字），必須以句號（。）結尾
+3) 接續的內容為詳細功能變更說明
+4) 基於 commit 訊息整理功能要點
+5) 不要描述技術細節或 diff
+
+輸出範例：
+優化 AI 工具整合功能。本次更新改善了 AI 工具的調用流程，提升了分支名稱生成的準確性，並調整了工具優先順序以獲得更好的效能表現。
+
+請參考下方提供的 Commit 訊息摘要和檔案變更資訊。
+EOF
 }
 
 # AI 工具優先順序配置
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 # 修改此陣列可以調整工具優先級或新增其他 AI 工具
 # codex 會有語系的問題取得的 commit 訊息變成亂碼造成失敗
-readonly AI_TOOLS=( "codex" "gemini" "claude")
+readonly AI_TOOLS=( "codex")
+# readonly AI_TOOLS=( "codex" "gemini" "claude")
 
 # ==============================================
 # 分支配置區域
@@ -145,6 +162,44 @@ warning_msg() {
 # ============================================
 info_msg() {
     printf "\033[0;34m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 調試訊息函數
+# 功能：顯示灰色調試訊息
+# 參數：$1 - 調試訊息內容
+# 返回：0 (總是成功)
+# 使用：debug_msg "🔍 調試: 變數值='$var'"
+# ============================================
+debug_msg() {
+    printf "\033[0;90m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# AI 調試資訊顯示函數
+# 功能：統一顯示 AI 工具的輸入輸出調試資訊
+# 參數：
+#   $1 - 工具名稱（如 codex, gemini）
+#   $2 - prompt 內容
+#   $3 - content 內容
+#   $4 - 輸出內容（可選）
+# 返回：0 (總是成功)
+# ============================================
+show_ai_debug_info() {
+    local tool_name="$1"
+    local prompt="$2"
+    local content="$3"
+    local output="$4"
+    
+    debug_msg "📥 AI 輸入（prompt）："
+    echo "$prompt" | sed 's/^/  /' >&2
+    debug_msg "📥 AI 輸入（content，前 10 行）："
+    echo "$content" | head -n 10 | sed 's/^/  /' >&2
+    
+    if [ -n "$output" ]; then
+        debug_msg "💬 $tool_name 輸出："
+        echo "$output" | sed 's/^/  /' >&2
+    fi
 }
 
 # ============================================
@@ -388,11 +443,7 @@ run_command_with_loading() {
     # 設置中斷信號處理
     trap cleanup_and_exit INT TERM
     
-    # 在背景啟動 loading 動畫
-    show_loading "$loading_message" "$timeout" &
-    local loading_pid=$!
-    
-    # 在背景執行命令，將輸出重定向到臨時檔案
+    # 在背景執行命令並將結果寫入臨時檔案
     (
         eval "$command" > "$temp_file" 2>&1
         echo $? > "${temp_file}.exit_code"
@@ -400,19 +451,42 @@ run_command_with_loading() {
     
     local cmd_pid=$!
     
-    # 等待命令執行完成
-    wait $cmd_pid 2>/dev/null
+    # 顯示 loading 動畫
+    show_loading "$loading_message" "$timeout" "$cmd_pid" &
+    local loading_pid=$!
+    
+    # 等待命令完成或超時
+    local count=0
+    while [ $count -lt $((timeout * 10)) ] && kill -0 "$cmd_pid" 2>/dev/null; do
+        sleep 0.1
+        count=$((count + 1))
+    done
     
     # 停止 loading 動畫
     kill "$loading_pid" 2>/dev/null
     wait "$loading_pid" 2>/dev/null
     
-    # 清理終端
-    printf "\r\033[K\033[?25h" >&2
+    # 如果命令仍在運行，則超時殺死它
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+        kill -TERM "$cmd_pid" 2>/dev/null
+        sleep 1
+        kill -KILL "$cmd_pid" 2>/dev/null
+        wait "$cmd_pid" 2>/dev/null
+        warning_msg "命令執行超時" >&2
+        rm -f "$temp_file" "${temp_file}.exit_code"
+        trap - INT TERM  # 清理信號處理
+        return 124  # timeout 的標準退出碼
+    fi
     
-    # 讀取輸出和退出碼
+    # 等待背景程序完成
+    wait "$cmd_pid" 2>/dev/null
+    
+    # 清理信號處理
+    trap - INT TERM
+    
+    # 讀取結果
     local output
-    local exit_code=0
+    local exit_code
     
     if [ -f "$temp_file" ]; then
         output=$(cat "$temp_file" 2>/dev/null)
@@ -470,9 +544,11 @@ run_codex_command() {
     local temp_prompt
     temp_prompt=$(mktemp)
     
-    # 使用 printf 確保 UTF-8 編碼，並設置環境變數保證編碼一致
+    # 使用 printf 確保 UTF-8 編碼
+    # 使用 C.UTF-8 或 en_US.UTF-8 避免 locale 相關問題
     {
-        LC_ALL=zh_TW.UTF-8 printf '%s\n\n%s' "$prompt" "$content"
+        export LC_ALL=C.UTF-8 LANG=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+        printf '%s\n\n%s' "$prompt" "$content"
     } > "$temp_prompt" || {
         rm -f "$temp_prompt"
         warning_msg "寫入臨時檔案失敗" >&2
@@ -485,31 +561,43 @@ run_codex_command() {
     fi
     
     # 🔍 調試輸出：印出即將傳遞給 codex 的內容
-    info_msg "🔍 調試: run_codex_command() - 即將傳遞給 codex 的內容" >&2
-    printf "\033[0;90m" >&2
-    printf "─────────────────────────────────────────\n" >&2
-    printf "📄 文件內容（編碼: UTF-8）:\n" >&2
-    printf "─────────────────────────────────────────\n" >&2
-    file -b "$temp_prompt" >&2
-    printf "\n📊 內容統計:\n" >&2
-    printf "   - 總行數: $(wc -l < "$temp_prompt") 行\n" >&2
-    printf "   - 總位元組: $(wc -c < "$temp_prompt") 位元組\n" >&2
-    printf "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)\n" >&2
-    printf "\n📝 前 500 個位元組內容:\n" >&2
-    printf "─────────────────────────────────────────\n" >&2
-    head -c 500 "$temp_prompt" | cat -v >&2
-    printf "\n─────────────────────────────────────────\033[0m\n" >&2
+    debug_msg "🔍 調試: run_codex_command() - 即將傳遞給 codex 的內容"
+    debug_msg "─────────────────────────────────────────"
+    debug_msg "📄 文件內容（編碼: UTF-8）:"
+    debug_msg "─────────────────────────────────────────"
+    file -b "$temp_prompt" | sed 's/^/  /' >&2
+    debug_msg ""
+    debug_msg "📊 內容統計:"
+    debug_msg "   - 總行數: $(wc -l < "$temp_prompt") 行"
+    debug_msg "   - 總位元組: $(wc -c < "$temp_prompt") 位元組"
+    debug_msg "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)"
+    debug_msg ""
+    debug_msg "📝 前 20 行內容:"
+    debug_msg "─────────────────────────────────────────"
+    head -n 20 "$temp_prompt" | sed 's/^/  /' >&2
+    debug_msg "─────────────────────────────────────────"
     echo >&2
     
     # 執行 codex 命令，設定 UTF-8 環境變數
     local output exit_code
+    export LC_ALL=C.UTF-8 LANG=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
     if command -v timeout >/dev/null 2>&1; then
-        output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     else
-        output=$(LC_ALL=zh_TW.UTF-8 run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     fi
+    
+    # 確保 exit_code 是乾淨的數字（清理所有可能的隱藏字符）
+    exit_code=$(echo "$exit_code" | tr -d '\r\n\t ' | tr -cd '0-9')
+    if ! [[ "$exit_code" =~ ^[0-9]+$ ]] || [ -z "$exit_code" ]; then
+        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1" >&2
+        exit_code=1
+    fi
+    
+    # 🔍 調試：顯示退出碼
+    debug_msg "🔍 調試: codex 退出碼 exit_code='$exit_code'"
     
     # 清理臨時檔案
     rm -f "$temp_prompt"
@@ -521,21 +609,36 @@ run_codex_command() {
             if [ -n "$output" ]; then
                 local filtered_output
                 
-                # 方法1：精確提取 "codex" 和 "tokens used" 之間的內容
-                filtered_output=$(echo "$output" | \
-                    sed -n '/^codex$/,/^tokens used/p' | \
-                    sed '1d;$d' | \
-                    grep -E ".+" | \
+                # 清理 output 中的控制字符（保留換行）
+                output=$(echo "$output" | tr -d '\r')
+                
+                # 🔍 調試：顯示原始輸出
+                debug_msg "🔍 調試: codex 原始輸出（前 500 字符）"
+                echo "$output" | head -c 500 | sed 's/^/  /' >&2
+                echo >&2
+                
+                # 改進的過濾邏輯：使用 LC_ALL=C 避免 locale 相關錯誤
+                # 方法1：精確提取 "codex" 行之後、"tokens used" 行之前的內容
+                filtered_output=$(LC_ALL=C echo "$output" | \
+                    awk '/^codex$/{flag=1; next} /^tokens used/{flag=0} flag' | \
+                    grep -v '^[[:space:]]*$' | \
+                    grep -v -E '^(thinking|user|OpenAI Codex|workdir:|model:|provider:|approval:|sandbox:|reasoning|session id:|-----)' | \
+                    tr '\n' ' ' | \
+                    sed 's/[[:space:]]\+/ /g' | \
                     xargs)
                 
-                # 方法2：如果方法1沒有結果，使用備用過濾邏輯
+                # 方法2：如果方法1沒有結果，嘗試更簡單的過濾
                 if [ -z "$filtered_output" ]; then
-                    filtered_output=$(echo "$output" | \
-                        grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex|effort:|summaries:)" | \
+                    filtered_output=$(LC_ALL=C echo "$output" | \
+                        grep -v -E '^(OpenAI Codex|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|thinking|user|session id:|effort:|summaries:)' | \
                         grep -E ".+" | \
-                        tail -n 1 | \
+                        tail -n 5 | \
+                        tr '\n' ' ' | \
                         xargs)
                 fi
+                
+                # 🔍 調試：顯示過濾後的輸出
+                debug_msg "🔍 調試: 過濾後的輸出 filtered_output='$filtered_output'"
                 
                 if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
                     success_msg "codex 回應完成" >&2
@@ -554,11 +657,23 @@ run_codex_command() {
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
                 printf "\033[0;31m❌ codex 認證錯誤\033[0m\n" >&2
                 printf "\033[1;33m💡 請執行：codex auth login\033[0m\n" >&2
+                show_ai_debug_info "codex" "$prompt" "$content" "$output"
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
                 printf "\033[0;31m❌ codex 網路錯誤\033[0m\n" >&2
                 printf "\033[1;33m💡 請檢查網路連接\033[0m\n" >&2
+                show_ai_debug_info "codex" "$prompt" "$content" "$output"
             else
-                warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+                # 清理 exit_code 確保是純數字（最後一次保險）
+                local clean_code
+                clean_code=$(printf '%s' "$exit_code" | LC_ALL=C tr -cd '0-9')
+                [ -z "$clean_code" ] && clean_code="1"
+                
+                # 🔍 調試：顯示錯誤訊息前的 exit_code
+                debug_msg "🔍 調試: 準備顯示錯誤，clean_code='$clean_code' (原始: '$exit_code')"
+                warning_msg "codex 執行失敗"
+                
+                # 顯示 AI 的輸入和輸出訊息
+                show_ai_debug_info "codex" "$prompt" "$content" "$output"
             fi
             ;;
     esac
@@ -616,32 +731,36 @@ run_stdin_ai_command() {
         printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
         
         # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（%s 超時錯誤）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [content_file]\033[0m\n" "$tool_name" "$prompt" >&2
-        printf "\033[0;90m超時設定: %d 秒\033[0m\n" "$timeout" >&2
-        printf "\033[0;90m內容大小: %d 行\033[0m\n" "$(echo "$content" | wc -l)" >&2
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
+        debug_msg "執行的指令: $tool_name -p '$prompt' < [content_file]"
+        debug_msg "超時設定: $timeout 秒"
+        
+        # 使用統一函數顯示 AI 輸入輸出
         if [ -n "$output" ]; then
-            printf "\033[0;90m部分輸出內容:\033[0m\n" >&2
-            echo "$output" | head -n 5 | sed 's/^/  /' >&2
+            show_ai_debug_info "$tool_name" "$prompt" "$content" "$(echo "$output" | head -n 5)"
         else
-            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+            show_ai_debug_info "$tool_name" "$prompt" "$content"
+            debug_msg "輸出內容: (無)"
         fi
-        printf "\n" >&2
+        echo >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        printf "\033[0;31m❌ %s 執行失敗（退出碼: %d）\033[0m\n" "$tool_name" "$exit_code" >&2
+        printf "\033[0;31m❌ %s 執行失敗\033[0m\n" "$tool_name" >&2
         
         # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（%s 執行失敗）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [content_file]\033[0m\n" "$tool_name" "$prompt" >&2
-        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
+        debug_msg "執行的指令: $tool_name -p '$prompt' < [content_file]"
+        
+        # 使用統一函數顯示 AI 輸入輸出
         if [ -n "$output" ]; then
-            printf "\033[0;90m完整輸出內容:\033[0m\n" >&2
-            echo "$output" | sed 's/^/  /' >&2
+            show_ai_debug_info "$tool_name" "$prompt" "$content" "$output"
         else
-            printf "\033[0;90m輸出內容: (無)\033[0m\n" >&2
+            show_ai_debug_info "$tool_name" "$prompt" "$content"
+            debug_msg "輸出內容: (無)"
         fi
-        printf "\n" >&2
+        echo >&2
         return 1
     fi
     
@@ -649,12 +768,13 @@ run_stdin_ai_command() {
         printf "\033[0;31m❌ %s 沒有返回內容\033[0m\n" "$tool_name" >&2
         
         # 顯示調試信息
-        printf "\n\033[0;90m🔍 調試信息（%s 無輸出）:\033[0m\n" "$tool_name" >&2
-        printf "\033[0;90m執行的指令: %s -p '%s' < [content_file]\033[0m\n" "$tool_name" "$prompt" >&2
-        printf "\033[0;90m退出碼: %d\033[0m\n" "$exit_code" >&2
-        printf "\033[0;90m內容預覽:\033[0m\n" >&2
-        echo "$content" | head -n 5 | sed 's/^/  /' >&2
-        printf "\n" >&2
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
+        debug_msg "執行的指令: $tool_name -p '$prompt' < [content_file]"
+        
+        # 使用統一函數顯示 AI 輸入
+        show_ai_debug_info "$tool_name" "$prompt" "$content"
+        echo >&2
         return 1
     fi
     
@@ -668,13 +788,13 @@ clean_ai_message() {
     local message="$1"
     
     # 顯示原始訊息
-    printf "\033[0;90m🔍 AI 原始輸出: '%s'\033[0m\n" "$message" >&2
+    debug_msg "🔍 AI 原始輸出: '$message'"
     
     # 最簡化處理：只移除前後空白，保留完整內容
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果
-    printf "\033[0;90m🧹 清理後輸出: '%s'\033[0m\n" "$message" >&2
+    debug_msg "🧹 清理後輸出: '$message'"
     
     echo "$message"
 }
@@ -721,19 +841,19 @@ format_pr_content() {
     # 只將第一個字母轉大寫，而不是整個首字符
     title=$(echo "${title:0:1}" | tr '[:lower:]' '[:upper:]')$(echo "${title:1}")
     
-    # 格式化內容：處理轉義的換行符
-    body=$(echo "$body" | sed 's/\\n/\n/g')
+    # 格式化內容：處理轉義的換行符（使用 LC_ALL=C 避免編碼問題）
+    body=$(LC_ALL=C echo "$body" | sed 's/\\n/\n/g')
     
     # 如果已經包含 Markdown 標題，保持原格式
     if [[ "$body" =~ ^#.*$ ]]; then
         # 已有 Markdown 格式，進行基本清理
-        body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
+        body=$(LC_ALL=C echo "$body" | sed 's/\n\n\n*/\n\n/g')
     else
         # 處理中文句號分隔的內容
         if [[ "$body" == *"。"* ]] && [[ ${#body} -gt 80 ]]; then
-            # 在句號後添加換行，創建段落
-            body=$(echo "$body" | sed 's/。/。\n\n/g' | sed '/^[[:space:]]*$/d')
-            body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
+            # 在句號後添加換行，創建段落（使用 LC_ALL=C）
+            body=$(LC_ALL=C echo "$body" | sed 's/。/。\n\n/g' | sed '/^[[:space:]]*$/d')
+            body=$(LC_ALL=C echo "$body" | sed 's/\n\n\n*/\n\n/g')
         fi
         
         # 添加簡化的 PR 結構
@@ -765,6 +885,45 @@ $body"
     echo "${title}|||${body}"
 }
 
+# 格式化 PR body（新版本，不使用 ||| 分隔符）
+format_pr_body() {
+    local body="$1"
+    
+    # 處理轉義的換行符
+    body=$(echo "$body" | sed 's/\\n/\n/g')
+    
+    # 如果已經包含 Markdown 標題，保持原格式
+    if [[ "$body" =~ ^#.*$ ]]; then
+        # 已有 Markdown 格式，進行基本清理
+        body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
+    else
+        # 處理中文句號分隔的內容，在句號後添加換行創建段落
+        if [[ "$body" == *"。"* ]] && [[ ${#body} -gt 80 ]]; then
+            body=$(echo "$body" | sed 's/。/。\n\n/g' | sed '/^[[:space:]]*$/d')
+            body=$(echo "$body" | sed 's/\n\n\n*/\n\n/g')
+        fi
+        
+        # 添加簡化的 PR 結構
+        if [ ${#body} -lt 50 ]; then
+            body="## 📝 功能變更
+
+$body
+
+## 🔧 技術實作
+- [ ] 功能測試通過"
+        else
+            # 為較長內容添加結構
+            if [[ ! "$body" =~ (功能變更|技術實作) ]]; then
+                body="## 📝 功能變更
+
+$body"
+            fi
+        fi
+    fi
+    
+    echo "$body"
+}
+
 # ============================================
 # 分支名稱清理與驗證函數
 # 功能：清理 AI 生成的分支名稱，確保符合 Git 分支命名規範
@@ -785,10 +944,10 @@ clean_branch_name() {
     # 先進行基本的 AI 輸出清理
     branch_name=$(clean_ai_message "$branch_name")
     
-    # 移除分支名稱中的描述性前綴
-    branch_name=$(echo "$branch_name" | sed 's/^分支名稱[：:][[:space:]]*//')
-    branch_name=$(echo "$branch_name" | sed 's/^建議[的]*分支名稱[：:][[:space:]]*//')
-    branch_name=$(echo "$branch_name" | sed 's/^功能描述[：:][[:space:]]*//')
+    # 移除分支名稱中的描述性前綴（使用 LC_ALL=C 避免編碼問題）
+    branch_name=$(LC_ALL=C echo "$branch_name" | sed 's/^分支名稱[：:][[:space:]]*//')
+    branch_name=$(LC_ALL=C echo "$branch_name" | sed 's/^建議[的]*分支名稱[：:][[:space:]]*//')
+    branch_name=$(LC_ALL=C echo "$branch_name" | sed 's/^功能描述[：:][[:space:]]*//')
     
     # 如果不是以 feature/ 開頭，檢查是否包含有效的分支名稱
     if [[ ! "$branch_name" =~ ^feature/ ]]; then
@@ -804,14 +963,14 @@ clean_branch_name() {
         fi
     fi
     
-    # 清理分支名稱中的無效字符
-    branch_name=$(echo "$branch_name" | sed 's/[^a-zA-Z0-9._/-]//g')
+    # 清理分支名稱中的無效字符（使用 LC_ALL=C）
+    branch_name=$(LC_ALL=C echo "$branch_name" | sed 's/[^a-zA-Z0-9._/-]//g')
     
     # 移除多餘的連字號和點
-    branch_name=$(echo "$branch_name" | sed 's/--*/-/g' | sed 's/\.\.*/\./g')
+    branch_name=$(LC_ALL=C echo "$branch_name" | sed 's/--*/-/g' | sed 's/\.\.*/\./g')
     
     # 移除開頭和結尾的連字號或點
-    branch_name=$(echo "$branch_name" | sed 's/^[-\.]*//; s/[-\.]*$//')
+    branch_name=$(LC_ALL=C echo "$branch_name" | sed 's/^[-\.]*//; s/[-\.]*$//')
     
     # 標準化為小寫以符合 Git 慣例
     branch_name=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
@@ -859,9 +1018,9 @@ Requirements: Use format feature/${issue_key}-description, lowercase only, max 4
             "codex")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_codex_command "$prompt" "$content" 30); then
-                    info_msg "🔍 調試: codex 原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: codex 原始輸出 result='$result'" >&2
                     result=$(clean_branch_name "$result")
-                    info_msg "🔍 調試: 清理後的 result='$result'" >&2
+                    debug_msg "🔍 調試: 清理後的 result='$result'" >&2
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
                         echo "$result"
@@ -876,9 +1035,9 @@ Requirements: Use format feature/${issue_key}-description, lowercase only, max 4
             "gemini"|"claude")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_stdin_ai_command "$tool" "$prompt" "$content" 30); then
-                    info_msg "🔍 調試: $tool 原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: $tool 原始輸出 result='$result'" >&2
                     result=$(clean_branch_name "$result")
-                    info_msg "🔍 調試: 清理後的 result='$result'" >&2
+                    debug_msg "🔍 調試: 清理後的 result='$result'" >&2
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
                         echo "$result"
@@ -910,8 +1069,8 @@ generate_pr_content_with_ai() {
     main_branch=$(get_main_branch)
     
     # 獲取完整的 commit 訊息（不只是 oneline）
-    # 使用 LC_ALL=zh_TW.UTF-8 確保 git 輸出為 UTF-8 編碼
-    commits=$(LC_ALL=zh_TW.UTF-8 git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
+    # 確保 git 輸出為 UTF-8 編碼
+    commits=$(git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
     
     if [ -z "$commits" ]; then
         warning_msg "分支 '$branch_name' 沒有新的 commit" >&2
@@ -920,8 +1079,8 @@ generate_pr_content_with_ai() {
     
     # 獲取檔案變更摘要（僅用於參考）
     local file_changes
-    # 使用 LC_ALL=zh_TW.UTF-8 確保 git 輸出為 UTF-8 編碼
-    file_changes=$(LC_ALL=zh_TW.UTF-8 git diff --name-status "$main_branch".."$branch_name" 2>/dev/null | head -20)
+    # 確保 git 輸出為 UTF-8 編碼
+    file_changes=$(git diff --name-status "$main_branch".."$branch_name" 2>/dev/null | head -20)
     
     # 計算 commit 數量
     local commit_count
@@ -934,9 +1093,9 @@ generate_pr_content_with_ai() {
     info_msg "   - 檔案變更: $(echo "$file_changes" | wc -l | xargs) 個檔案" >&2
     echo >&2
     
-    # 使用提示詞模板生成 prompt
+    # 使用提示詞模板生成 prompt（只包含指令，不包含實際數據）
     local prompt
-    prompt=$(generate_ai_pr_prompt "$issue_key" "$branch_name" "$commits" "$file_changes")
+    prompt=$(generate_ai_pr_prompt "$issue_key" "$branch_name")
     
     info_msg "🤖 使用 AI 根據 commit 訊息生成 PR 內容..." >&2
     
@@ -944,14 +1103,14 @@ generate_pr_content_with_ai() {
     local temp_content
     temp_content=$(mktemp)
     {
-        LC_ALL=zh_TW.UTF-8 printf "Issue Key: %s\n" "$issue_key"
-        LC_ALL=zh_TW.UTF-8 printf "分支名稱: %s\n" "$branch_name"
-        LC_ALL=zh_TW.UTF-8 printf "Commit 數量: %s\n\n" "$commit_count"
-        LC_ALL=zh_TW.UTF-8 printf "Commit 訊息摘要:\n"
-        LC_ALL=zh_TW.UTF-8 printf "%s" "$commits"
-        LC_ALL=zh_TW.UTF-8 printf "\n\n檔案變更摘要:\n"
-        LC_ALL=zh_TW.UTF-8 printf "%s" "$file_changes"
-        LC_ALL=zh_TW.UTF-8 printf "\n"
+        printf "Issue Key: %s\n" "$issue_key"
+        printf "分支名稱: %s\n" "$branch_name"
+        printf "Commit 數量: %s\n\n" "$commit_count"
+        printf "Commit 訊息摘要:\n"
+        printf "%s" "$commits"
+        printf "\n\n檔案變更摘要:\n"
+        printf "%s" "$file_changes"
+        printf "\n"
     } > "$temp_content"
     
     # 嘗試使用不同的 AI 工具
@@ -977,7 +1136,7 @@ generate_pr_content_with_ai() {
                 
                 # 調用統一的 run_codex_command 函數
                 if result=$(run_codex_command "$prompt" "$content_text" "$timeout"); then
-                    info_msg "🔍 調試: codex PR 內容原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: codex PR 內容原始輸出 result='$result'" >&2
                     success_msg "✅ $tool 生成 PR 內容成功" >&2
                     rm -f "$temp_content"
                     echo "$result"
@@ -1007,7 +1166,7 @@ generate_pr_content_with_ai() {
                 fi
                 
                 if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
-                    info_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'" >&2
+                    debug_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'" >&2
                     success_msg "✅ $tool 生成 PR 內容成功" >&2
                     rm -f "$temp_content"
                     echo "$output"
@@ -1020,7 +1179,7 @@ generate_pr_content_with_ai() {
                             echo "$output" | head -n 10 | sed 's/^/  /' >&2
                         fi
                     elif [ $exit_code -ne 0 ]; then
-                        warning_msg "$tool 執行失敗（退出碼: $exit_code）" >&2
+                        warning_msg "$tool 執行失敗" >&2
                         if [ -n "$output" ]; then
                             printf "\033[0;90m💬 $tool 輸出：\033[0m\n" >&2
                             echo "$output" | sed 's/^/  /' >&2
@@ -1077,43 +1236,46 @@ get_operation_choice() {
     while true; do
         show_operation_menu
         read -r choice
-        choice=$(echo "$choice" | xargs)  # 去除前後空白
         
-        # 如果用戶直接按 Enter，要求重新輸入
+        # 清理輸入：移除非 ASCII 字符和前後空白，只保留數字
+        choice=$(echo "$choice" | LC_ALL=C tr -cd '0-9' | xargs)
+        
+        # 如果用戶直接按 Enter 或輸入無效字符，要求重新輸入
         if [ -z "$choice" ]; then
-            warning_msg "請選擇一個選項，不能為空" >&2
+            warning_msg "⚠️  請選擇一個有效選項（1-5）"
+            echo >&2
             continue
         fi
         
         # 驗證輸入是否有效
         case "$choice" in
             1)
-                info_msg "✅ 已選擇：建立功能分支" >&2
+                info_msg "✅ 已選擇：建立功能分支"
                 echo "$choice"
                 return 0
                 ;;
             2)
-                info_msg "✅ 已選擇：建立 Pull Request" >&2
+                info_msg "✅ 已選擇：建立 Pull Request"
                 echo "$choice"
                 return 0
                 ;;
             3)
-                info_msg "✅ 已選擇：撤銷當前 PR" >&2
+                info_msg "✅ 已選擇：撤銷當前 PR"
                 echo "$choice"
                 return 0
                 ;;
             4)
-                info_msg "✅ 已選擇：審查與合併 PR (專案擁有者)" >&2
+                info_msg "✅ 已選擇：審查與合併 PR (專案擁有者)"
                 echo "$choice"
                 return 0
                 ;;
             5)
-                info_msg "✅ 已選擇：刪除分支" >&2
+                info_msg "✅ 已選擇：刪除分支"
                 echo "$choice"
                 return 0
                 ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4 或 5" >&2
+                warning_msg "⚠️  無效選項，請輸入 1、2、3、4 或 5"
                 echo >&2
                 ;;
         esac
@@ -1477,10 +1639,16 @@ execute_create_pr() {
         printf "請輸入 issue key (例: ISSUE-123, JIRA-456, PROJ-001, TASK-789): " >&2
     fi
     
-    # 3. 強制手動輸入，重複提示直到獲得有效輸入
+    # 3. 允許使用建議值或手動輸入，重複提示直到獲得有效輸入
     while [ -z "$issue_key" ]; do
         read -r user_input
         user_input=$(echo "$user_input" | xargs)
+        
+        # 如果使用者按 Enter 且有建議值，直接使用建議值
+        if [ -z "$user_input" ] && [ -n "$suggested_key" ]; then
+            user_input="$suggested_key"
+            info_msg "使用建議的 issue key: $user_input"
+        fi
         
         if [ -n "$user_input" ]; then
             # 驗證和標準化 issue key
@@ -1541,30 +1709,37 @@ execute_create_pr() {
         info_msg "🤖 使用 AI 生成 PR 內容..."
         
         if pr_content=$(generate_pr_content_with_ai "$issue_key" "$current_branch"); then
-            # 解析 AI 生成的內容（格式為 "標題|||內容"）
-            if [[ "$pr_content" == *"|||"* ]]; then
-                # 正確分割標題和內容：標題是第一行 ||| 之前的部分
-                pr_title=$(echo "$pr_content" | sed -n '1s/|||.*//p' | xargs)
-                # 內容是第一行 ||| 之後的部分，加上其餘行
-                if echo "$pr_content" | head -n 1 | grep -q '|||'; then
-                    pr_body=$(echo "$pr_content" | sed '1s/^[^|]*|||\s*//')
-                else
-                    pr_body=$(echo "$pr_content" | sed '1d')
-                fi
+            # 🔍 調試：顯示 AI 生成的原始內容
+            debug_msg "🔍 調試: AI 生成的 pr_content（前 300 字符）"
+            echo "$pr_content" | head -c 300 | sed 's/^/  /' >&2
+            echo >&2
+            
+            # 解析 AI 生成的內容（使用句號分割標題和內容）
+            if [[ "$pr_content" == *"。"* ]]; then
+                # 第一句話（第一個句號之前）作為標題
+                pr_title="${pr_content%%。*}。"  # 取得第一個句號之前的部分並加上句號
+                
+                # 完整內容（包含標題）作為 PR body
+                pr_body="$pr_content"
+                
+                # 清理前後空白
+                pr_title=$(echo "$pr_title" | xargs)
+                pr_body=$(echo "$pr_body" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                
+                debug_msg "🔍 調試: 分割後 pr_title='$pr_title'" >&2
+                debug_msg "🔍 調試: 分割後 pr_body（前 200 字符）='$(echo "$pr_body" | head -c 200)'" >&2
             else
+                # 沒有句號，整個內容作為標題，body 使用預設格式
                 pr_title="$pr_content"
-                pr_body="Issue: $issue_key\nSummary: Implement feature as described in $issue_key"
+                pr_body="$pr_content
+
+Issue: $issue_key
+Summary: Implement feature as described in $issue_key"
+                warning_msg "⚠️  AI 輸出未包含句號，使用整段作為標題" >&2
             fi
             
-            # 應用格式化處理
-            local formatted_content
-            formatted_content=$(format_pr_content "$pr_title" "$pr_body")
-            pr_title=$(echo "$formatted_content" | sed -n '1s/|||.*//p')
-            if echo "$formatted_content" | head -n 1 | grep -q '|||'; then
-                pr_body=$(echo "$formatted_content" | sed '1s/^[^|]*|||\s*//')
-            else
-                pr_body=$(echo "$formatted_content" | sed '1d')
-            fi
+            # 應用格式化處理（只格式化 body，title 保持不變）
+            pr_body=$(format_pr_body "$pr_body")
             
             echo >&2
             info_msg "🎯 格式化後的 PR 標題:"
@@ -1618,15 +1793,8 @@ execute_create_pr() {
         fi
     fi
     
-    # 對最終的 PR 內容應用格式化處理
-    local final_formatted_content
-    final_formatted_content=$(format_pr_content "$pr_title" "$pr_body")
-    pr_title=$(echo "$final_formatted_content" | sed -n '1s/|||.*//p')
-    if echo "$final_formatted_content" | head -n 1 | grep -q '|||'; then
-        pr_body=$(echo "$final_formatted_content" | sed '1s/^[^|]*|||\s*//')
-    else
-        pr_body=$(echo "$final_formatted_content" | sed '1d')
-    fi
+    # 對最終的 PR body 應用格式化處理（title 不需要格式化）
+    pr_body=$(format_pr_body "$pr_body")
     
     # 顯示最終格式化的 PR 預覽
     echo >&2

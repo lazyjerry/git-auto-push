@@ -79,7 +79,7 @@
 #   - Conventional Commits：https://www.conventionalcommits.org/
 #
 # 作者：Lazy Jerry
-# 版本：v1.5.0
+# 版本：v1.7.0
 # 最後更新：2025-10-24
 # 授權：MIT License
 # 倉庫：https://github.com/lazyjerry/git-auto-push
@@ -210,6 +210,17 @@ readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
 #   readonly DEFAULT_USERNAME="john"
 #   readonly DEFAULT_USERNAME="team-a"
 readonly DEFAULT_USERNAME="jerry"
+
+# PR 合併後分支刪除策略配置
+# 說明：控制 PR 合併後是否自動刪除功能分支。
+#       設定為 true 時，合併 PR 會自動刪除遠端分支；
+#       設定為 false 時，合併 PR 會保留分支供後續參考或重複使用。
+# 安全考量：預設為 false（保守策略），避免誤刪重要分支
+# 使用時機：「審查與合併 PR」功能會參考此設定決定是否使用 --delete-branch 選項
+# 修改範例：
+#   readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true   # 自動刪除（適合短期功能分支）
+#   readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（適合需要追蹤的分支）
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 
 # ==============================================
 # 訊息輸出函數區域
@@ -2618,9 +2629,29 @@ execute_review_and_merge() {
             if [[ -z "$merge_confirm" ]] || [[ "$merge_confirm" =~ ^(y|yes|是|確定)$ ]]; then
                 info_msg "🔀 合併 PR #$pr_number (使用 squash 模式)..."
                 
-                # 使用 squash 合併並刪除分支
-                if gh pr merge "$pr_number" --squash --delete-branch; then
-                    success_msg "🎉 PR #$pr_number 已成功合併並刪除功能分支"
+                # 根據配置決定是否刪除分支
+                local merge_result
+                if [ "$AUTO_DELETE_BRANCH_AFTER_MERGE" = true ]; then
+                    # 使用 squash 合併並刪除分支
+                    if gh pr merge "$pr_number" --squash --delete-branch; then
+                        merge_result=true
+                        success_msg "🎉 PR #$pr_number 已成功合併並刪除功能分支"
+                    else
+                        merge_result=false
+                    fi
+                else
+                    # 使用 squash 合併但保留分支
+                    if gh pr merge "$pr_number" --squash; then
+                        merge_result=true
+                        success_msg "🎉 PR #$pr_number 已成功合併（功能分支已保留）"
+                        info_msg "💡 提示：如需刪除分支，請執行 './git-auto-pr.sh' 並選擇選項 5"
+                    else
+                        merge_result=false
+                    fi
+                fi
+                
+                # 如果合併成功，更新本地 main 分支
+                if [ "$merge_result" = true ]; then
                     
                     # 更新本地 main 分支
                     local main_branch

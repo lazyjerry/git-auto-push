@@ -183,6 +183,39 @@ debug_msg() {
 }
 
 # ============================================
+# 洋紅色高亮訊息函數
+# 功能：顯示亮洋紅色訊息（用於特殊高亮或重要提示）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：magenta_msg "💝 特殊訊息"
+# ============================================
+magenta_msg() {
+    printf "\033[1;35m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 紫色訊息函數
+# 功能：顯示紫色訊息（用於分支資訊等）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：purple_msg "🌿 當前分支: main"
+# ============================================
+purple_msg() {
+    printf "\033[0;35m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
+# 青色訊息函數
+# 功能：顯示青色訊息（用於連結、命令提示等）
+# 參數：$1 - 訊息內容
+# 返回：0 (總是成功)
+# 使用：cyan_msg "🔗 連結: https://example.com"
+# ============================================
+cyan_msg() {
+    printf "\033[0;36m%s\033[0m\n" "$1" >&2
+}
+
+# ============================================
 # AI 調試資訊顯示函數
 # 功能：統一顯示 AI 工具的輸入輸出調試資訊
 # 參數：
@@ -236,7 +269,7 @@ show_random_thanks() {
     local selected_message="${messages[$random_index]}"
     
     echo >&2
-    printf "\033[1;35m💝 %s\033[0m\n" "$selected_message" >&2
+    magenta_msg "💝 $selected_message"
 }
 
 # ============================================
@@ -251,6 +284,9 @@ show_random_thanks() {
 run_command() {
     local cmd="$1"
     local error_msg="$2"
+    
+    # 印出將要執行的指令
+    cyan_msg "→ 執行指令: $cmd"
     
     if ! eval "$cmd"; then
         if [ -n "$error_msg" ]; then
@@ -350,16 +386,16 @@ get_main_branch() {
     
     # 如果都沒找到，顯示錯誤訊息並退出程式
     if [ -z "$found_branch" ]; then
-        printf "\033[0;31m❌ 錯誤：找不到任何配置的主分支\033[0m\n" >&2
-        printf "\033[0;33m📋 配置的主分支候選清單: %s\033[0m\n" "${DEFAULT_MAIN_BRANCHES[*]}" >&2
-        printf "\033[0;36m💡 解決方法：\033[0m\n" >&2
+        handle_error "❌ 錯誤：找不到任何配置的主分支"
+        warning_msg "📋 配置的主分支候選清單: ${DEFAULT_MAIN_BRANCHES[*]}"
+        cyan_msg "💡 解決方法："
         printf "   1. 檢查 Git 倉庫是否已初始化\n" >&2
         printf "   2. 創建其中一個主分支：\n" >&2
         for branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
-            printf "      \033[0;32mgit checkout -b %s\033[0m\n" "$branch_candidate" >&2
+            success_msg "      git checkout -b $branch_candidate"
         done
         printf "   3. 或修改腳本頂部的 DEFAULT_MAIN_BRANCHES 陣列\n" >&2
-        printf "      \033[0;90m位置: %s (第 78 行)\033[0m\n" "${BASH_SOURCE[0]}" >&2
+        debug_msg "      位置: ${BASH_SOURCE[0]} (第 78 行)"
         exit 1
     fi
     
@@ -656,18 +692,18 @@ run_codex_command() {
             warning_msg "codex 沒有返回有效內容" >&2
             ;;
         124)
-            printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
-            printf "\033[1;33m💡 建議：檢查網路連接或稍後重試\033[0m\n" >&2
+            handle_error "❌ codex 執行超時（${timeout}秒）"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
             ;;
         *)
             # 檢查特定錯誤類型
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
-                printf "\033[0;31m❌ codex 認證錯誤\033[0m\n" >&2
-                printf "\033[1;33m💡 請執行：codex auth login\033[0m\n" >&2
+                handle_error "❌ codex 認證錯誤"
+                warning_msg "💡 請執行：codex auth login"
                 show_ai_debug_info "codex" "$prompt" "$content" "$output"
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
-                printf "\033[0;31m❌ codex 網路錯誤\033[0m\n" >&2
-                printf "\033[1;33m💡 請檢查網路連接\033[0m\n" >&2
+                handle_error "❌ codex 網路錯誤"
+                warning_msg "💡 請檢查網路連接"
                 show_ai_debug_info "codex" "$prompt" "$content" "$output"
             else
                 # 清理 exit_code 確保是純數字（最後一次保險）
@@ -735,7 +771,7 @@ run_stdin_ai_command() {
     rm -f "$temp_content"
     
     if [ $exit_code -eq 124 ]; then
-        printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
+        handle_error "❌ $tool_name 執行超時（${timeout}秒）"
         
         # 顯示調試信息
         echo >&2
@@ -753,7 +789,7 @@ run_stdin_ai_command() {
         echo >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        printf "\033[0;31m❌ %s 執行失敗\033[0m\n" "$tool_name" >&2
+        handle_error "❌ $tool_name 執行失敗"
         
         # 顯示調試信息
         echo >&2
@@ -772,7 +808,7 @@ run_stdin_ai_command() {
     fi
     
     if [ -z "$output" ]; then
-        printf "\033[0;31m❌ %s 沒有返回內容\033[0m\n" "$tool_name" >&2
+        handle_error "❌ $tool_name 沒有返回內容"
         
         # 顯示調試信息
         echo >&2
@@ -1024,7 +1060,7 @@ Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lo
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
-        printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
+        info_msg "🤖 嘗試使用 AI 工具: $tool"
         
         local result
         case "$tool" in
@@ -1128,7 +1164,7 @@ generate_pr_content_with_ai() {
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
-        printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
+        info_msg "🤖 嘗試使用 AI 工具: $tool"
         
         local result
         local output
@@ -1188,13 +1224,13 @@ generate_pr_content_with_ai() {
                     if [ $exit_code -eq 124 ]; then
                         warning_msg "$tool 執行超時（${timeout}秒）" >&2
                         if [ -n "$output" ]; then
-                            printf "\033[0;90m💬 $tool 部分輸出：\033[0m\n" >&2
+                            debug_msg "💬 $tool 部分輸出："
                             echo "$output" | head -n 10 | sed 's/^/  /' >&2
                         fi
                     elif [ $exit_code -ne 0 ]; then
                         warning_msg "$tool 執行失敗" >&2
                         if [ -n "$output" ]; then
-                            printf "\033[0;90m💬 $tool 輸出：\033[0m\n" >&2
+                            debug_msg "💬 $tool 輸出："
                             echo "$output" | sed 's/^/  /' >&2
                         fi
                     elif [ -z "$output" ]; then
@@ -1224,22 +1260,22 @@ show_operation_menu() {
     echo >&2
     echo "==================================================" >&2
     info_msg "請選擇要執行的 GitHub Flow PR 操作:" >&2
-    printf "\033[0;36m📋 偵測到的主分支: %s\033[0m\n" "$main_branch" >&2
+    cyan_msg "📋 偵測到的主分支: $main_branch"
     
     # 顯示當前分支資訊
     local current_branch
     current_branch=$(get_current_branch)
     if [ -n "$current_branch" ]; then
-        printf "\033[0;35m🌿 當前所在分支: %s\033[0m\n" "$current_branch" >&2
+        purple_msg "🌿 當前所在分支: $current_branch"
     else
-        printf "\033[0;31m⚠️  無法偵測當前分支\033[0m\n" >&2
+        handle_error "⚠️  無法偵測當前分支"
     fi
     echo "==================================================" >&2
-    printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
-    printf "\033[1;32m2.\033[0m 🔄 建立 Pull Request\n" >&2
-    printf "\033[1;31m3.\033[0m ❌ 撤銷當前 PR\n" >&2
-    printf "\033[1;35m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
-    printf "\033[1;36m5.\033[0m 🗑️ 刪除分支\n" >&2
+    warning_msg "1. 🌿 建立功能分支"
+    success_msg "2. 🔄 建立 Pull Request"
+    handle_error "3. ❌ 撤銷當前 PR"
+    magenta_msg "4. 👑 審查與合併 PR (專案擁有者)"
+    cyan_msg "5. 🗑️ 刪除分支"
     echo "==================================================" >&2
     printf "請輸入選項 [1-5]: " >&2
 }
@@ -1409,14 +1445,14 @@ execute_create_branch() {
     # 顯示當前分支狀態
     echo >&2
     # 顯示目前分支狀態資訊，使用彩色輸出提升可讀性
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "📋 主分支: $main_branch"
     echo >&2
     
     # 檢查是否在主分支上，如果不在主分支則需要切換
     if ! check_main_branch; then
         # 提示使用者目前不在主分支，詢問是否要切換
-        printf "\033[1;33m當前不在主分支（當前: %s，主分支: %s）\033[0m\n" "$current_branch" "$main_branch" >&2
+        warning_msg "當前不在主分支（當前: $current_branch，主分支: $main_branch）"
         printf "是否切換到 %s 分支？[Y/n]: " "$main_branch" >&2
         read -r switch_confirm
         # 標準化使用者輸入（移除空白、轉換為小寫）
@@ -1500,27 +1536,27 @@ execute_create_branch() {
     echo >&2
     info_msg "📋 分支類型說明：" >&2
     echo >&2
-    printf "\033[1;36m1. issue\033[0m - 問題 (Issue)\n" >&2
+    cyan_msg "1. issue - 問題 (Issue)"
     printf "   定義：專案過程中遇到的任何障礙、延誤或突發狀況，不一定是系統性的錯誤。\n" >&2
     printf "   範例：需求變動、人力不足、進度落後等。\n" >&2
     printf "   解決方式：通常透過調整資源與計劃來解決。\n" >&2
     echo >&2
-    printf "\033[1;36m2. bug\033[0m - 錯誤 (Bug)\n" >&2
+    cyan_msg "2. bug - 錯誤 (Bug)"
     printf "   定義：軟體或系統中明確的錯誤，會影響最終產品的品質或功能。\n" >&2
     printf "   範例：程式碼中的邏輯錯誤、流程錯誤，或 UI 介面問題。\n" >&2
     printf "   解決方式：需要進行技術性修正。\n" >&2
     echo >&2
-    printf "\033[1;36m3. feature\033[0m - 功能請求 (Feature Request)\n" >&2
+    cyan_msg "3. feature - 功能請求 (Feature Request)"
     printf "   定義：使用者或團隊希望在現有產品中新增或修改的功能。\n" >&2
     printf "   範例：使用者希望增加一個「匯出成 CSV」的功能。\n" >&2
     printf "   解決方式：將其納入未來的開發計劃中。\n" >&2
     echo >&2
-    printf "\033[1;36m4. enhancement\033[0m - 增強 (Enhancement)\n" >&2
+    cyan_msg "4. enhancement - 增強 (Enhancement)"
     printf "   定義：對現有功能的改進，讓產品變得更好用或更有效率，但不是必須的修正。\n" >&2
     printf "   範例：將按鈕的顏色從綠色改為藍色，或者優化某個流程的速度。\n" >&2
     printf "   解決方式：通常被視為較不緊急的問題，可以安排在後續的開發階段處理。\n" >&2
     echo >&2
-    printf "\033[1;36m5. blocker\033[0m - 阻礙 (Blocker)\n" >&2
+    cyan_msg "5. blocker - 阻礙 (Blocker)"
     printf "   定義：一種會完全阻止專案繼續進行的關鍵問題。\n" >&2
     printf "   範例：伺服器當機，導致所有開發工作都無法進行。\n" >&2
     printf "   解決方式：需要立即解決，以解除阻礙。\n" >&2
@@ -1598,9 +1634,12 @@ execute_create_branch() {
     # 提示開發流程
     echo >&2
     info_msg "📝 接下來您可以："
-    printf "   1. 在 VS Code 中開始開發: \033[0;36mcode .\033[0m\n" >&2
-    printf "   2. 執行測試: \033[0;36mnpm test\033[0m 或 \033[0;36mphp artisan test\033[0m\n" >&2
-    printf "   3. 完成開發後運行: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2)\n" >&2
+    printf "   1. 在 VS Code 中開始開發: " >&2
+    cyan_msg "code ."
+    printf "   2. 執行測試: " >&2
+    cyan_msg "npm test 或 php artisan test"
+    printf "   3. 完成開發後運行: " >&2
+    cyan_msg "./git-auto-pr.sh (選擇選項 2)"
     echo >&2
 }
 
@@ -1622,8 +1661,8 @@ execute_create_pr() {
     
     # 顯示分支資訊
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m🎯 目標分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "🎯 目標分支: $main_branch"
     echo >&2
     
     if [ "$current_branch" = "$main_branch" ]; then
@@ -1783,7 +1822,7 @@ Summary: Implement feature as described in $issue_key"
             
             echo >&2
             info_msg "🎯 格式化後的 PR 標題:"
-            printf "\033[1;32m   %s\033[0m\n" "$pr_title" >&2
+            success_msg "   $pr_title"
             echo >&2
             info_msg "📝 格式化後的 PR 內容:"
             echo >&2
@@ -1841,9 +1880,9 @@ Summary: Implement feature as described in $issue_key"
     echo "==================================================" >&2
     info_msg "📋 最終 PR 預覽:" >&2
     echo "==================================================" >&2
-    printf "\033[1;36m標題:\033[0m %s\n" "$pr_title" >&2
+    cyan_msg "標題: $pr_title"
     echo >&2
-    printf "\033[1;36m內容:\033[0m\n" >&2
+    cyan_msg "內容:"
     printf "%s\n" "$pr_body" | sed 's/^/  /' >&2
     echo "==================================================" >&2
     echo >&2
@@ -1865,9 +1904,12 @@ Summary: Implement feature as described in $issue_key"
         
         echo >&2
         info_msg "🎯 接下來您可以："
-        printf "   1. 查看 PR: \033[0;36mgh pr view --web\033[0m\n" >&2
-        printf "   2. 檢查 CI 狀態: \033[0;36mgh pr checks\033[0m\n" >&2
-        printf "   3. 添加 reviewer: \033[0;36mgh pr edit --add-reviewer @team/leads\033[0m\n" >&2
+        printf "   1. 查看 PR: " >&2
+        cyan_msg "gh pr view --web"
+        printf "   2. 檢查 CI 狀態: " >&2
+        cyan_msg "gh pr checks"
+        printf "   3. 添加 reviewer: " >&2
+        cyan_msg "gh pr edit --add-reviewer @team/leads"
         echo >&2
     fi
 }
@@ -1885,8 +1927,8 @@ execute_cancel_pr() {
     
     # 顯示分支資訊
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m🎯 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "🎯 主分支: $main_branch"
     echo >&2
     
     if [ "$current_branch" = "$main_branch" ]; then
@@ -1928,8 +1970,8 @@ execute_cancel_pr() {
     
     echo >&2
     success_msg "找到 PR #${pr_number}: $pr_title"
-    printf "\033[0;36m🔗 PR 連結: %s\033[0m\n" "$pr_url" >&2
-    printf "\033[0;33m📊 PR 狀態: %s\033[0m\n" "$pr_state" >&2
+    cyan_msg "🔗 PR 連結: $pr_url"
+    warning_msg "📊 PR 狀態: $pr_state"
     
     if [ "$pr_state" = "MERGED" ]; then
         handle_merged_pr "$pr_number" "$pr_title" "$merged_at"
@@ -1961,7 +2003,7 @@ handle_merged_pr() {
     local merged_at="$3"
     
     warning_msg "PR #${pr_number} 已經合併"
-    printf "\033[0;33m⏰ 合併時間: %s\033[0m\n" "$merged_at" >&2
+    warning_msg "⏰ 合併時間: $merged_at"
     
     # 獲取 PR 合併後的 commit 資訊
     info_msg "🔍 分析 PR 合併後的 commit 變更..."
@@ -1970,7 +2012,7 @@ handle_merged_pr() {
     merge_commit=$(gh pr view "$pr_number" --json mergeCommit --jq '.mergeCommit.oid' 2>/dev/null)
     
     if [ -n "$merge_commit" ] && [ "$merge_commit" != "null" ]; then
-        printf "\033[0;36m📝 合併 commit: %s\033[0m\n" "$merge_commit" >&2
+        cyan_msg "📝 合併 commit: $merge_commit"
         
         # 獲取合併後到現在的 commit 數量
         local main_branch
@@ -1979,11 +2021,11 @@ handle_merged_pr() {
         local commits_after_pr
         commits_after_pr=$(git rev-list --count "$merge_commit..$main_branch" 2>/dev/null || echo "0")
         
-        printf "\033[0;33m📊 PR 合併後新增了 %s 個 commit\033[0m\n" "$commits_after_pr" >&2
+        warning_msg "📊 PR 合併後新增了 $commits_after_pr 個 commit"
         
         if [ "$commits_after_pr" -gt 0 ]; then
             echo >&2
-            printf "\033[1;33m⚠️  注意: PR 合併後又有 %s 個新的 commit\033[0m\n" "$commits_after_pr" >&2
+            warning_msg "⚠️  注意: PR 合併後又有 $commits_after_pr 個新的 commit"
             printf "執行 revert 會影響到這些新的變更\n" >&2
             echo >&2
             git log --oneline "$merge_commit..$main_branch" >&2
@@ -1992,7 +2034,7 @@ handle_merged_pr() {
     fi
     
     echo >&2
-    printf "\033[1;31m是否要 revert 此 PR 的變更？[y/N]: \033[0m" >&2
+    handle_error "是否要 revert 此 PR 的變更？[y/N]: "
     read -r revert_confirm
     revert_confirm=$(echo "$revert_confirm" | xargs | tr '[:upper:]' '[:lower:]')
     
@@ -2001,8 +2043,9 @@ handle_merged_pr() {
             info_msg "🔄 執行 revert 操作..."
             if git revert -m 1 "$merge_commit" --no-edit; then
                 success_msg "已成功 revert PR #${pr_number} 的變更"
-                printf "\033[0;33m⚠️  請檢查 revert 結果並視需要推送變更\033[0m\n" >&2
-                printf "推送命令: \033[0;36mgit push origin %s\033[0m\n" "$(get_main_branch)" >&2
+                warning_msg "⚠️  請檢查 revert 結果並視需要推送變更"
+                printf "推送命令: " >&2
+                cyan_msg "git push origin $(get_main_branch)"
             else
                 handle_error "revert 操作失敗，請手動處理衝突"
             fi
@@ -2026,9 +2069,9 @@ handle_open_pr() {
     echo "==================================================" >&2
     info_msg "請選擇對開放中 PR 的處理方式:" >&2
     echo "==================================================" >&2
-    printf "\033[1;32m1.\033[0m 🚫 關閉 PR（保留分支）\n" >&2
-    printf "\033[1;33m2.\033[0m  添加評論後保持開放\n" >&2
-    printf "\033[1;36m3.\033[0m ❌ 取消操作\n" >&2
+    success_msg "1. 🚫 關閉 PR（保留分支）"
+    warning_msg "2. 💬 添加評論後保持開放"
+    cyan_msg "3. ❌ 取消操作"
     echo "==================================================" >&2
     printf "請輸入選項 [1-3]: " >&2
     
@@ -2076,7 +2119,7 @@ handle_close_pr_keep_branch() {
     if [ -n "$close_reason" ]; then
         if gh pr close "$pr_number" --comment "$close_reason"; then
             success_msg "✅ 已成功關閉 PR #${pr_number}"
-            printf "\033[0;33m💬 關閉原因: %s\033[0m\n" "$close_reason" >&2
+            warning_msg "💬 關閉原因: $close_reason"
             info_msg "📌 功能分支已保留，可稍後重新開啟 PR"
         else
             handle_error "無法關閉 PR #${pr_number}"
@@ -2113,7 +2156,7 @@ handle_add_comment() {
     
     if gh pr comment "$pr_number" --body "$comment_text"; then
         success_msg "✅ 已成功添加評論到 PR #${pr_number}"
-        printf "\033[0;33m💬 評論內容: %s\033[0m\n" "$comment_text" >&2
+        warning_msg "💬 評論內容: $comment_text"
         info_msg "📌 PR 保持開放狀態，可繼續開發或等待審查"
     else
         handle_error "無法為 PR #${pr_number} 添加評論"
@@ -2131,8 +2174,8 @@ execute_review_and_merge() {
     main_branch=$(get_main_branch)
     
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m🎯 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "🎯 主分支: $main_branch"
     echo >&2
     
     # 檢查是否有待審查的 PR
@@ -2230,10 +2273,10 @@ execute_review_and_merge() {
     # 審查選項
     echo >&2
     info_msg "🔍 請選擇審查動作:"
-    printf "\033[1;32m1.\033[0m ✅ 批准並合併\n" >&2
-    printf "\033[1;33m2.\033[0m 💬 添加評論但不合併\n" >&2
-    printf "\033[1;31m3.\033[0m ❌ 請求變更\n" >&2
-    printf "\033[1;36m4.\033[0m 📖 只查看，不進行審查\n" >&2
+    success_msg "1. ✅ 批准並合併"
+    warning_msg "2. 💬 添加評論但不合併"
+    handle_error "3. ❌ 請求變更"
+    cyan_msg "4. 📖 只查看，不進行審查"
     echo "==================================================" >&2
     printf "請選擇 [1-4]: " >&2
     read -r review_action
@@ -2413,8 +2456,8 @@ execute_delete_branch() {
     main_branch=$(get_main_branch)
     
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "📋 主分支: $main_branch"
     echo >&2
     
     # 列出所有本地分支（排除主分支）
@@ -2440,9 +2483,9 @@ execute_delete_branch() {
     local branch_num=1
     for branch in "${branch_array[@]}"; do
         if [ "$branch" = "$current_branch" ]; then
-            printf "\033[1;33m%d. %s\033[0m \033[0;31m(當前分支)\033[0m\n" "$branch_num" "$branch" >&2
+            warning_msg "$branch_num. $branch (當前分支)"
         else
-            printf "\033[1;32m%d.\033[0m %s\n" "$branch_num" "$branch" >&2
+            success_msg "$branch_num. $branch"
         fi
         ((branch_num++))
     done
@@ -2497,7 +2540,7 @@ execute_delete_branch() {
     
     # 最終確認刪除
     echo >&2
-    printf "\033[1;31m⚠️  確定要刪除分支 '%s'？[y/N]: \033[0m" "$target_branch" >&2
+    handle_error "⚠️  確定要刪除分支 '$target_branch'？[y/N]: "
     read -r delete_confirm
     delete_confirm=$(echo "$delete_confirm" | xargs | tr '[:upper:]' '[:lower:]')
     

@@ -163,18 +163,20 @@ git-auto-pr --auto
 
 #### git-auto-pr.sh 操作模式
 
-| 模式             | 功能描述                       | 使用情境           |
-| ---------------- | ------------------------------ | ------------------ |
-| 1. 建立功能分支  | 基於 main 建立 feature 分支    | 開始新功能開發     |
-| 2. 建立 PR       | 基於目前分支建立 Pull Request  | 提交程式碼審查     |
-| 3. 撤銷目前 PR   | 關閉開放 PR / Revert 已合併 PR | PR 錯誤修正        |
-| 4. 審查與合併 PR | 審查 → 批准/請求變更 → 合併    | 專案擁有者 PR 管理 |
-| 5. 刪除分支      | 安全刪除本地/遠端功能分支      | 分支清理與維護     |
+| 模式             | 功能描述                                   | 使用情境           |
+| ---------------- | ------------------------------------------ | ------------------ |
+| 1. 建立功能分支  | 輸入 issue key、擁有者、類型，自動生成分支 | 開始新功能開發     |
+| 2. 建立 PR       | 基於目前分支建立 Pull Request              | 提交程式碼審查     |
+| 3. 撤銷目前 PR   | 關閉開放 PR / Revert 已合併 PR             | PR 錯誤修正        |
+| 4. 審查與合併 PR | 審查 → 批准/請求變更 → 合併                | 專案擁有者 PR 管理 |
+| 5. 刪除分支      | 安全刪除本地/遠端功能分支                  | 分支清理與維護     |
 
 #### GitHub Flow 工作流程特色
 
 - **Issue 整合**: 支援 JIRA、GitHub Issue 等多種編號格式
-- **AI 智慧產生**: 分支名稱、commit message、PR 標題和內容均可 AI 輔助
+- **分支類型分類**: 提供 issue、bug、feature、enhancement、blocker 五種分支類型
+- **自動分支命名**: 基於 `{username}/{type}/{issue-key}` 格式自動生成標準分支名
+- **AI 智慧產生**: commit message、PR 標題和內容可由 AI 輔助生成
 - **PR 生命週期管理**: 建立 → 撤銷 → 審查 → 合併，完整涵蓋 PR 各階段操作
 - **智慧撤銷機制**: 自動偵測 PR 狀態，提供安全的關閉或 revert 選項
 - **完整驗證**: 檢查 Git 儲存庫、gh CLI 登入狀態、分支狀態
@@ -300,6 +302,42 @@ git checkout main && git pull
 # 專案擁有者：審查並合併 PR
 ./git-auto-pr.sh  # 選擇選項 4，審查 → 批准 → 合併
 ```
+
+#### 分支建立流程說明 🆕
+
+```bash
+# 執行分支建立
+./git-auto-pr.sh  # 選擇選項 1
+
+# 步驟 1：輸入 Issue Key
+請輸入 issue key: PROJ-123
+✅ 使用標準格式 issue key: PROJ-123
+
+# 步驟 2：輸入擁有者名字（預設：jerry）
+請輸入擁有者名字 [預設: jerry]: tom
+👤 使用者名稱: tom
+
+# 步驟 3：選擇分支類型
+📋 分支類型說明：
+1. issue - 問題（專案障礙、延誤）
+2. bug - 錯誤（系統性錯誤）
+3. feature - 功能請求（新功能）
+4. enhancement - 增強（改進現有功能）
+5. blocker - 阻礙（關鍵問題）
+
+請選擇分支類型 [1-5]: 3
+🏷️  分支類型: feature
+
+# 自動生成分支
+📝 將建立分支: tom/feature/proj-123
+✅ 成功建立功能分支: tom/feature/proj-123
+```
+
+**分支命名規則**：
+
+- 格式：`{username}/{type}/{issue-key}`
+- 自動轉換為小寫
+- 範例：`jerry/bug/issue-456`、`mary/enhancement/jira-789`
 
 #### 專案擁有者 PR 管理
 
@@ -575,14 +613,15 @@ CMD ["git-auto-push", "--auto"]
 
 - **位置**：兩個腳本檔案的開頭部分
 - **git-auto-push.sh**：第 28-52 行 - AI 工具優先順序和提示詞配置
-- **git-auto-pr.sh**：第 25-78 行 - AI 提示詞模板、工具設定和分支設定
+- **git-auto-pr.sh**：第 25-125 行 - AI 提示詞模板、工具設定、分支設定和使用者設定
 - **修改原則**：所有設定都集中在檔案上方，便於維護和修改
 
 #### 分支設定系統（NEW! ✨）
 
 **git-auto-pr.sh** 新增智慧分支設定功能：
 
-- **主分支陣列設定**：`DEFAULT_MAIN_BRANCHES=("main" "master")
+- **主分支陣列設定**：`DEFAULT_MAIN_BRANCHES=("main" "master")`
+- **預設使用者設定**：`DEFAULT_USERNAME="jerry"` - 可自訂預設擁有者名字
 - **自動檢測機制**：按順序檢測第一個存在的分支
 - **錯誤處理**：找不到分支時提供詳細解決建議
 - **易於擴展**：可添加 `develop`、`dev` 等更多分支選項
@@ -621,10 +660,6 @@ CMD ["git-auto-push", "--auto"]
 
 ```bash
 # 修改位置：檔案開頭的 AI 提示詞配置區域
-generate_ai_branch_prompt() {
-    # 修改分支名稱生成邏輯
-}
-
 generate_ai_commit_prompt() {
     # 修改 commit 訊息生成邏輯
 }
@@ -633,6 +668,8 @@ generate_ai_pr_prompt() {
     # 修改 PR 內容生成邏輯
 }
 ```
+
+**注意**：分支名稱現已改為自動生成，不再使用 AI 產生。
 
 #### 2. AI 工具順序調整
 
@@ -654,7 +691,7 @@ readonly AI_TOOLS=(
 #### 4. 分支配置自定義 ✨
 
 ```bash
-# git-auto-pr.sh 分支配置修改（第 78 行）
+# git-auto-pr.sh 主分支配置修改（第 116 行）
 readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
 
 # 添加更多分支選項
@@ -662,11 +699,18 @@ readonly -a DEFAULT_MAIN_BRANCHES=("main" "master" "develop" "dev")
 
 # 只使用特定分支
 readonly -a DEFAULT_MAIN_BRANCHES=("main")
+
+# 預設使用者名稱配置（第 122 行）
+readonly DEFAULT_USERNAME="jerry"
+
+# 修改為您的名字或團隊慣例
+readonly DEFAULT_USERNAME="tom"
 ```
 
 **配置說明**：
 
 - **檢測順序**：腳本會按陣列順序檢測第一個存在的分支
+- **預設使用者**：分支建立時的預設擁有者名稱，可在執行時覆蓋
 - **錯誤處理**：找不到任何分支時會顯示詳細錯誤訊息和解決建議
 - **動態提示**：錯誤訊息會根據配置陣列動態生成修復指令
 

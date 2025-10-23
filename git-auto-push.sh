@@ -376,7 +376,7 @@ run_command_with_loading() {
         
         # 顯示游標並清理終端
         printf "\r\033[K\033[?25h" >&2
-        warning_msg "操作已被用戶中斷" >&2
+        warning_msg "操作已被用戶中斷"
         exit 130  # SIGINT 的標準退出碼
     }
     
@@ -412,7 +412,7 @@ run_command_with_loading() {
         sleep 1
         kill -KILL "$cmd_pid" 2>/dev/null
         wait "$cmd_pid" 2>/dev/null
-        warning_msg "命令執行超時" >&2
+        warning_msg "命令執行超時"
         rm -f "$temp_file" "${temp_file}.exit_code"
         trap - INT TERM  # 清理信號處理
         return 124  # timeout 的標準退出碼
@@ -460,11 +460,11 @@ run_codex_command() {
     local prompt="$1"
     local timeout=60
     
-    info_msg "正在調用 codex..." >&2
+    info_msg "正在調用 codex..."
     
     # 檢查 codex 是否可用
     if ! command -v codex >/dev/null 2>&1; then
-        warning_msg "codex 工具未安裝" >&2
+        warning_msg "codex 工具未安裝"
         return 1
     fi
     
@@ -473,14 +473,14 @@ run_codex_command() {
     diff_size=$(git diff --cached 2>/dev/null | wc -l)
     if [ "$diff_size" -gt 500 ]; then
         timeout=90
-        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..." >&2
+        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..."
     fi
     
     # 準備 git diff 內容
     local git_diff
     git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
     if [ -z "$git_diff" ]; then
-        warning_msg "沒有檢測到任何變更內容" >&2
+        warning_msg "沒有檢測到任何變更內容"
         return 1
     fi
     
@@ -526,12 +526,12 @@ run_codex_command() {
                 fi
                 
                 if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
-                    success_msg "codex 回應完成" >&2
+                    success_msg "codex 回應完成"
                     echo "$filtered_output"
                     return 0
                 fi
             fi
-            warning_msg "codex 沒有返回有效內容" >&2
+            warning_msg "codex 沒有返回有效內容"
             ;;
         124)
             error_msg "❌ codex 執行超時（${timeout}秒）"
@@ -546,7 +546,7 @@ run_codex_command() {
                 error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
             else
-                warning_msg "codex 執行失敗（退出碼: $exit_code）" >&2
+                warning_msg "codex 執行失敗（退出碼: $exit_code）"
             fi
             ;;
     esac
@@ -560,11 +560,11 @@ run_stdin_ai_command() {
     local prompt="$2"
     local timeout=45  # 增加超時時間到 45 秒
     
-    info_msg "正在調用 $tool_name..." >&2
+    info_msg "正在調用 $tool_name..."
     
     # 首先檢查工具是否可用
     if ! command -v "$tool_name" >/dev/null 2>&1; then
-        warning_msg "$tool_name 工具未安裝" >&2
+        warning_msg "$tool_name 工具未安裝"
         return 1
     fi
     
@@ -576,7 +576,7 @@ run_stdin_ai_command() {
     diff_content=$(git diff --cached 2>/dev/null)
     
     if [ -z "$diff_content" ]; then
-        warning_msg "沒有暫存區變更可供 $tool_name 分析" >&2
+        warning_msg "沒有暫存區變更可供 $tool_name 分析"
         return 1
     fi
     
@@ -649,14 +649,14 @@ run_stdin_ai_command() {
         return 1
     fi
     
-    success_msg "$tool_name 回應完成" >&2
+    success_msg "$tool_name 回應完成"
     echo "$output"
     return 0
 }
 
 # 全自動生成 commit message（不需要用戶交互）
 generate_auto_commit_message_silent() {
-    info_msg "🤖 全自動模式：正在使用 AI 工具分析變更並生成 commit message..." >&2
+    info_msg "🤖 全自動模式：正在使用 AI 工具分析變更並生成 commit message..."
     
     local prompt="$AI_COMMIT_PROMPT"
     local generated_message
@@ -665,11 +665,11 @@ generate_auto_commit_message_silent() {
     # 依序檢查每個 AI 工具
     for tool_name in "${AI_TOOLS[@]}"; do
         if ! command -v "$tool_name" >/dev/null 2>&1; then
-            info_msg "🔄 AI 工具 $tool_name 未安裝，嘗試下一個..." >&2
+            info_msg "🔄 AI 工具 $tool_name 未安裝，嘗試下一個..."
             continue
         fi
 
-        info_msg "🔄 自動使用 AI 工具: $tool_name" >&2
+        info_msg "🔄 自動使用 AI 工具: $tool_name"
         ai_tool_used="$tool_name"
         
         # 根據不同工具使用不同的調用方式
@@ -686,7 +686,7 @@ generate_auto_commit_message_silent() {
                 ;;
         esac
         
-        warning_msg "❌ $tool_name 執行失敗，嘗試下一個工具..." >&2
+        warning_msg "❌ $tool_name 執行失敗，嘗試下一個工具..."
         generated_message=""
         ai_tool_used=""
     done
@@ -697,26 +697,26 @@ generate_auto_commit_message_silent() {
         generated_message=$(clean_ai_message "$generated_message")
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:" >&2
+            info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
             highlight_success_msg "🔖 $generated_message"
             echo "$generated_message"
             return 0
         else
-            warning_msg "⚠️  AI 生成的訊息太短或無效: '$generated_message'" >&2
+            warning_msg "⚠️  AI 生成的訊息太短或無效: '$generated_message'"
         fi
     fi
     
     # 如果所有 AI 工具都不可用或失敗，使用預設訊息
-    warning_msg "⚠️  所有 AI 工具都執行失敗，使用預設 commit message" >&2
+    warning_msg "⚠️  所有 AI 工具都執行失敗，使用預設 commit message"
     local default_message="自動提交：更新專案檔案"
-    info_msg "🔖 使用預設訊息: $default_message" >&2
+    info_msg "🔖 使用預設訊息: $default_message"
     echo "$default_message"
     return 0
 }
 
 # 使用 AI 工具自動生成 commit message
 generate_auto_commit_message() {
-    info_msg "正在使用 AI 工具分析變更並生成 commit message..." >&2
+    info_msg "正在使用 AI 工具分析變更並生成 commit message..."
     
     local prompt="$AI_COMMIT_PROMPT"
     local generated_message
@@ -725,28 +725,28 @@ generate_auto_commit_message() {
     # 依序檢查每個 AI 工具
     for tool_name in "${AI_TOOLS[@]}"; do
         if ! command -v "$tool_name" >/dev/null 2>&1; then
-            info_msg "AI 工具 $tool_name 未安裝，跳過..." >&2
+            info_msg "AI 工具 $tool_name 未安裝，跳過..."
             continue
         fi
 
         # 提示用戶即將使用 AI 工具，並提供狀態提醒
         echo >&2
-        info_msg "🤖 即將嘗試使用 AI 工具: $tool_name" >&2
+        info_msg "🤖 即將嘗試使用 AI 工具: $tool_name"
         
         # 根據不同工具提供特定的狀態提醒
         case "$tool_name" in
             "gemini")
-                warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試" >&2
+                warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試"
                 ;;
             "claude")
-                warning_msg "💡 提醒: Claude 需要登入付費帳號登入或 API 參數設定，如未登入請執行 'claude /login'" >&2
+                warning_msg "💡 提醒: Claude 需要登入付費帳號登入或 API 參數設定，如未登入請執行 'claude /login'"
                 ;;
             "codex")
-                info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定" >&2
+                info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定"
                 ;;
         esac
         
-        info_msg "🔄 正在使用 AI 工具: $tool_name" >&2
+        info_msg "🔄 正在使用 AI 工具: $tool_name"
         ai_tool_used="$tool_name"
         
         # 根據不同工具使用不同的調用方式
@@ -763,7 +763,7 @@ generate_auto_commit_message() {
                 ;;
         esac
         
-        warning_msg "$tool_name 執行失敗，嘗試下一個工具..." >&2
+        warning_msg "$tool_name 執行失敗，嘗試下一個工具..."
         generated_message=""
         ai_tool_used=""
     done
@@ -774,18 +774,18 @@ generate_auto_commit_message() {
         generated_message=$(clean_ai_message "$generated_message")
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            info_msg "✅ 使用 $ai_tool_used 生成的 commit message:" >&2
+            info_msg "✅ 使用 $ai_tool_used 生成的 commit message:"
             highlight_success_msg "🔖 $generated_message"
             echo "$generated_message"
             return 0
         else
-            warning_msg "AI 生成的訊息太短或無效: '$generated_message'" >&2
+            warning_msg "AI 生成的訊息太短或無效: '$generated_message'"
         fi
     fi
     
     # 如果所有 AI 工具都不可用或失敗
-    warning_msg "所有 AI 工具都執行失敗或未生成有效的 commit message" >&2
-    info_msg "已嘗試的工具: ${AI_TOOLS[*]}" >&2
+    warning_msg "所有 AI 工具都執行失敗或未生成有效的 commit message"
+    info_msg "已嘗試的工具: ${AI_TOOLS[*]}"
     return 1
 }
 
@@ -793,7 +793,7 @@ generate_auto_commit_message() {
 get_commit_message() {
     echo >&2
     echo "==================================================" >&2
-    info_msg "請輸入 commit message (直接按 Enter 可使用 AI 自動生成):" >&2
+    info_msg "請輸入 commit message (直接按 Enter 可使用 AI 自動生成):"
     echo "==================================================" >&2
     
     read -r message
@@ -807,7 +807,7 @@ get_commit_message() {
     
     # 如果用戶未輸入內容，直接使用 AI 自動生成
     echo >&2
-    info_msg "未輸入 commit message，正在使用 AI 自動生成..." >&2
+    info_msg "未輸入 commit message，正在使用 AI 自動生成..."
     
     if auto_message=$(generate_auto_commit_message); then
         echo >&2
@@ -827,12 +827,12 @@ get_commit_message() {
     # 如果 AI 生成失敗或用戶拒絕使用，提供手動輸入選項
     while true; do
         echo >&2
-        info_msg "請手動輸入 commit message (或輸入 'q' 取消操作，輸入 'ai' 重新嘗試 AI 生成):" >&2
+        info_msg "請手動輸入 commit message (或輸入 'q' 取消操作，輸入 'ai' 重新嘗試 AI 生成):"
         read -r manual_message
         manual_message=$(echo "$manual_message" | xargs)
         
         if [ "$manual_message" = "q" ] || [ "$manual_message" = "Q" ]; then
-            warning_msg "已取消操作" >&2
+            warning_msg "已取消操作"
             return 1
         elif [ "$manual_message" = "ai" ] || [ "$manual_message" = "AI" ]; then
             # 重新嘗試 AI 生成
@@ -849,13 +849,13 @@ get_commit_message() {
                     return 0
                 fi
             else
-                warning_msg "AI 生成仍然失敗，請手動輸入" >&2
+                warning_msg "AI 生成仍然失敗，請手動輸入"
             fi
         elif [ -n "$manual_message" ]; then
             echo "$manual_message"
             return 0
         else
-            warning_msg "請輸入有效的 commit message，或輸入 'q' 取消，'ai' 重新嘗試 AI 生成" >&2
+            warning_msg "請輸入有效的 commit message，或輸入 'q' 取消，'ai' 重新嘗試 AI 生成"
         fi
     done
 }
@@ -869,7 +869,7 @@ confirm_commit() {
     
     echo >&2
     echo "==================================================" >&2
-    info_msg "確認提交資訊:" >&2
+    info_msg "確認提交資訊:"
     echo "Commit Message: $message" >&2
     echo "==================================================" >&2
     
@@ -889,7 +889,7 @@ confirm_commit() {
         elif [[ "$confirm" =~ ^(n|no|否|取消)$ ]]; then
             return 1
         else
-            warning_msg "請輸入 y 或 n（或直接按 Enter 表示同意）" >&2
+            warning_msg "請輸入 y 或 n（或直接按 Enter 表示同意）"
         fi
     done
 }
@@ -941,7 +941,7 @@ DEFAULT_OPTION=1  # 預設選項：1=完整流程, 2=add+commit, 3=僅add
 show_operation_menu() {
     echo >&2
     echo "==================================================" >&2
-    info_msg "請選擇要執行的 Git 操作:" >&2
+    info_msg "請選擇要執行的 Git 操作:"
     echo "==================================================" >&2
     highlight_success_msg "1. 🚀 完整流程 (add → commit → push)"
     warning_msg "2. 📝 本地提交 (add → commit)"
@@ -968,37 +968,37 @@ get_operation_choice() {
                 # 驗證輸入是否有效
         case "$choice" in
             1)
-                info_msg "✅ 已選擇：完整流程 (add → commit → push)" >&2
+                info_msg "✅ 已選擇：完整流程 (add → commit → push)"
                 echo "$choice"
                 return 0
                 ;;
             2)
-                info_msg "✅ 已選擇：本地提交 (add → commit)" >&2
+                info_msg "✅ 已選擇：本地提交 (add → commit)"
                 echo "$choice"
                 return 0
                 ;;
             3)
-                info_msg "✅ 已選擇：僅添加檔案 (add)" >&2
+                info_msg "✅ 已選擇：僅添加檔案 (add)"
                 echo "$choice"
                 return 0
                 ;;
             4)
-                info_msg "✅ 已選擇：全自動模式 (add → AI commit → push)" >&2
+                info_msg "✅ 已選擇：全自動模式 (add → AI commit → push)"
                 echo "$choice"
                 return 0
                 ;;
             5)
-                info_msg "✅ 已選擇：僅提交 (commit)" >&2
+                info_msg "✅ 已選擇：僅提交 (commit)"
                 echo "$choice"
                 return 0
                 ;;
             6)
-                info_msg "✅ 已選擇：顯示 Git 倉庫資訊" >&2
+                info_msg "✅ 已選擇：顯示 Git 倉庫資訊"
                 echo "$choice"
                 return 0
                 ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6" >&2
+                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6"
                 echo >&2
                 ;;
         esac
@@ -1037,20 +1037,20 @@ main() {
     # 設置全局信號處理
     global_cleanup() {
         printf "\r\033[K\033[?25h" >&2  # 清理終端並顯示游標
-        warning_msg "程序被用戶中斷，正在清理..." >&2
+        warning_msg "程序被用戶中斷，正在清理..."
         exit 130  # SIGINT 的標準退出碼
     }
     
     # 設置中斷信號處理
     trap global_cleanup INT TERM
 
-    warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。" >&2
+    warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
     # 檢查命令行參數
     local auto_mode=false
     if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
         auto_mode=true
-        info_msg "🤖 命令行啟用全自動模式" >&2
+        info_msg "🤖 命令行啟用全自動模式"
     fi
     
     # 顯示工具標題
@@ -1076,13 +1076,13 @@ main() {
         # 如果用戶確認推送（預設為是）
         if [ -z "$push_confirm" ] || [[ "$push_confirm" =~ ^(y|yes|是|確認)$ ]]; then
             if push_to_remote; then
-                success_msg "🎉 推送完成！" >&2
+                success_msg "🎉 推送完成！"
             else
-                warning_msg "❌ 推送失敗" >&2
+                warning_msg "❌ 推送失敗"
                 exit 1
             fi
         else
-            info_msg "已取消推送操作。" >&2
+            info_msg "已取消推送操作。"
         fi
         
         exit 0
@@ -1144,7 +1144,7 @@ main() {
 
 # 執行完整工作流程 (add → commit → push)
 execute_full_workflow() {
-    info_msg "🚀 執行完整 Git 工作流程..." >&2
+    info_msg "🚀 執行完整 Git 工作流程..."
     
     # 步驟 4: 獲取用戶輸入的 commit message
     local message
@@ -1154,7 +1154,7 @@ execute_full_workflow() {
     
     # 步驟 5: 確認是否要提交
     if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。" >&2
+        warning_msg "已取消提交。"
         exit 0
     fi
     
@@ -1171,7 +1171,7 @@ execute_full_workflow() {
     # 完成提示
     echo >&2
     echo "==================================================" >&2
-    success_msg "🎉 完整工作流程執行完成！" >&2
+    success_msg "🎉 完整工作流程執行完成！"
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息
@@ -1180,7 +1180,7 @@ execute_full_workflow() {
 
 # 執行本地提交 (add → commit)
 execute_local_commit() {
-    info_msg "📝 執行本地 Git 提交..." >&2
+    info_msg "📝 執行本地 Git 提交..."
     
     # 步驟 4: 獲取用戶輸入的 commit message
     local message
@@ -1190,7 +1190,7 @@ execute_local_commit() {
     
     # 步驟 5: 確認是否要提交
     if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。" >&2
+        warning_msg "已取消提交。"
         exit 0
     fi
     
@@ -1202,8 +1202,8 @@ execute_local_commit() {
     # 完成提示
     echo >&2
     echo "==================================================" >&2
-    success_msg "📋 本地提交完成！" >&2
-    info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1" >&2
+    success_msg "📋 本地提交完成！"
+    info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1"
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息
@@ -1212,13 +1212,13 @@ execute_local_commit() {
 
 # 執行僅添加檔案 (add)
 execute_add_only() {
-    info_msg "📦 僅執行檔案添加操作..." >&2
+    info_msg "📦 僅執行檔案添加操作..."
     
     # 完成提示（add 操作已在主流程中完成）
     echo >&2
     echo "==================================================" >&2
-    success_msg "📁 檔案添加完成！" >&2
-    info_msg "💡 提示：檔案已添加到暫存區，如需提交請使用 'git commit' 或重新運行腳本選擇選項 2" >&2
+    success_msg "📁 檔案添加完成！"
+    info_msg "💡 提示：檔案已添加到暫存區，如需提交請使用 'git commit' 或重新運行腳本選擇選項 2"
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息
@@ -1227,19 +1227,19 @@ execute_add_only() {
 
 # 執行僅提交功能 (commit)
 execute_commit_only() {
-    info_msg "💾 執行僅提交操作..." >&2
+    info_msg "💾 執行僅提交操作..."
     
     # 步驟 1: 檢查是否有已暫存的變更需要提交
     local staged_changes
     staged_changes=$(git diff --cached --name-only 2>/dev/null)
     
     if [ -z "$staged_changes" ]; then
-        warning_msg "沒有已暫存的變更可提交。請先使用 'git add' 添加檔案，或選擇其他選項。" >&2
+        warning_msg "沒有已暫存的變更可提交。請先使用 'git add' 添加檔案，或選擇其他選項。"
         exit 0
     fi
     
     # 顯示已暫存的變更
-    info_msg "已暫存的變更:" >&2
+    info_msg "已暫存的變更:"
     git diff --cached --name-only >&2
     
     # 步驟 2: 獲取用戶輸入的 commit message
@@ -1250,7 +1250,7 @@ execute_commit_only() {
     
     # 步驟 3: 確認是否要提交
     if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。" >&2
+        warning_msg "已取消提交。"
         exit 0
     fi
     
@@ -1262,8 +1262,8 @@ execute_commit_only() {
     # 完成提示
     echo >&2
     echo "==================================================" >&2
-    success_msg "💾 提交完成！" >&2
-    info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1" >&2
+    success_msg "💾 提交完成！"
+    info_msg "💡 提示：如需推送到遠端，請使用 'git push' 或重新運行腳本選擇選項 1"
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息
@@ -1286,10 +1286,10 @@ execute_commit_only() {
 #   - 工作區狀態（已修改/未追蹤檔案）
 # ============================================
 show_git_info() {
-    info_msg "📊 正在收集 Git 倉庫資訊..." >&2
+    info_msg "📊 正在收集 Git 倉庫資訊..."
     echo >&2
     echo "==================================================" >&2
-    success_msg "📍 Git 倉庫資訊" >&2
+    success_msg "📍 Git 倉庫資訊"
     echo "==================================================" >&2
     
     # 1. 當前分支
@@ -1305,7 +1305,7 @@ show_git_info() {
     echo >&2
     
     # 3. 遠端倉庫資訊
-    info_msg "🌐 遠端倉庫:" >&2
+    info_msg "🌐 遠端倉庫:"
     local remotes
     remotes=$(git remote -v 2>/dev/null)
     if [ -n "$remotes" ]; then
@@ -1347,7 +1347,7 @@ show_git_info() {
     echo >&2
     
     # 5. 分支來源資訊（如果有的話）
-    info_msg "🌳 分支歷史:" >&2
+    info_msg "🌳 分支歷史:"
     local branch_point
     # 嘗試找出當前分支是從哪個分支分出來的
     if [ "$current_branch" != "master" ] && [ "$current_branch" != "main" ]; then
@@ -1375,7 +1375,7 @@ show_git_info() {
     echo >&2
     
     # 6. 最近的 commit
-    info_msg "📝 最近提交:" >&2
+    info_msg "📝 最近提交:"
     local recent_commits
     recent_commits=$(git log --oneline -5 --decorate --color=always 2>/dev/null)
     if [ -n "$recent_commits" ]; then
@@ -1389,7 +1389,7 @@ show_git_info() {
     echo >&2
     
     # 7. 工作區狀態
-    info_msg "📋 工作區狀態:" >&2
+    info_msg "📋 工作區狀態:"
     local status_output
     status_output=$(git status --short 2>/dev/null)
     if [ -n "$status_output" ]; then
@@ -1409,21 +1409,21 @@ show_git_info() {
 
 # 執行全自動工作流程 (add → AI commit → push)
 execute_auto_workflow() {
-    info_msg "🤖 執行全自動 Git 工作流程..." >&2
-    info_msg "💡 提示：全自動模式將使用 AI 生成 commit message 並自動完成所有步驟" >&2
+    info_msg "🤖 執行全自動 Git 工作流程..."
+    info_msg "💡 提示：全自動模式將使用 AI 生成 commit message 並自動完成所有步驟"
     
     # 步驟 4: 使用 AI 自動生成 commit message（無需用戶確認）
     local message
     if ! message=$(generate_auto_commit_message_silent); then
         # 如果 AI 生成失敗，使用預設訊息
         message="自動提交：更新專案檔案"
-        warning_msg "⚠️  使用預設 commit message: $message" >&2
+        warning_msg "⚠️  使用預設 commit message: $message"
     fi
     
     # 顯示將要使用的 commit message
     echo >&2
     echo "==================================================" >&2
-    info_msg "🤖 全自動提交資訊:" >&2
+    info_msg "🤖 全自動提交資訊:"
     cyan_msg "📝 Commit Message: $message"
     echo "==================================================" >&2
     
@@ -1440,12 +1440,12 @@ execute_auto_workflow() {
     # 完成提示
     echo >&2
     echo "==================================================" >&2
-    success_msg "🎉 全自動工作流程執行完成！" >&2
-    info_msg "📊 執行摘要：" >&2
-    info_msg "   ✅ 檔案已添加到暫存區" >&2
-    info_msg "   ✅ 使用 AI 生成 commit message" >&2
-    info_msg "   ✅ 變更已提交到本地倉庫" >&2
-    info_msg "   ✅ 變更已推送到遠端倉庫" >&2
+    success_msg "🎉 全自動工作流程執行完成！"
+    info_msg "📊 執行摘要："
+    info_msg "   ✅ 檔案已添加到暫存區"
+    info_msg "   ✅ 使用 AI 生成 commit message"
+    info_msg "   ✅ 變更已提交到本地倉庫"
+    info_msg "   ✅ 變更已推送到遠端倉庫"
     echo "==================================================" >&2
     
     # 顯示隨機感謝訊息

@@ -1371,18 +1371,18 @@ main() {
     # 設置全局信號處理
     global_cleanup() {
         printf "\r\033[K\033[?25h" >&2  # 清理終端並顯示游標
-        warning_msg "程序被用戶中斷，正在清理..." >&2
+        warning_msg "程序被用戶中斷，正在清理..."
         exit 130  # SIGINT 的標準退出碼
     }
     
     # 設置中斷信號處理
     trap global_cleanup INT TERM
 
-    warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。" >&2
+    warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
     # 檢查命令行參數（移除自動模式支援）
     if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
-        warning_msg "⚠️  全自動模式已移除，請使用互動式選單操作" >&2
+        warning_msg "⚠️  全自動模式已移除，請使用互動式選單操作"
         echo >&2
     fi
     
@@ -1496,7 +1496,7 @@ execute_create_branch() {
         user_input=$(echo "$user_input" | xargs)
         
         if [ -z "$user_input" ]; then
-            warning_msg "⚠️  Issue key 不能為空" >&2
+            warning_msg "⚠️  Issue key 不能為空"
             continue
         fi
         
@@ -1509,31 +1509,31 @@ execute_create_branch() {
         case $validation_result in
             0)
                 issue_key="$validated_key"
-                info_msg "✅ 使用標準格式 issue key: $issue_key" >&2
+                info_msg "✅ 使用標準格式 issue key: $issue_key"
                 ;;
             1)
-                warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)" >&2
-                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)"
+                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                 ;;
             2)
-                warning_msg "❌ Issue key 必須以英文字母開頭" >&2
-                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                warning_msg "❌ Issue key 必須以英文字母開頭"
+                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                 ;;
             3)
                 issue_key="$validated_key"
-                warning_msg "⚠️  接受的 issue key: $issue_key" >&2
-                warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}" >&2
+                warning_msg "⚠️  接受的 issue key: $issue_key"
+                warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}"
                 ;;
         esac
     done
 
     # 確保 issue_key 為大寫格式（標準化）
     issue_key=$(echo "$issue_key" | tr '[:lower:]' '[:upper:]')
-    info_msg "📝 最終 issue key: $issue_key" >&2
+    info_msg "📝 最終 issue key: $issue_key"
     
     # 輸入擁有者名字
     echo >&2
-    printf "請輸入擁有者名字 [預設: %s]: " "$DEFAULT_USERNAME" >&2
+    printf "請輸入擁有者名字 [預設: %s]: " "$DEFAULT_USERNAME"
     read -r username
     username=$(echo "$username" | xargs | tr '[:upper:]' '[:lower:]')
     
@@ -1541,11 +1541,11 @@ execute_create_branch() {
         username="$DEFAULT_USERNAME"
     fi
     
-    info_msg "👤 使用者名稱: $username" >&2
+    info_msg "👤 使用者名稱: $username"
     
     # 選擇分支類型
     echo >&2
-    info_msg "📋 分支類型說明：" >&2
+    info_msg "📋 分支類型說明："
     echo >&2
     cyan_msg "1. issue - 問題 (Issue)"
     printf "   定義：專案過程中遇到的任何障礙、延誤或突發狀況，不一定是系統性的錯誤。\n" >&2
@@ -1596,12 +1596,12 @@ execute_create_branch() {
                 branch_type="blocker"
                 ;;
             *)
-                warning_msg "❌ 無效的選擇，請輸入 1-5" >&2
+                warning_msg "❌ 無效的選擇，請輸入 1-5"
                 ;;
         esac
     done
     
-    info_msg "🏷️  分支類型: $branch_type" >&2
+    info_msg "🏷️  分支類型: $branch_type"
     
     # 自動生成分支名稱
     echo >&2
@@ -1610,7 +1610,7 @@ execute_create_branch() {
     # 標準化分支名稱：轉換為小寫
     branch_name=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
     
-    info_msg "📝 將建立分支: $branch_name" >&2
+    info_msg "📝 將建立分支: $branch_name"
     
     if [ -z "$branch_name" ]; then
         handle_error "分支名稱不能為空"
@@ -1753,8 +1753,8 @@ execute_create_pr() {
                     info_msg "✅ 使用標準格式 issue key: $issue_key"
                     ;;
                 1)
-                    warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)" >&2
-                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                    warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)"
+                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                     if [ -n "$suggested_key" ]; then
                         printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
                     else
@@ -1762,8 +1762,8 @@ execute_create_pr() {
                     fi
                     ;;
                 2)
-                    warning_msg "❌ Issue key 必須以英文字母開頭" >&2
-                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                    warning_msg "❌ Issue key 必須以英文字母開頭"
+                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                     if [ -n "$suggested_key" ]; then
                         printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
                     else
@@ -1772,13 +1772,13 @@ execute_create_pr() {
                     ;;
                 3)
                     issue_key="$validated_key"
-                    warning_msg "⚠️  接受的 issue key: $issue_key" >&2
-                    warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}" >&2
+                    warning_msg "⚠️  接受的 issue key: $issue_key"
+                    warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}"
                     ;;
             esac
         else
             # 強制用戶輸入，不接受空輸入
-            warning_msg "⚠️  Issue key 不能為空，請輸入有效的 issue key" >&2
+            warning_msg "⚠️  Issue key 不能為空，請輸入有效的 issue key"
             if [ -n "$suggested_key" ]; then
                 printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
             else
@@ -1816,8 +1816,8 @@ execute_create_pr() {
                 pr_title=$(echo "$pr_title" | xargs)
                 pr_body=$(echo "$pr_body" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
                 
-                debug_msg "🔍 調試: 分割後 pr_title='$pr_title'" >&2
-                debug_msg "🔍 調試: 分割後 pr_body（前 200 字符）='$(echo "$pr_body" | head -c 200)'" >&2
+                debug_msg "🔍 調試: 分割後 pr_title='$pr_title'"
+                debug_msg "🔍 調試: 分割後 pr_body（前 200 字符）='$(echo "$pr_body" | head -c 200)'"
             else
                 # 沒有句號，整個內容作為標題，body 使用預設格式
                 pr_title="$pr_content"
@@ -1825,7 +1825,7 @@ execute_create_pr() {
 
 Issue: $issue_key
 Summary: Implement feature as described in $issue_key"
-                warning_msg "⚠️  AI 輸出未包含句號，使用整段作為標題" >&2
+                warning_msg "⚠️  AI 輸出未包含句號，使用整段作為標題"
             fi
             
             # 應用格式化處理（只格式化 body，title 保持不變）
@@ -1867,7 +1867,7 @@ Summary: Implement feature as described in $issue_key"
     
     if [ -z "$pr_body" ]; then
         echo >&2
-        info_msg "💡 建議包含：功能變更、技術實作細節" >&2
+        info_msg "💡 建議包含：功能變更、技術實作細節"
         printf "請輸入 PR 描述 (可選，直接按 Enter 跳過): " >&2
         read -r pr_body_input
         if [ -n "$pr_body_input" ]; then

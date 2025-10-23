@@ -1,83 +1,160 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
+
+# 腳本用途：
+#   提供完整的 GitHub Flow 工作流程自動化，從分支建立到 PR 合併。
+#   支援 AI 輔助生成分支名稱、PR 內容，並整合企業級安全機制。
+#   適用於團隊協作開發環境，涵蓋分支管理、PR 審查、合併與撤銷等完整流程。
 #
-# ==============================================================================
-# GitHub Flow PR 流程自動化工具 (git-auto-pr.sh)
-# ==============================================================================
+# 使用方式：
+#   互動模式：    ./git-auto-pr.sh
+#   顯示說明：    ./git-auto-pr.sh -h 或 --help
+#   相容模式：    ./git-auto-pr.sh --auto（已廢用，會提示使用互動模式）
+#   全域使用：    git-auto-pr（需先將腳本連結至 PATH）
 #
-# 描述：提供完整的 GitHub Flow 工作流程自動化，從分支建立到 PR 合併
-#      支援 AI 輔助功能和企業級安全機制，適用於團隊協作開發
+# 五種操作模式：
+#   1. 建立功能分支 - 基於主分支建立新分支，支援 AI 生成分支名稱
+#   2. 建立 Pull Request - 建立 PR 並使用 AI 生成標題與內容
+#   3. 撤銷 PR（智慧模式）- 關閉開放中的 PR 或 revert 已合併的 PR
+#   4. 審查並合併 PR - 互動式審查流程，支援 squash merge
+#   5. 刪除分支（安全模式）- 刪除本地與遠端分支，含主分支保護
 #
-# 主要功能：
-# ├── GitHub Flow 完整流程：分支建立 → 開發 → PR 建立 → 審查 → 合併
-# ├── 5 種操作模式：建立分支、建立 PR、撤銷 PR、審查合併、刪除分支
-# ├── AI 智慧功能：自動生成分支名、commit 訊息、PR 內容
-# ├── 安全機制：主分支保護、多重確認、PR 狀態檢查
-# ├── 智慧撤銷：支援開放 PR 關閉和已合併 PR 的 revert
-# ├── 分支管理：安全的本地/遠端分支刪除功能
-# └── 錯誤處理：企業級錯誤偵測與智慧修復建議
+# 相依工具：
+#   bash>=4.0       必需，腳本執行環境
+#   git>=2.0        必需，版本控制操作
+#   gh>=2.0         必需，GitHub CLI，用於 PR 相關操作
+#   codex/gemini/claude  可選，AI CLI 工具，用於智慧生成功能
 #
-# 使用方法：
-#   互動式模式：  ./git-auto-pr.sh          # 顯示選單選擇操作
-#   相容模式：    ./git-auto-pr.sh --auto   # 已廈用，提示使用互動模式
-#   全域使用：    git-auto-pr               # 全域安裝後
+# 權限與安全：
+#   - 不需要 root 權限
+#   - 會讀取當前 Git 倉庫配置與狀態
+#   - 會執行 git/gh 指令進行分支與 PR 操作
+#   - 會透過網路存取 GitHub API（經由 gh CLI）
+#   - 主分支受保護，無法直接刪除或切換至主分支建立 PR
 #
-# 系統需求：
-#   - Bash 4.0+
-#   - Git 2.0+
-#   - GitHub CLI (gh) - 必需，用於 PR 操作
-#   - 選用：AI CLI 工具 (codex/gemini/claude) 用於智慧功能
+# 輸入來源：
+#   - CLI 參數：-h/--help（顯示說明）、--auto（相容模式）
+#   - 環境變數：無特定環境變數需求，使用 Git/GitHub 預設配置
+#   - STDIN：互動式輸入（選單選項、分支名稱、PR 資訊等）
+#   - 設定檔：使用 gh CLI 的認證配置（~/.config/gh/）
+#
+# 輸出結果：
+#   - STDOUT：無資料輸出（所有訊息均輸出至 STDERR）
+#   - STDERR：所有狀態訊息、錯誤訊息、互動提示、彩色輸出
+#   - 格式：UTF-8 編碼，ANSI 彩色碼
+#
+# 退出碼表：
+#   0   成功完成操作
+#   1   一般錯誤（參數錯誤、操作失敗、使用者取消等）
+#   2   相依工具不足（git 或 gh 未安裝）
+#   130 使用者中斷（Ctrl+C）
+#
+# 主要流程：
+#   1. 初始化與環境檢查（驗證 git/gh 可用性、檢測 Git 倉庫）
+#   2. 顯示操作選單並接收使用者選擇
+#   3. 根據選擇執行對應工作流程：
+#      - 建立分支：檢測主分支 → AI 生成分支名 → 建立並切換分支
+#      - 建立 PR：收集 commits → AI 生成 PR 內容 → 使用 gh 建立 PR
+#      - 撤銷 PR：檢查 PR 狀態 → 關閉或 revert → 確認操作
+#      - 審查合併：檢視 PR 與 CI 狀態 → 審查 → squash merge
+#      - 刪除分支：確認分支狀態 → 多重確認 → 刪除本地與遠端分支
+#   4. 輸出操作結果與後續建議
+#   5. 清理暫存資源並退出
+#
+# 注意事項：
+#   - AI 工具調用有 45 秒超時機制，失敗時會自動切換至下一個工具
+#   - PR 合併預設使用 squash 策略，會將所有 commits 壓縮為一個
+#   - 分支名稱格式：username/type/issue-key-description（小寫、連字號分隔）
+#   - 主分支自動檢測順序：uat → main → master（可於配置區調整）
+#   - 撤銷已合併 PR 的 revert 操作預設選項為「否」，需明確確認
+#   - 網路操作（gh CLI）無內建重試機制，失敗時需手動重新執行
+#   - 時區假設：使用系統本地時區
+#   - 不支援離線模式，所有 PR 操作均需網路連線
+#
+# 參考：
+#   - GitHub Flow 說明：docs/github-flow.md
+#   - PR 撤銷功能：docs/pr-cancel-feature.md
+#   - Git 倉庫資訊：docs/git-info-feature.md
+#   - GitHub CLI 文檔：https://cli.github.com/manual/
+#   - Conventional Commits：https://www.conventionalcommits.org/
 #
 # 作者：Lazy Jerry
-# 版本：v1.4.0  
-# 最後更新：2025-09-21
+# 版本：v1.5.0
+# 最後更新：2025-10-24
 # 授權：MIT License
 # 倉庫：https://github.com/lazyjerry/git-auto-push
-# 文檔：docs/github-flow.md
-#
-# ==============================================================================
 #
 
 # ==============================================
 # AI 提示詞配置區域
 # ==============================================
-# 
-# 說明：此區域包含所有 AI 工具使用的提示詞模板
-# 修改這些函數可以調整 AI 生成的內容品質和格式
-# 支援的 AI 工具：codex, gemini, claude
+#
+# 說明：此區域集中管理所有 AI 工具的提示詞模板函數。
+#       修改這些函數可調整 AI 生成內容的品質、格式與風格。
+#       支援的 AI 工具：codex、gemini、claude（依 AI_TOOLS 陣列順序調用）
 #
 # 注意事項：
-# 1. 提示詞應保持簡潔明確，避免過長導致超時
-# 2. 使用統一的輸出格式便於後處理
-# 3. 修改後請測試各種場景確保相容性
+# 1. 提示詞應簡潔明確，避免過長導致 AI 工具超時（預設 45 秒）
+# 2. 輸出格式需統一便於後處理（如使用 ||| 分隔多欄位）
+# 3. 修改後請測試各種場景（空輸入、長輸入、特殊字元）確保相容性
+# 4. 提示詞使用英文可提升跨 AI 工具的相容性
 # ==============================================
 
-# AI 分支名稱生成提示詞模板
-# 參數：$1=issue_key, $2=description_hint
-# 輸出：符合 Git 規範的分支名稱 (feature/xxx-xxx 格式)
+# 函式：generate_ai_branch_prompt
+# 功能說明：生成 AI 分支名稱提示詞，用於請求 AI 工具產生符合規範的 Git 分支名稱。
+# 輸入參數：
+#   $1 <username> 使用者名稱，用於分支名稱前綴，應為小寫英文
+#   $2 <branch_type> 分支類型，如 feature、bugfix、hotfix 等
+#   $3 <issue_key> 議題編號，如 issue-001、jira-456 等
+#   $4 <description_hint> 功能描述提示（可選），用於生成分支描述部分
+# 輸出結果：
+#   STDOUT 輸出英文提示詞字串，不含換行符號
+#   格式範例："Generate branch name for: add login. Username: jerry, Type: feature..."
+# 例外/失敗：
+#   無例外，總是返回提示詞字串（即使參數為空）
+# 流程：
+#   1. 檢查 description_hint 是否為空
+#   2. 若為空，使用通用提示詞模板
+#   3. 若不為空，使用包含描述的詳細模板
+#   4. 使用 printf '%s' 輸出避免額外換行
+# 副作用：無副作用，純函數
+# 參考：generate_ai_branch_name() 函數會調用此提示詞
 generate_ai_branch_prompt() {
-    local issue_key="$1"
-    local description_hint="$2"
+    local username="$1"
+    local branch_type="$2"
+    local issue_key="$3"
+    local description_hint="$4"
     
     # 如果描述為空，使用更通用的提示詞
     if [ -z "$description_hint" ]; then
-        printf '%s' "Generate a Git branch name for issue $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/issue-001-add-feature"
+        printf '%s' "Generate a Git branch name. Format: $username/$branch_type/$issue_key-description. Use only lowercase, numbers, hyphens. Max 50 chars. Example: jerry/feature/issue-001-add-login"
     else
-        printf '%s' "Generate branch name for: $description_hint. Issue: $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+        printf '%s' "Generate branch name for: $description_hint. Username: $username, Type: $branch_type, Issue: $issue_key. Format: $username/$branch_type/$issue_key-description. Use only lowercase, numbers, hyphens. Max 50 chars. Example: jerry/feature/jira-456-add-auth"
     fi
 }
 
-# AI Commit 訊息生成提示詞模板  
-# 輸出：符合 Conventional Commits 規範的中文訊息
-# 注意：實際的 git diff 內容會通過 content 參數傳遞，不包含在 prompt 中
-# AI PR 內容生成提示詞模板
-# 參數：$1=issue_key, $2=branch_name, $3=commits, $4=file_changes  
-# 輸出：PR標題|||PR內容 格式，使用 ||| 分隔標題和內容
+# 函式：generate_ai_pr_prompt
+# 功能說明：生成 AI PR 內容提示詞，用於請求 AI 工具根據 commit 訊息生成 PR 標題與內容。
+# 輸入參數：
+#   $1 <issue_key> 議題編號，如 issue-001、jira-456，用於 PR 內容參考
+#   $2 <branch_name> 分支名稱，用於 PR 內容參考
+#   注意：實際的 commits 與 file_changes 會透過臨時檔案（content 參數）傳遞給 AI 工具
+# 輸出結果：
+#   STDOUT 輸出多行提示詞文字（透過 cat <<EOF），包含格式指示與範例
+#   提示詞指示 AI 輸出格式：標題。詳細內容（標題需以句號結尾）
+# 例外/失敗：
+#   無例外，總是返回提示詞字串
+# 流程：
+#   1. 接收 issue_key 與 branch_name 參數
+#   2. 使用 cat <<EOF 輸出多行提示詞模板
+#   3. 提示詞包含格式要求、語言要求（繁體中文）、輸出範例
+# 副作用：無副作用，純函數
+# 參考：generate_pr_content_with_ai() 函數會調用此提示詞
 generate_ai_pr_prompt() {
     local issue_key="$1"
     local branch_name="$2"
     
-    # Prompt 只包含指令和格式說明，不包含實際的 commits 和 file_changes
+    # 注意：Prompt 只包含指令和格式說明，不包含實際的 commits 和 file_changes
     # 實際數據會透過 content 參數（臨時檔案）傳遞
     cat <<EOF
 根據以下 commit 訊息摘要生成 PR 內容。
@@ -100,44 +177,99 @@ EOF
 }
 
 # AI 工具優先順序配置
-# 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
-# 修改此陣列可以調整工具優先級或新增其他 AI 工具
-# codex 會有語系的問題取得的 commit 訊息變成亂碼造成失敗
-readonly AI_TOOLS=( "codex")
-# readonly AI_TOOLS=( "codex" "gemini" "claude")
+# 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個。
+#       腳本會依陣列順序逐一調用，直到成功或全部失敗。
+# 修改方式：調整陣列元素順序或新增其他 AI CLI 工具名稱（需系統已安裝）
+# 已知問題：codex 在某些環境可能產生亂碼或編碼問題
+# 範例：
+#   readonly AI_TOOLS=("gemini")                    # 僅使用 gemini
+#   readonly AI_TOOLS=("codex" "gemini" "claude")   # 依序嘗試三個工具
+readonly AI_TOOLS=("codex" "gemini" "claude")
 
 # ==============================================
 # 分支配置區域
 # ==============================================
-#
-# 主分支候選清單：依優先順序自動檢測
-# 可自行添加更多分支名稱，腳本會按順序檢測第一個存在的分支
-# 格式：("分支1" "分支2" "分支3" ...)
-readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+
+# 主分支候選清單配置
+# 說明：定義主分支的候選名稱，腳本會依陣列順序檢測第一個存在的遠端分支。
+#       此設定影響「建立功能分支」與「建立 PR」功能的基底分支選擇。
+# 格式：Bash 只讀陣列，元素為分支名稱字串（無 origin/ 前綴）
+# 檢測邏輯：透過 git show-ref --verify refs/remotes/origin/<branch> 驗證存在性
+# 修改範例：
+#   readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")           # 標準配置
+#   readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")     # 包含預發布分支
+#   readonly -a DEFAULT_MAIN_BRANCHES=("develop" "main")          # Git Flow 風格
+readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
+
+# 預設使用者名稱配置
+# 說明：用於生成分支名稱的使用者前綴（格式：username/type/issue-description）。
+#       建議設定為團隊成員的 Git 使用者名稱或縮寫。
+# 格式：小寫英文字母，無空白或特殊符號（可含數字、連字號）
+# 使用時機：「建立功能分支」功能會使用此值作為分支名稱前綴
+# 修改範例：
+#   readonly DEFAULT_USERNAME="john"
+#   readonly DEFAULT_USERNAME="team-a"
+readonly DEFAULT_USERNAME="jerry"
 
 # ==============================================
-# 工具函數區域
+# 訊息輸出函數區域
 # ==============================================
 
-# ============================================
-# 錯誤處理函數
-# 功能：顯示紅色錯誤訊息並終止腳本執行
-# 參數：$1 - 錯誤訊息內容
-# 返回：無（直接退出程式，exit code 1）
-# 使用：handle_error "發生嚴重錯誤"
-# ============================================
+# 函式：error_msg
+# 功能說明：輸出紅色錯誤訊息至 stderr，不終止程式執行。
+# 輸入參數：
+#   $1 <message> 錯誤訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出紅色 ANSI 彩色文字，格式：\033[0;31m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 紅色碼（\033[0;31m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：handle_error() 函數會調用此函數
+error_msg() {
+    printf "\033[0;31m%s\033[0m\n" "$1" >&2
+}
+
+# 函式：handle_error
+# 功能說明：輸出錯誤訊息並立即終止腳本執行，退出碼為 1。
+# 輸入參數：
+#   $1 <message> 錯誤訊息文字，會加上「錯誤: 」前綴
+# 輸出結果：
+#   STDERR 輸出紅色錯誤訊息，格式：「錯誤: <message>」
+# 例外/失敗：
+#   無返回，直接以 exit 1 終止程式
+# 流程：
+#   1. 呼叫 error_msg 輸出錯誤訊息
+#   2. 執行 exit 1 終止腳本
+# 副作用：
+#   - 輸出至 stderr
+#   - 終止程式執行，退出碼 1
+#   - 觸發 trap EXIT 清理函數（若已設定）
+# 參考：所有需要終止執行的錯誤情境都應使用此函數
 handle_error() {
-    printf "\033[0;31m錯誤: %s\033[0m\n" "$1" >&2
+    error_msg "錯誤: $1"
     exit 1
 }
 
-# ============================================
-# 成功訊息函數
-# 功能：顯示綠色成功訊息
-# 參數：$1 - 成功訊息內容
-# 返回：0 (總是成功)
-# 使用：success_msg "操作完成！"
-# ============================================
+# 函式：success_msg
+# 功能說明：輸出綠色成功訊息至 stderr。
+# 輸入參數：
+#   $1 <message> 成功訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出綠色 ANSI 彩色文字，格式：\033[0;32m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 綠色碼（\033[0;32m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：操作成功完成時使用此函數顯示結果
 success_msg() {
     printf "\033[0;32m%s\033[0m\n" "$1" >&2
 }
@@ -145,46 +277,139 @@ success_msg() {
 # ============================================
 # 警告訊息函數
 # 功能：顯示黃色警告訊息
-# 參數：$1 - 警告訊息內容
-# 返回：0 (總是成功)
-# 使用：warning_msg "注意：檔案已存在"
-# ============================================
+# 函式：warning_msg
+# 功能說明：輸出黃色警告訊息至 stderr。
+# 輸入參數：
+#   $1 <message> 警告訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出粗體黃色 ANSI 彩色文字，格式：\033[1;33m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 粗體黃色碼（\033[1;33m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於非致命錯誤或需要使用者注意的情境
 warning_msg() {
     printf "\033[1;33m%s\033[0m\n" "$1" >&2
 }
 
-# ============================================
-# 資訊訊息函數
-# 功能：顯示藍色資訊訊息
-# 參數：$1 - 資訊訊息內容
-# 返回：0 (總是成功)
-# 使用：info_msg "正在執行操作..."
-# ============================================
+# 函式：info_msg
+# 功能說明：輸出藍色資訊訊息至 stderr。
+# 輸入參數：
+#   $1 <message> 資訊訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出藍色 ANSI 彩色文字，格式：\033[0;34m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 藍色碼（\033[0;34m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於一般資訊提示、操作狀態顯示
 info_msg() {
     printf "\033[0;34m%s\033[0m\n" "$1" >&2
 }
 
-# ============================================
-# 調試訊息函數
-# 功能：顯示灰色調試訊息
-# 參數：$1 - 調試訊息內容
-# 返回：0 (總是成功)
-# 使用：debug_msg "🔍 調試: 變數值='$var'"
-# ============================================
+# 函式：debug_msg
+# 功能說明：輸出灰色調試訊息至 stderr，用於開發階段除錯。
+# 輸入參數：
+#   $1 <message> 調試訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出灰色 ANSI 彩色文字，格式：\033[0;90m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 灰色碼（\033[0;90m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於開發階段的變數值檢查、流程追蹤
 debug_msg() {
     printf "\033[0;90m%s\033[0m\n" "$1" >&2
 }
 
-# ============================================
-# AI 調試資訊顯示函數
-# 功能：統一顯示 AI 工具的輸入輸出調試資訊
-# 參數：
-#   $1 - 工具名稱（如 codex, gemini）
-#   $2 - prompt 內容
-#   $3 - content 內容
-#   $4 - 輸出內容（可選）
-# 返回：0 (總是成功)
-# ============================================
+# 函式：magenta_msg
+# 功能說明：輸出粗體洋紅色訊息至 stderr，用於特殊高亮或重要提示。
+# 輸入參數：
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出粗體洋紅色 ANSI 彩色文字，格式：\033[1;35m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 粗體洋紅色碼（\033[1;35m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於特殊狀態提示、關鍵資訊高亮
+magenta_msg() {
+    printf "\033[1;35m%s\033[0m\n" "$1" >&2
+}
+
+# 函式：purple_msg
+# 功能說明：輸出紫色訊息至 stderr，用於分支資訊等中性資訊。
+# 輸入參數：
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出紫色 ANSI 彩色文字，格式：\033[0;35m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 紫色碼（\033[0;35m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於顯示分支名稱、標籤等中性資訊
+purple_msg() {
+    printf "\033[0;35m%s\033[0m\n" "$1" >&2
+}
+
+# 函式：cyan_msg
+# 功能說明：輸出青色訊息至 stderr，用於連結、命令提示等輔助資訊。
+# 輸入參數：
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出青色 ANSI 彩色文字，格式：\033[0;36m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 青色碼（\033[0;36m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於顯示 URL 連結、命令提示、次要資訊
+cyan_msg() {
+    printf "\033[0;36m%s\033[0m\n" "$1" >&2
+}
+
+# 函式：show_ai_debug_info
+# 功能說明：統一格式顯示 AI 工具的調試資訊，包含工具名稱、輸入與輸出內容。
+# 輸入參數：
+#   $1 <tool_name> AI 工具名稱，如 codex、gemini、claude
+#   $2 <prompt> 提示詞內容（指令部分）
+#   $3 <content> 實際資料內容（如 diff、commits）
+#   $4 <output> 輸出內容（可選），AI 工具的回應結果
+# 輸出結果：
+#   STDERR 輸出彩色格式化的調試資訊，包含分隔線與標題
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 輸出分隔線與工具名稱標題（使用 debug_msg）
+#   2. 顯示 prompt 內容（截取前 200 字元）
+#   3. 顯示 content 內容（截取前 500 字元）
+#   4. 若提供 output 參數，顯示輸出內容（截取前 300 字元）
+#   5. 輸出結束分隔線
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於開發階段追蹤 AI 工具的輸入輸出
 show_ai_debug_info() {
     local tool_name="$1"
     local prompt="$2"
@@ -229,7 +454,7 @@ show_random_thanks() {
     local selected_message="${messages[$random_index]}"
     
     echo >&2
-    printf "\033[1;35m💝 %s\033[0m\n" "$selected_message" >&2
+    magenta_msg "💝 $selected_message"
 }
 
 # ============================================
@@ -244,6 +469,9 @@ show_random_thanks() {
 run_command() {
     local cmd="$1"
     local error_msg="$2"
+    
+    # 印出將要執行的指令
+    cyan_msg "→ 執行指令: $cmd"
     
     if ! eval "$cmd"; then
         if [ -n "$error_msg" ]; then
@@ -343,16 +571,16 @@ get_main_branch() {
     
     # 如果都沒找到，顯示錯誤訊息並退出程式
     if [ -z "$found_branch" ]; then
-        printf "\033[0;31m❌ 錯誤：找不到任何配置的主分支\033[0m\n" >&2
-        printf "\033[0;33m📋 配置的主分支候選清單: %s\033[0m\n" "${DEFAULT_MAIN_BRANCHES[*]}" >&2
-        printf "\033[0;36m💡 解決方法：\033[0m\n" >&2
+        handle_error "❌ 錯誤：找不到任何配置的主分支"
+        warning_msg "📋 配置的主分支候選清單: ${DEFAULT_MAIN_BRANCHES[*]}"
+        cyan_msg "💡 解決方法："
         printf "   1. 檢查 Git 倉庫是否已初始化\n" >&2
         printf "   2. 創建其中一個主分支：\n" >&2
         for branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
-            printf "      \033[0;32mgit checkout -b %s\033[0m\n" "$branch_candidate" >&2
+            success_msg "      git checkout -b $branch_candidate"
         done
         printf "   3. 或修改腳本頂部的 DEFAULT_MAIN_BRANCHES 陣列\n" >&2
-        printf "      \033[0;90m位置: %s (第 78 行)\033[0m\n" "${BASH_SOURCE[0]}" >&2
+        debug_msg "      位置: ${BASH_SOURCE[0]} (第 78 行)"
         exit 1
     fi
     
@@ -407,7 +635,33 @@ show_loading() {
     trap - INT TERM
 }
 
-# 執行帶有 loading 動畫的命令
+# 函式：run_command_with_loading
+# 功能說明：執行命令並顯示 loading 動畫，支援超時控制與中斷處理。
+# 輸入參數：
+#   $1 <command> 要執行的 shell 命令字串（可含管道、重導向）
+#   $2 <loading_message> loading 動畫顯示的訊息文字
+#   $3 <timeout> 超時秒數，整數，命令執行超過此時間會被終止
+# 輸出結果：
+#   STDOUT 輸出命令的執行結果（透過臨時檔案回傳）
+#   STDERR 顯示 loading 動畫（格式：旋轉符號 訊息 (已用秒數/超時秒數)）
+# 例外/失敗：
+#   1=命令超時；命令本身的退出碼（非零表示失敗）
+# 流程：
+#   1. 建立臨時檔案用於儲存命令輸出與退出碼
+#   2. 定義局部 cleanup_and_exit 函數處理中斷清理
+#   3. 設置 trap INT TERM 捕捉中斷信號
+#   4. 在背景執行命令，輸出重導向至臨時檔案
+#   5. 在背景執行 show_loading 顯示動畫
+#   6. 主循環檢查命令是否完成或超時
+#   7. 命令完成後停止動畫，讀取輸出與退出碼
+#   8. 清理臨時檔案與 trap 設定
+#   9. 返回命令的退出碼
+# 副作用：
+#   - 建立並自動清理臨時檔案（mktemp 建立於 /tmp）
+#   - 設置與還原 trap INT TERM
+#   - 背景進程（命令與動畫）會在結束時被清理
+#   - 輸出至 stdout 與 stderr
+# 參考：show_loading() 函數、cleanup_and_exit() 局部函數
 run_command_with_loading() {
     local command="$1"
     local loading_message="$2"
@@ -415,7 +669,19 @@ run_command_with_loading() {
     local temp_file
     temp_file=$(mktemp)
     
-    # 設置信號處理函數
+    # 局部函式：cleanup_and_exit
+    # 功能說明：清理 loading 動畫、終止命令進程、刪除臨時檔案並退出。
+    # 輸入參數：無
+    # 輸出結果：無
+    # 例外/失敗：以退出碼 130 終止腳本（SIGINT 標準退出碼）
+    # 流程：
+    #   1. 停止 loading 動畫背景進程（kill $loading_pid）
+    #   2. 終止命令背景進程（TERM 後等待 0.5 秒再 KILL）
+    #   3. 刪除臨時檔案（輸出與退出碼檔案）
+    #   4. 顯示游標、清理終端、輸出中斷訊息
+    #   5. 以 exit 130 終止腳本
+    # 副作用：終止腳本執行、清理所有相關資源
+    # 參考：由 trap INT TERM 調用
     cleanup_and_exit() {
         # 停止 loading 動畫
         if [ -n "$loading_pid" ]; then
@@ -436,7 +702,7 @@ run_command_with_loading() {
         
         # 顯示游標並清理終端
         printf "\r\033[K\033[?25h" >&2
-        warning_msg "操作已被用戶中斷" >&2
+        warning_msg "操作已被用戶中斷"
         exit 130  # SIGINT 的標準退出碼
     }
     
@@ -472,7 +738,7 @@ run_command_with_loading() {
         sleep 1
         kill -KILL "$cmd_pid" 2>/dev/null
         wait "$cmd_pid" 2>/dev/null
-        warning_msg "命令執行超時" >&2
+        warning_msg "命令執行超時"
         rm -f "$temp_file" "${temp_file}.exit_code"
         trap - INT TERM  # 清理信號處理
         return 124  # timeout 的標準退出碼
@@ -525,17 +791,17 @@ run_codex_command() {
     local content="$2"
     local timeout="${3:-60}"
     
-    info_msg "正在調用 codex..." >&2
+    info_msg "正在調用 codex..."
     
     # 檢查 codex 是否可用
     if ! command -v codex >/dev/null 2>&1; then
-        warning_msg "codex 工具未安裝" >&2
+        warning_msg "codex 工具未安裝"
         return 1
     fi
     
     # 檢查內容是否為空
     if [ -z "$content" ]; then
-        warning_msg "沒有內容可供分析" >&2
+        warning_msg "沒有內容可供分析"
         return 1
     fi
     
@@ -551,13 +817,13 @@ run_codex_command() {
         printf '%s\n\n%s' "$prompt" "$content"
     } > "$temp_prompt" || {
         rm -f "$temp_prompt"
-        warning_msg "寫入臨時檔案失敗" >&2
+        warning_msg "寫入臨時檔案失敗"
         return 1
     }
     
     # 驗證臨時檔案是否為有效的 UTF-8
     if ! file "$temp_prompt" | grep -q "UTF-8\|ASCII"; then
-        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")" >&2
+        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")"
     fi
     
     # 🔍 調試輸出：印出即將傳遞給 codex 的內容
@@ -592,7 +858,7 @@ run_codex_command() {
     # 確保 exit_code 是乾淨的數字（清理所有可能的隱藏字符）
     exit_code=$(echo "$exit_code" | tr -d '\r\n\t ' | tr -cd '0-9')
     if ! [[ "$exit_code" =~ ^[0-9]+$ ]] || [ -z "$exit_code" ]; then
-        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1" >&2
+        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1"
         exit_code=1
     fi
     
@@ -641,26 +907,26 @@ run_codex_command() {
                 debug_msg "🔍 調試: 過濾後的輸出 filtered_output='$filtered_output'"
                 
                 if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
-                    success_msg "codex 回應完成" >&2
+                    success_msg "codex 回應完成"
                     echo "$filtered_output"
                     return 0
                 fi
             fi
-            warning_msg "codex 沒有返回有效內容" >&2
+            warning_msg "codex 沒有返回有效內容"
             ;;
         124)
-            printf "\033[0;31m❌ codex 執行超時（${timeout}秒）\033[0m\n" >&2
-            printf "\033[1;33m💡 建議：檢查網路連接或稍後重試\033[0m\n" >&2
+            handle_error "❌ codex 執行超時（${timeout}秒）"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
             ;;
         *)
             # 檢查特定錯誤類型
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
-                printf "\033[0;31m❌ codex 認證錯誤\033[0m\n" >&2
-                printf "\033[1;33m💡 請執行：codex auth login\033[0m\n" >&2
+                handle_error "❌ codex 認證錯誤"
+                warning_msg "💡 請執行：codex auth login"
                 show_ai_debug_info "codex" "$prompt" "$content" "$output"
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
-                printf "\033[0;31m❌ codex 網路錯誤\033[0m\n" >&2
-                printf "\033[1;33m💡 請檢查網路連接\033[0m\n" >&2
+                handle_error "❌ codex 網路錯誤"
+                warning_msg "💡 請檢查網路連接"
                 show_ai_debug_info "codex" "$prompt" "$content" "$output"
             else
                 # 清理 exit_code 確保是純數字（最後一次保險）
@@ -693,17 +959,17 @@ run_stdin_ai_command() {
     local content="$3"
     local timeout="${4:-45}"
     
-    info_msg "正在調用 $tool_name..." >&2
+    info_msg "正在調用 $tool_name..."
     
     # 首先檢查工具是否可用
     if ! command -v "$tool_name" >/dev/null 2>&1; then
-        warning_msg "$tool_name 工具未安裝" >&2
+        warning_msg "$tool_name 工具未安裝"
         return 1
     fi
     
     # 檢查內容是否為空
     if [ -z "$content" ]; then
-        warning_msg "沒有內容可供 $tool_name 分析" >&2
+        warning_msg "沒有內容可供 $tool_name 分析"
         return 1
     fi
     
@@ -728,7 +994,7 @@ run_stdin_ai_command() {
     rm -f "$temp_content"
     
     if [ $exit_code -eq 124 ]; then
-        printf "\033[0;31m❌ %s 執行超時（%d秒）\033[0m\n" "$tool_name" "$timeout" >&2
+        handle_error "❌ $tool_name 執行超時（${timeout}秒）"
         
         # 顯示調試信息
         echo >&2
@@ -746,7 +1012,7 @@ run_stdin_ai_command() {
         echo >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        printf "\033[0;31m❌ %s 執行失敗\033[0m\n" "$tool_name" >&2
+        handle_error "❌ $tool_name 執行失敗"
         
         # 顯示調試信息
         echo >&2
@@ -765,7 +1031,7 @@ run_stdin_ai_command() {
     fi
     
     if [ -z "$output" ]; then
-        printf "\033[0;31m❌ %s 沒有返回內容\033[0m\n" "$tool_name" >&2
+        handle_error "❌ $tool_name 沒有返回內容"
         
         # 顯示調試信息
         echo >&2
@@ -778,7 +1044,7 @@ run_stdin_ai_command() {
         return 1
     fi
     
-    success_msg "$tool_name 回應完成" >&2
+    success_msg "$tool_name 回應完成"
     echo "$output"
     return 0
 }
@@ -988,73 +1254,79 @@ clean_branch_name() {
 
 # 使用 AI 生成分支名稱
 generate_branch_name_with_ai() {
-    local issue_key="$1"
-    local description_hint="$2"
+    local username="$1"
+    local branch_type="$2"
+    local issue_key="$3"
+    local description_hint="$4"
     
     local prompt
-    prompt=$(generate_ai_branch_prompt "$issue_key" "$description_hint")
+    prompt=$(generate_ai_branch_prompt "$username" "$branch_type" "$issue_key" "$description_hint")
     
     # 準備分支生成的上下文內容
     local content
     if [ -z "$description_hint" ]; then
-        content="Issue Key: ${issue_key}
+        content="Username: ${username}
+Branch Type: ${branch_type}
+Issue Key: ${issue_key}
 Task: Generate a meaningful branch name based on the issue key.
-Requirements: Use format feature/${issue_key}-description, lowercase only, max 40 chars."
+Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lowercase only, max 50 chars."
     else
-        content="Issue Key: ${issue_key}
+        content="Username: ${username}
+Branch Type: ${branch_type}
+Issue Key: ${issue_key}
 Description: ${description_hint}
 Task: Generate a branch name that captures the essence of this feature.
-Requirements: Use format feature/${issue_key}-description, lowercase only, max 40 chars."
+Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lowercase only, max 50 chars."
     fi
     
-    info_msg "🤖 使用 AI 生成分支名稱..." >&2
+    info_msg "🤖 使用 AI 生成分支名稱..."
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
-        printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
+        info_msg "🤖 嘗試使用 AI 工具: $tool"
         
         local result
         case "$tool" in
             "codex")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_codex_command "$prompt" "$content" 30); then
-                    debug_msg "🔍 調試: codex 原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: codex 原始輸出 result='$result'"
                     result=$(clean_branch_name "$result")
-                    debug_msg "🔍 調試: 清理後的 result='$result'" >&2
+                    debug_msg "🔍 調試: 清理後的 result='$result'"
                     if [ -n "$result" ]; then
-                        success_msg "✅ $tool 生成分支名稱成功: $result" >&2
+                        success_msg "✅ $tool 生成分支名稱成功: $result"
                         echo "$result"
                         return 0
                     else
-                        warning_msg "⚠️  clean_branch_name 清理後結果為空" >&2
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空"
                     fi
                 else
-                    warning_msg "⚠️  run_codex_command 執行失敗或返回空結果" >&2
+                    warning_msg "⚠️  run_codex_command 執行失敗或返回空結果"
                 fi
                 ;;
             "gemini"|"claude")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_stdin_ai_command "$tool" "$prompt" "$content" 30); then
-                    debug_msg "🔍 調試: $tool 原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: $tool 原始輸出 result='$result'"
                     result=$(clean_branch_name "$result")
-                    debug_msg "🔍 調試: 清理後的 result='$result'" >&2
+                    debug_msg "🔍 調試: 清理後的 result='$result'"
                     if [ -n "$result" ]; then
-                        success_msg "✅ $tool 生成分支名稱成功: $result" >&2
+                        success_msg "✅ $tool 生成分支名稱成功: $result"
                         echo "$result"
                         return 0
                     else
-                        warning_msg "⚠️  clean_branch_name 清理後結果為空" >&2
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空"
                     fi
                 else
-                    warning_msg "⚠️  run_stdin_ai_command 執行失敗或返回空結果" >&2
+                    warning_msg "⚠️  run_stdin_ai_command 執行失敗或返回空結果"
                 fi
                 ;;
         esac
         
-        warning_msg "⚠️  $tool 無法生成分支名稱，嘗試下一個工具..." >&2
+        warning_msg "⚠️  $tool 無法生成分支名稱，嘗試下一個工具..."
     done
     
-    warning_msg "所有 AI 工具都無法生成分支名稱" >&2
+    warning_msg "所有 AI 工具都無法生成分支名稱"
     return 1
 }
 
@@ -1073,7 +1345,7 @@ generate_pr_content_with_ai() {
     commits=$(git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
     
     if [ -z "$commits" ]; then
-        warning_msg "分支 '$branch_name' 沒有新的 commit" >&2
+        warning_msg "分支 '$branch_name' 沒有新的 commit"
         return 1
     fi
     
@@ -1086,18 +1358,18 @@ generate_pr_content_with_ai() {
     local commit_count
     commit_count=$(echo "$commits" | wc -l | xargs)
     
-    info_msg "📊 分析分支資訊：" >&2
-    info_msg "   - Issue Key: $issue_key" >&2
-    info_msg "   - 分支名稱: $branch_name" >&2
-    info_msg "   - Commit 數量: $commit_count" >&2
-    info_msg "   - 檔案變更: $(echo "$file_changes" | wc -l | xargs) 個檔案" >&2
+    info_msg "📊 分析分支資訊："
+    info_msg "   - Issue Key: $issue_key"
+    info_msg "   - 分支名稱: $branch_name"
+    info_msg "   - Commit 數量: $commit_count"
+    info_msg "   - 檔案變更: $(echo "$file_changes" | wc -l | xargs) 個檔案"
     echo >&2
     
     # 使用提示詞模板生成 prompt（只包含指令，不包含實際數據）
     local prompt
     prompt=$(generate_ai_pr_prompt "$issue_key" "$branch_name")
     
-    info_msg "🤖 使用 AI 根據 commit 訊息生成 PR 內容..." >&2
+    info_msg "🤖 使用 AI 根據 commit 訊息生成 PR 內容..."
     
     # 創建臨時檔案存儲 commit 訊息和檔案變更
     local temp_content
@@ -1115,7 +1387,7 @@ generate_pr_content_with_ai() {
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
-        printf "\033[1;34m🤖 嘗試使用 AI 工具: %s\033[0m\n" "$tool" >&2
+        info_msg "🤖 嘗試使用 AI 工具: $tool"
         
         local result
         local output
@@ -1126,7 +1398,7 @@ generate_pr_content_with_ai() {
             "codex")
                 # 檢查 codex 是否可用
                 if ! command -v codex >/dev/null 2>&1; then
-                    warning_msg "codex 工具未安裝" >&2
+                    warning_msg "codex 工具未安裝"
                     continue
                 fi
                 
@@ -1136,19 +1408,19 @@ generate_pr_content_with_ai() {
                 
                 # 調用統一的 run_codex_command 函數
                 if result=$(run_codex_command "$prompt" "$content_text" "$timeout"); then
-                    debug_msg "🔍 調試: codex PR 內容原始輸出 result='$result'" >&2
-                    success_msg "✅ $tool 生成 PR 內容成功" >&2
+                    debug_msg "🔍 調試: codex PR 內容原始輸出 result='$result'"
+                    success_msg "✅ $tool 生成 PR 內容成功"
                     rm -f "$temp_content"
                     echo "$result"
                     return 0
                 else
-                    warning_msg "$tool 無法生成 PR 內容" >&2
+                    warning_msg "$tool 無法生成 PR 內容"
                 fi
                 ;;
             "gemini"|"claude")
                 # 檢查工具是否可用
                 if ! command -v "$tool" >/dev/null 2>&1; then
-                    warning_msg "$tool 工具未安裝" >&2
+                    warning_msg "$tool 工具未安裝"
                     continue
                 fi
                 
@@ -1166,38 +1438,38 @@ generate_pr_content_with_ai() {
                 fi
                 
                 if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
-                    debug_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'" >&2
-                    success_msg "✅ $tool 生成 PR 內容成功" >&2
+                    debug_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'"
+                    success_msg "✅ $tool 生成 PR 內容成功"
                     rm -f "$temp_content"
                     echo "$output"
                     return 0
                 else
                     if [ $exit_code -eq 124 ]; then
-                        warning_msg "$tool 執行超時（${timeout}秒）" >&2
+                        warning_msg "$tool 執行超時（${timeout}秒）"
                         if [ -n "$output" ]; then
-                            printf "\033[0;90m💬 $tool 部分輸出：\033[0m\n" >&2
+                            debug_msg "💬 $tool 部分輸出："
                             echo "$output" | head -n 10 | sed 's/^/  /' >&2
                         fi
                     elif [ $exit_code -ne 0 ]; then
-                        warning_msg "$tool 執行失敗" >&2
+                        warning_msg "$tool 執行失敗"
                         if [ -n "$output" ]; then
-                            printf "\033[0;90m💬 $tool 輸出：\033[0m\n" >&2
+                            debug_msg "💬 $tool 輸出："
                             echo "$output" | sed 's/^/  /' >&2
                         fi
                     elif [ -z "$output" ]; then
-                        warning_msg "$tool 沒有產生輸出" >&2
+                        warning_msg "$tool 沒有產生輸出"
                     fi
                 fi
                 ;;
         esac
         
-        warning_msg "⚠️  $tool 無法生成 PR 內容，嘗試下一個工具..." >&2
+        warning_msg "⚠️  $tool 無法生成 PR 內容，嘗試下一個工具..."
     done
     
     # 清理臨時文件
     rm -f "$temp_content"
     
-    warning_msg "所有 AI 工具都無法生成 PR 內容" >&2
+    warning_msg "所有 AI 工具都無法生成 PR 內容"
     return 1
 }
 
@@ -1210,23 +1482,23 @@ show_operation_menu() {
     
     echo >&2
     echo "==================================================" >&2
-    info_msg "請選擇要執行的 GitHub Flow PR 操作:" >&2
-    printf "\033[0;36m📋 偵測到的主分支: %s\033[0m\n" "$main_branch" >&2
+    info_msg "請選擇要執行的 GitHub Flow PR 操作:"
+    cyan_msg "📋 偵測到的主分支: $main_branch"
     
     # 顯示當前分支資訊
     local current_branch
     current_branch=$(get_current_branch)
     if [ -n "$current_branch" ]; then
-        printf "\033[0;35m🌿 當前所在分支: %s\033[0m\n" "$current_branch" >&2
+        purple_msg "🌿 當前所在分支: $current_branch"
     else
-        printf "\033[0;31m⚠️  無法偵測當前分支\033[0m\n" >&2
+        handle_error "⚠️  無法偵測當前分支"
     fi
     echo "==================================================" >&2
-    printf "\033[1;33m1.\033[0m 🌿 建立功能分支\n" >&2
-    printf "\033[1;32m2.\033[0m 🔄 建立 Pull Request\n" >&2
-    printf "\033[1;31m3.\033[0m ❌ 撤銷當前 PR\n" >&2
-    printf "\033[1;35m4.\033[0m 👑 審查與合併 PR (專案擁有者)\n" >&2
-    printf "\033[1;36m5.\033[0m 🗑️ 刪除分支\n" >&2
+    warning_msg "1. 🌿 建立功能分支"
+    success_msg "2. 🔄 建立 Pull Request"
+    error_msg "3. ❌ 撤銷當前 PR"
+    magenta_msg "4. 👑 審查與合併 PR (專案擁有者)"
+    cyan_msg "5. 🗑️ 刪除分支"
     echo "==================================================" >&2
     printf "請輸入選項 [1-5]: " >&2
 }
@@ -1311,18 +1583,18 @@ main() {
     # 設置全局信號處理
     global_cleanup() {
         printf "\r\033[K\033[?25h" >&2  # 清理終端並顯示游標
-        warning_msg "程序被用戶中斷，正在清理..." >&2
+        warning_msg "程序被用戶中斷，正在清理..."
         exit 130  # SIGINT 的標準退出碼
     }
     
     # 設置中斷信號處理
     trap global_cleanup INT TERM
 
-    warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。" >&2
+    warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
     # 檢查命令行參數（移除自動模式支援）
     if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
-        warning_msg "⚠️  全自動模式已移除，請使用互動式選單操作" >&2
+        warning_msg "⚠️  全自動模式已移除，請使用互動式選單操作"
         echo >&2
     fi
     
@@ -1379,11 +1651,33 @@ main() {
     show_random_thanks
 }
 
-# 建立功能分支
+# 函式：execute_create_branch
+# 功能說明：執行功能分支建立流程，基於主分支建立標準化命名的功能分支。
+# 輸入參數：無（透過互動式輸入獲取）
+# 輸出結果：
+#   STDERR 輸出各階段進度訊息、輸入提示與結果
+# 例外/失敗：
+#   1=使用者取消、主分支切換失敗、分支建立失敗
+# 流程：
+#   1. 檢測當前分支與主分支，若不在主分支則詢問是否切換
+#   2. 更新主分支至最新狀態（git pull --ff-only）
+#   3. 互動輸入 issue key 並驗證格式（支援多種格式：ISSUE-123、JIRA_456 等）
+#   4. 輸入擁有者名字（預設使用 DEFAULT_USERNAME）
+#   5. 選擇分支類型（issue、bug、feature、enhancement、blocker）
+#   6. 基於 AI 或手動輸入生成分支名稱（格式：username/type/issue-key-description）
+#   7. 驗證分支名稱格式並建立分支
+#   8. 切換到新建立的分支
+#   9. 顯示完成訊息與後續建議
+# 副作用：
+#   - 可能切換當前分支
+#   - 更新主分支（git pull）
+#   - 建立新的本地分支
+#   - 輸出至 stderr
+# 參考：get_main_branch()、check_main_branch()、validate_and_standardize_issue_key()、generate_ai_branch_name()
 execute_create_branch() {
     info_msg "🌿 建立功能分支流程..."
     
-    # 確保在主分支 - 先獲取所有需要的變數
+    # 步驟 1: 檢測當前分支與主分支狀態
     local main_branch
     local current_branch
     main_branch=$(get_main_branch)
@@ -1396,14 +1690,14 @@ execute_create_branch() {
     # 顯示當前分支狀態
     echo >&2
     # 顯示目前分支狀態資訊，使用彩色輸出提升可讀性
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "📋 主分支: $main_branch"
     echo >&2
     
     # 檢查是否在主分支上，如果不在主分支則需要切換
     if ! check_main_branch; then
         # 提示使用者目前不在主分支，詢問是否要切換
-        printf "\033[1;33m當前不在主分支（當前: %s，主分支: %s）\033[0m\n" "$current_branch" "$main_branch" >&2
+        warning_msg "當前不在主分支（當前: $current_branch，主分支: $main_branch）"
         printf "是否切換到 %s 分支？[Y/n]: " "$main_branch" >&2
         read -r switch_confirm
         # 標準化使用者輸入（移除空白、轉換為小寫）
@@ -1436,7 +1730,7 @@ execute_create_branch() {
         user_input=$(echo "$user_input" | xargs)
         
         if [ -z "$user_input" ]; then
-            warning_msg "⚠️  Issue key 不能為空" >&2
+            warning_msg "⚠️  Issue key 不能為空"
             continue
         fi
         
@@ -1449,88 +1743,115 @@ execute_create_branch() {
         case $validation_result in
             0)
                 issue_key="$validated_key"
-                info_msg "✅ 使用標準格式 issue key: $issue_key" >&2
+                info_msg "✅ 使用標準格式 issue key: $issue_key"
                 ;;
             1)
-                warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)" >&2
-                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)"
+                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                 ;;
             2)
-                warning_msg "❌ Issue key 必須以英文字母開頭" >&2
-                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                warning_msg "❌ Issue key 必須以英文字母開頭"
+                warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                 ;;
             3)
                 issue_key="$validated_key"
-                warning_msg "⚠️  接受的 issue key: $issue_key" >&2
-                warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}" >&2
+                warning_msg "⚠️  接受的 issue key: $issue_key"
+                warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}"
                 ;;
         esac
     done
 
     # 確保 issue_key 為大寫格式（標準化）
     issue_key=$(echo "$issue_key" | tr '[:lower:]' '[:upper:]')
-    info_msg "📝 最終 issue key: $issue_key" >&2
+    info_msg "📝 最終 issue key: $issue_key"
     
-    # 獲取功能描述
+    # 輸入擁有者名字
     echo >&2
-    printf "請輸入功能簡短描述 (選填，例: add user authentication): " >&2
-    read -r description
-    description=$(echo "$description" | xargs)
+    printf "請輸入擁有者名字 [預設: %s]: " "$DEFAULT_USERNAME"
+    read -r username
+    username=$(echo "$username" | xargs | tr '[:upper:]' '[:lower:]')
     
-    # 如果描述為空，給予提示
-    if [ -z "$description" ]; then
-        info_msg "💡 未提供描述，AI 將根據 issue key 生成分支名稱" >&2
+    if [ -z "$username" ]; then
+        username="$DEFAULT_USERNAME"
     fi
     
-    # 生成分支名稱（可選擇使用 AI）
-    local branch_name
-    printf "\n是否使用 AI 自動生成分支名稱？[Y/n]: " >&2
-    read -r use_ai
-    use_ai=$(echo "$use_ai" | xargs | tr '[:upper:]' '[:lower:]')
+    info_msg "👤 使用者名稱: $username"
     
-    if [[ -z "$use_ai" ]] || [[ "$use_ai" =~ ^(y|yes|是|確定)$ ]]; then
-        if branch_name=$(generate_branch_name_with_ai "$issue_key" "$description"); then
-            info_msg "AI 生成的分支名稱: $branch_name"
-            printf "是否使用此分支名稱？[Y/n]: " >&2
-            read -r confirm_branch
-            confirm_branch=$(echo "$confirm_branch" | xargs | tr '[:upper:]' '[:lower:]')
-            
-            if [[ -n "$confirm_branch" ]] && [[ ! "$confirm_branch" =~ ^(y|yes|是|確定)$ ]]; then
-                branch_name=""
-            fi
-        else
-            warning_msg "AI 生成分支名稱失敗，將使用建議的名稱"
-        fi
-    fi
+    # 選擇分支類型
+    echo >&2
+    info_msg "📋 分支類型說明："
+    echo >&2
+    cyan_msg "1. issue - 問題 (Issue)"
+    printf "   定義：專案過程中遇到的任何障礙、延誤或突發狀況，不一定是系統性的錯誤。\n" >&2
+    printf "   範例：需求變動、人力不足、進度落後等。\n" >&2
+    printf "   解決方式：通常透過調整資源與計劃來解決。\n" >&2
+    echo >&2
+    cyan_msg "2. bug - 錯誤 (Bug)"
+    printf "   定義：軟體或系統中明確的錯誤，會影響最終產品的品質或功能。\n" >&2
+    printf "   範例：程式碼中的邏輯錯誤、流程錯誤，或 UI 介面問題。\n" >&2
+    printf "   解決方式：需要進行技術性修正。\n" >&2
+    echo >&2
+    cyan_msg "3. feature - 功能請求 (Feature Request)"
+    printf "   定義：使用者或團隊希望在現有產品中新增或修改的功能。\n" >&2
+    printf "   範例：使用者希望增加一個「匯出成 CSV」的功能。\n" >&2
+    printf "   解決方式：將其納入未來的開發計劃中。\n" >&2
+    echo >&2
+    cyan_msg "4. enhancement - 增強 (Enhancement)"
+    printf "   定義：對現有功能的改進，讓產品變得更好用或更有效率，但不是必須的修正。\n" >&2
+    printf "   範例：將按鈕的顏色從綠色改為藍色，或者優化某個流程的速度。\n" >&2
+    printf "   解決方式：通常被視為較不緊急的問題，可以安排在後續的開發階段處理。\n" >&2
+    echo >&2
+    cyan_msg "5. blocker - 阻礙 (Blocker)"
+    printf "   定義：一種會完全阻止專案繼續進行的關鍵問題。\n" >&2
+    printf "   範例：伺服器當機，導致所有開發工作都無法進行。\n" >&2
+    printf "   解決方式：需要立即解決，以解除阻礙。\n" >&2
+    echo >&2
     
-    # 如果 AI 生成失敗或用戶不採用，手動輸入
-    if [ -z "$branch_name" ]; then
-        if [ -n "$description" ]; then
-            # 自動生成建議的分支名稱
-            local suggested_branch
-            suggested_branch="feature/${issue_key}-$(echo "$description" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')"
-            printf "建議的分支名稱: %s\n" "$suggested_branch" >&2
-            printf "請輸入分支名稱 (英文。直接按 Enter 使用建議): " >&2
-            read -r branch_input
-            branch_input=$(echo "$branch_input" | xargs)
-            
-            if [ -z "$branch_input" ]; then
-                branch_name="$suggested_branch"
-            else
-                branch_name="$branch_input"
-            fi
-        else
-            printf "請輸入完整分支名稱 (格式: feature/%s-description): " "$issue_key" >&2
-            read -r branch_name
-            branch_name=$(echo "$branch_name" | xargs)
-        fi
-    fi
+    local branch_type=""
+    while [ -z "$branch_type" ]; do
+        printf "請選擇分支類型 [1-5]: " >&2
+        read -r type_choice
+        type_choice=$(echo "$type_choice" | xargs)
+        
+        case "$type_choice" in
+            1|issue)
+                branch_type="issue"
+                ;;
+            2|bug)
+                branch_type="bug"
+                ;;
+            3|feature)
+                branch_type="feature"
+                ;;
+            4|enhancement)
+                branch_type="enhancement"
+                ;;
+            5|blocker)
+                branch_type="blocker"
+                ;;
+            *)
+                warning_msg "❌ 無效的選擇，請輸入 1-5"
+                ;;
+        esac
+    done
+    
+    info_msg "🏷️  分支類型: $branch_type"
+    
+    # 自動生成分支名稱
+    echo >&2
+    local branch_name="${username}/${branch_type}/${issue_key}"
+    
+    # 標準化分支名稱：轉換為小寫
+    branch_name=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
+    
+    info_msg "📝 將建立分支: $branch_name"
     
     if [ -z "$branch_name" ]; then
         handle_error "分支名稱不能為空"
     fi
     
     # 檢查分支是否已存在
+    echo >&2
     if git show-ref --verify --quiet "refs/heads/$branch_name"; then
         warning_msg "分支 '$branch_name' 已存在"
         printf "是否切換到現有分支？[Y/n]: " >&2
@@ -1558,9 +1879,12 @@ execute_create_branch() {
     # 提示開發流程
     echo >&2
     info_msg "📝 接下來您可以："
-    printf "   1. 在 VS Code 中開始開發: \033[0;36mcode .\033[0m\n" >&2
-    printf "   2. 執行測試: \033[0;36mnpm test\033[0m 或 \033[0;36mphp artisan test\033[0m\n" >&2
-    printf "   3. 完成開發後運行: \033[0;36m./git-auto-pr.sh\033[0m (選擇選項 2)\n" >&2
+    printf "   1. 在 VS Code 中開始開發: " >&2
+    cyan_msg "code ."
+    printf "   2. 執行測試: " >&2
+    cyan_msg "npm test 或 php artisan test"
+    printf "   3. 完成開發後運行: " >&2
+    cyan_msg "./git-auto-pr.sh (選擇選項 2)"
     echo >&2
 }
 
@@ -1569,11 +1893,33 @@ execute_create_branch() {
 # 功能說明：此函式已移除。請使用 git-auto-push.sh 來提交並推送變更。
 # 注意事項：建立 PR 前必須先推送分支變更到遠端。
 
-# 建立 Pull Request
+# 函式：execute_create_pr
+# 功能說明：執行 Pull Request 建立流程，基於當前分支向主分支提交 PR。
+# 輸入參數：無（透過互動式輸入獲取）
+# 輸出結果：
+#   STDERR 輸出各階段進度訊息、輸入提示與結果
+#   在 GitHub 上建立新的 Pull Request
+# 例外/失敗：
+#   1=在主分支上無法建立 PR、分支未推送、PR 建立失敗
+# 流程：
+#   1. 檢測當前分支與主分支，驗證不在主分支上
+#   2. 檢查分支是否已推送到遠端（必須先推送才能建立 PR）
+#   3. 從分支名稱提取或手動輸入 issue key
+#   4. 收集分支的 commit 訊息與檔案變更
+#   5. 使用 AI 生成或手動輸入 PR 標題與內容
+#   6. 解析 AI 輸出（格式：標題。內容，以句號分隔）
+#   7. 確認 PR 資訊
+#   8. 使用 gh pr create 建立 PR
+#   9. 顯示 PR URL 與後續建議
+# 副作用：
+#   - 在 GitHub 上建立新的 Pull Request
+#   - 輸出至 stderr
+#   - 不修改本地 Git 狀態
+# 參考：get_current_branch()、get_main_branch()、generate_pr_content_with_ai()
 execute_create_pr() {
     info_msg "🔄 建立 Pull Request 流程..."
     
-    # 檢查當前分支
+    # 步驟 1: 檢測當前分支與主分支
     local current_branch
     current_branch=$(get_current_branch)
     
@@ -1582,8 +1928,8 @@ execute_create_pr() {
     
     # 顯示分支資訊
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m🎯 目標分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "🎯 目標分支: $main_branch"
     echo >&2
     
     if [ "$current_branch" = "$main_branch" ]; then
@@ -1634,7 +1980,7 @@ execute_create_pr() {
     echo >&2
     info_msg "當前分支名稱: $current_branch"
     if [ -n "$suggested_key" ]; then
-        printf "請輸入 issue key (預設: %s): " "$suggested_key" >&2
+        printf "請輸入 issue key [預設: %s]: " "$suggested_key" >&2
     else
         printf "請輸入 issue key (例: ISSUE-123, JIRA-456, PROJ-001, TASK-789): " >&2
     fi
@@ -1663,8 +2009,8 @@ execute_create_pr() {
                     info_msg "✅ 使用標準格式 issue key: $issue_key"
                     ;;
                 1)
-                    warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)" >&2
-                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                    warning_msg "❌ Issue key 格式不正確！只能包含英文字母、數字、連字號(-)和底線(_)"
+                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                     if [ -n "$suggested_key" ]; then
                         printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
                     else
@@ -1672,8 +2018,8 @@ execute_create_pr() {
                     fi
                     ;;
                 2)
-                    warning_msg "❌ Issue key 必須以英文字母開頭" >&2
-                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001" >&2
+                    warning_msg "❌ Issue key 必須以英文字母開頭"
+                    warning_msg "   範例：ISSUE-123, JIRA_456, PROJ-001"
                     if [ -n "$suggested_key" ]; then
                         printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
                     else
@@ -1682,13 +2028,13 @@ execute_create_pr() {
                     ;;
                 3)
                     issue_key="$validated_key"
-                    warning_msg "⚠️  接受的 issue key: $issue_key" >&2
-                    warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}" >&2
+                    warning_msg "⚠️  接受的 issue key: $issue_key"
+                    warning_msg "   建議格式：{字母}{字母數字}-{數字} 或 {字母}{字母數字}_{數字}"
                     ;;
             esac
         else
             # 強制用戶輸入，不接受空輸入
-            warning_msg "⚠️  Issue key 不能為空，請輸入有效的 issue key" >&2
+            warning_msg "⚠️  Issue key 不能為空，請輸入有效的 issue key"
             if [ -n "$suggested_key" ]; then
                 printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
             else
@@ -1726,8 +2072,8 @@ execute_create_pr() {
                 pr_title=$(echo "$pr_title" | xargs)
                 pr_body=$(echo "$pr_body" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
                 
-                debug_msg "🔍 調試: 分割後 pr_title='$pr_title'" >&2
-                debug_msg "🔍 調試: 分割後 pr_body（前 200 字符）='$(echo "$pr_body" | head -c 200)'" >&2
+                debug_msg "🔍 調試: 分割後 pr_title='$pr_title'"
+                debug_msg "🔍 調試: 分割後 pr_body（前 200 字符）='$(echo "$pr_body" | head -c 200)'"
             else
                 # 沒有句號，整個內容作為標題，body 使用預設格式
                 pr_title="$pr_content"
@@ -1735,7 +2081,7 @@ execute_create_pr() {
 
 Issue: $issue_key
 Summary: Implement feature as described in $issue_key"
-                warning_msg "⚠️  AI 輸出未包含句號，使用整段作為標題" >&2
+                warning_msg "⚠️  AI 輸出未包含句號，使用整段作為標題"
             fi
             
             # 應用格式化處理（只格式化 body，title 保持不變）
@@ -1743,7 +2089,7 @@ Summary: Implement feature as described in $issue_key"
             
             echo >&2
             info_msg "🎯 格式化後的 PR 標題:"
-            printf "\033[1;32m   %s\033[0m\n" "$pr_title" >&2
+            success_msg "   $pr_title"
             echo >&2
             info_msg "📝 格式化後的 PR 內容:"
             echo >&2
@@ -1777,7 +2123,7 @@ Summary: Implement feature as described in $issue_key"
     
     if [ -z "$pr_body" ]; then
         echo >&2
-        info_msg "💡 建議包含：功能變更、技術實作細節" >&2
+        info_msg "💡 建議包含：功能變更、技術實作細節"
         printf "請輸入 PR 描述 (可選，直接按 Enter 跳過): " >&2
         read -r pr_body_input
         if [ -n "$pr_body_input" ]; then
@@ -1799,11 +2145,11 @@ Summary: Implement feature as described in $issue_key"
     # 顯示最終格式化的 PR 預覽
     echo >&2
     echo "==================================================" >&2
-    info_msg "📋 最終 PR 預覽:" >&2
+    info_msg "📋 最終 PR 預覽:"
     echo "==================================================" >&2
-    printf "\033[1;36m標題:\033[0m %s\n" "$pr_title" >&2
+    cyan_msg "標題: $pr_title"
     echo >&2
-    printf "\033[1;36m內容:\033[0m\n" >&2
+    cyan_msg "內容:"
     printf "%s\n" "$pr_body" | sed 's/^/  /' >&2
     echo "==================================================" >&2
     echo >&2
@@ -1825,9 +2171,12 @@ Summary: Implement feature as described in $issue_key"
         
         echo >&2
         info_msg "🎯 接下來您可以："
-        printf "   1. 查看 PR: \033[0;36mgh pr view --web\033[0m\n" >&2
-        printf "   2. 檢查 CI 狀態: \033[0;36mgh pr checks\033[0m\n" >&2
-        printf "   3. 添加 reviewer: \033[0;36mgh pr edit --add-reviewer @team/leads\033[0m\n" >&2
+        printf "   1. 查看 PR: " >&2
+        cyan_msg "gh pr view --web"
+        printf "   2. 檢查 CI 狀態: " >&2
+        cyan_msg "gh pr checks"
+        printf "   3. 添加 reviewer: " >&2
+        cyan_msg "gh pr edit --add-reviewer @team/leads"
         echo >&2
     fi
 }
@@ -1845,8 +2194,8 @@ execute_cancel_pr() {
     
     # 顯示分支資訊
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m🎯 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "🎯 主分支: $main_branch"
     echo >&2
     
     if [ "$current_branch" = "$main_branch" ]; then
@@ -1888,8 +2237,8 @@ execute_cancel_pr() {
     
     echo >&2
     success_msg "找到 PR #${pr_number}: $pr_title"
-    printf "\033[0;36m🔗 PR 連結: %s\033[0m\n" "$pr_url" >&2
-    printf "\033[0;33m📊 PR 狀態: %s\033[0m\n" "$pr_state" >&2
+    cyan_msg "🔗 PR 連結: $pr_url"
+    warning_msg "📊 PR 狀態: $pr_state"
     
     if [ "$pr_state" = "MERGED" ]; then
         handle_merged_pr "$pr_number" "$pr_title" "$merged_at"
@@ -1921,7 +2270,7 @@ handle_merged_pr() {
     local merged_at="$3"
     
     warning_msg "PR #${pr_number} 已經合併"
-    printf "\033[0;33m⏰ 合併時間: %s\033[0m\n" "$merged_at" >&2
+    warning_msg "⏰ 合併時間: $merged_at"
     
     # 獲取 PR 合併後的 commit 資訊
     info_msg "🔍 分析 PR 合併後的 commit 變更..."
@@ -1930,7 +2279,7 @@ handle_merged_pr() {
     merge_commit=$(gh pr view "$pr_number" --json mergeCommit --jq '.mergeCommit.oid' 2>/dev/null)
     
     if [ -n "$merge_commit" ] && [ "$merge_commit" != "null" ]; then
-        printf "\033[0;36m📝 合併 commit: %s\033[0m\n" "$merge_commit" >&2
+        cyan_msg "📝 合併 commit: $merge_commit"
         
         # 獲取合併後到現在的 commit 數量
         local main_branch
@@ -1939,11 +2288,11 @@ handle_merged_pr() {
         local commits_after_pr
         commits_after_pr=$(git rev-list --count "$merge_commit..$main_branch" 2>/dev/null || echo "0")
         
-        printf "\033[0;33m📊 PR 合併後新增了 %s 個 commit\033[0m\n" "$commits_after_pr" >&2
+        warning_msg "📊 PR 合併後新增了 $commits_after_pr 個 commit"
         
         if [ "$commits_after_pr" -gt 0 ]; then
             echo >&2
-            printf "\033[1;33m⚠️  注意: PR 合併後又有 %s 個新的 commit\033[0m\n" "$commits_after_pr" >&2
+            warning_msg "⚠️  注意: PR 合併後又有 $commits_after_pr 個新的 commit"
             printf "執行 revert 會影響到這些新的變更\n" >&2
             echo >&2
             git log --oneline "$merge_commit..$main_branch" >&2
@@ -1952,7 +2301,7 @@ handle_merged_pr() {
     fi
     
     echo >&2
-    printf "\033[1;31m是否要 revert 此 PR 的變更？[y/N]: \033[0m" >&2
+    error_msg "是否要 revert 此 PR 的變更？[y/N]: "
     read -r revert_confirm
     revert_confirm=$(echo "$revert_confirm" | xargs | tr '[:upper:]' '[:lower:]')
     
@@ -1961,8 +2310,9 @@ handle_merged_pr() {
             info_msg "🔄 執行 revert 操作..."
             if git revert -m 1 "$merge_commit" --no-edit; then
                 success_msg "已成功 revert PR #${pr_number} 的變更"
-                printf "\033[0;33m⚠️  請檢查 revert 結果並視需要推送變更\033[0m\n" >&2
-                printf "推送命令: \033[0;36mgit push origin %s\033[0m\n" "$(get_main_branch)" >&2
+                warning_msg "⚠️  請檢查 revert 結果並視需要推送變更"
+                printf "推送命令: " >&2
+                cyan_msg "git push origin $(get_main_branch)"
             else
                 handle_error "revert 操作失敗，請手動處理衝突"
             fi
@@ -1984,11 +2334,11 @@ handle_open_pr() {
     
     echo >&2
     echo "==================================================" >&2
-    info_msg "請選擇對開放中 PR 的處理方式:" >&2
+    info_msg "請選擇對開放中 PR 的處理方式:"
     echo "==================================================" >&2
-    printf "\033[1;32m1.\033[0m 🚫 關閉 PR（保留分支）\n" >&2
-    printf "\033[1;33m2.\033[0m  添加評論後保持開放\n" >&2
-    printf "\033[1;36m3.\033[0m ❌ 取消操作\n" >&2
+    success_msg "1. 🚫 關閉 PR（保留分支）"
+    warning_msg "2. 💬 添加評論後保持開放"
+    cyan_msg "3. ❌ 取消操作"
     echo "==================================================" >&2
     printf "請輸入選項 [1-3]: " >&2
     
@@ -2036,7 +2386,7 @@ handle_close_pr_keep_branch() {
     if [ -n "$close_reason" ]; then
         if gh pr close "$pr_number" --comment "$close_reason"; then
             success_msg "✅ 已成功關閉 PR #${pr_number}"
-            printf "\033[0;33m💬 關閉原因: %s\033[0m\n" "$close_reason" >&2
+            warning_msg "💬 關閉原因: $close_reason"
             info_msg "📌 功能分支已保留，可稍後重新開啟 PR"
         else
             handle_error "無法關閉 PR #${pr_number}"
@@ -2073,7 +2423,7 @@ handle_add_comment() {
     
     if gh pr comment "$pr_number" --body "$comment_text"; then
         success_msg "✅ 已成功添加評論到 PR #${pr_number}"
-        printf "\033[0;33m💬 評論內容: %s\033[0m\n" "$comment_text" >&2
+        warning_msg "💬 評論內容: $comment_text"
         info_msg "📌 PR 保持開放狀態，可繼續開發或等待審查"
     else
         handle_error "無法為 PR #${pr_number} 添加評論"
@@ -2091,8 +2441,8 @@ execute_review_and_merge() {
     main_branch=$(get_main_branch)
     
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m🎯 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "🎯 主分支: $main_branch"
     echo >&2
     
     # 檢查是否有待審查的 PR
@@ -2190,10 +2540,10 @@ execute_review_and_merge() {
     # 審查選項
     echo >&2
     info_msg "🔍 請選擇審查動作:"
-    printf "\033[1;32m1.\033[0m ✅ 批准並合併\n" >&2
-    printf "\033[1;33m2.\033[0m 💬 添加評論但不合併\n" >&2
-    printf "\033[1;31m3.\033[0m ❌ 請求變更\n" >&2
-    printf "\033[1;36m4.\033[0m 📖 只查看，不進行審查\n" >&2
+    success_msg "1. ✅ 批准並合併"
+    warning_msg "2. 💬 添加評論但不合併"
+    error_msg "3. ❌ 請求變更"
+    cyan_msg "4. 📖 只查看，不進行審查"
     echo "==================================================" >&2
     printf "請選擇 [1-4]: " >&2
     read -r review_action
@@ -2373,8 +2723,8 @@ execute_delete_branch() {
     main_branch=$(get_main_branch)
     
     echo >&2
-    printf "\033[0;35m🌿 當前分支: %s\033[0m\n" "$current_branch" >&2
-    printf "\033[0;36m📋 主分支: %s\033[0m\n" "$main_branch" >&2
+    purple_msg "🌿 當前分支: $current_branch"
+    cyan_msg "📋 主分支: $main_branch"
     echo >&2
     
     # 列出所有本地分支（排除主分支）
@@ -2400,9 +2750,9 @@ execute_delete_branch() {
     local branch_num=1
     for branch in "${branch_array[@]}"; do
         if [ "$branch" = "$current_branch" ]; then
-            printf "\033[1;33m%d. %s\033[0m \033[0;31m(當前分支)\033[0m\n" "$branch_num" "$branch" >&2
+            warning_msg "$branch_num. $branch (當前分支)"
         else
-            printf "\033[1;32m%d.\033[0m %s\n" "$branch_num" "$branch" >&2
+            success_msg "$branch_num. $branch"
         fi
         ((branch_num++))
     done
@@ -2457,7 +2807,7 @@ execute_delete_branch() {
     
     # 最終確認刪除
     echo >&2
-    printf "\033[1;31m⚠️  確定要刪除分支 '%s'？[y/N]: \033[0m" "$target_branch" >&2
+    handle_error "⚠️  確定要刪除分支 '$target_branch'？[y/N]: "
     read -r delete_confirm
     delete_confirm=$(echo "$delete_confirm" | xargs | tr '[:upper:]' '[:lower:]')
     

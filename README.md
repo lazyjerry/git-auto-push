@@ -24,8 +24,8 @@
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1372 行，完整註解）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2263 行，企業級文件）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1655 行，完整註解與流程說明）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2872 行，企業級文件與流程註解）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤偵測      # 認證過期、網路錯誤自動識別
 │   ├── 友善錯誤提示      # 提供具體解決方案
@@ -163,18 +163,20 @@ git-auto-pr --auto
 
 #### git-auto-pr.sh 操作模式
 
-| 模式             | 功能描述                       | 使用情境           |
-| ---------------- | ------------------------------ | ------------------ |
-| 1. 建立功能分支  | 基於 main 建立 feature 分支    | 開始新功能開發     |
-| 2. 建立 PR       | 基於目前分支建立 Pull Request  | 提交程式碼審查     |
-| 3. 撤銷目前 PR   | 關閉開放 PR / Revert 已合併 PR | PR 錯誤修正        |
-| 4. 審查與合併 PR | 審查 → 批准/請求變更 → 合併    | 專案擁有者 PR 管理 |
-| 5. 刪除分支      | 安全刪除本地/遠端功能分支      | 分支清理與維護     |
+| 模式             | 功能描述                                   | 使用情境           |
+| ---------------- | ------------------------------------------ | ------------------ |
+| 1. 建立功能分支  | 輸入 issue key、擁有者、類型，自動生成分支 | 開始新功能開發     |
+| 2. 建立 PR       | 基於目前分支建立 Pull Request              | 提交程式碼審查     |
+| 3. 撤銷目前 PR   | 關閉開放 PR / Revert 已合併 PR             | PR 錯誤修正        |
+| 4. 審查與合併 PR | 審查 → 批准/請求變更 → 合併                | 專案擁有者 PR 管理 |
+| 5. 刪除分支      | 安全刪除本地/遠端功能分支                  | 分支清理與維護     |
 
 #### GitHub Flow 工作流程特色
 
 - **Issue 整合**: 支援 JIRA、GitHub Issue 等多種編號格式
-- **AI 智慧產生**: 分支名稱、commit message、PR 標題和內容均可 AI 輔助
+- **分支類型分類**: 提供 issue、bug、feature、enhancement、blocker 五種分支類型
+- **自動分支命名**: 基於 `{username}/{type}/{issue-key}` 格式自動生成標準分支名
+- **AI 智慧產生**: commit message、PR 標題和內容可由 AI 輔助生成
 - **PR 生命週期管理**: 建立 → 撤銷 → 審查 → 合併，完整涵蓋 PR 各階段操作
 - **智慧撤銷機制**: 自動偵測 PR 狀態，提供安全的關閉或 revert 選項
 - **完整驗證**: 檢查 Git 儲存庫、gh CLI 登入狀態、分支狀態
@@ -241,7 +243,7 @@ git-auto-pr --auto
 ```bash
 # 1. 開始新功能開發
 ./git-auto-pr.sh
-# 選擇選項 1，輸入 JIRA-123 和功能描述，AI 生成分支名稱
+# 選擇選項 1，輸入 issue key、擁有者名字、選擇分支類型，自動生成分支
 
 # 2. 開發完成後建立 PR
 ./git-auto-pr.sh
@@ -273,7 +275,8 @@ git-auto-pr --auto
 ```bash
 # 1. 建立功能分支
 ./git-auto-pr.sh  # 選擇選項 1
-# 輸入 JIRA-123，開發完成後...
+# 輸入 issue key（如 PROJ-123）、擁有者名字（預設 jerry）、選擇分支類型
+# 系統自動生成分支：jerry/feature/proj-123
 
 # 2. 建立 PR
 ./git-auto-pr.sh  # 選擇選項 2
@@ -289,7 +292,9 @@ git-auto-pr --auto
 ```bash
 # 開發者：基於 main 分支開始新功能
 git checkout main && git pull
-./git-auto-pr.sh  # 選擇選項 1，建立 feature/JIRA-123-new-feature
+./git-auto-pr.sh  # 選擇選項 1
+# 輸入：issue key: PROJ-123, 擁有者: tom, 類型: feature
+# 自動建立分支：tom/feature/proj-123
 
 # 開發者：功能完成，建立 PR 供審查
 ./git-auto-pr.sh  # 選擇選項 2（建立 PR）
@@ -297,6 +302,42 @@ git checkout main && git pull
 # 專案擁有者：審查並合併 PR
 ./git-auto-pr.sh  # 選擇選項 4，審查 → 批准 → 合併
 ```
+
+#### 分支建立流程說明 🆕
+
+```bash
+# 執行分支建立
+./git-auto-pr.sh  # 選擇選項 1
+
+# 步驟 1：輸入 Issue Key
+請輸入 issue key: PROJ-123
+✅ 使用標準格式 issue key: PROJ-123
+
+# 步驟 2：輸入擁有者名字（預設：jerry）
+請輸入擁有者名字 [預設: jerry]: tom
+👤 使用者名稱: tom
+
+# 步驟 3：選擇分支類型
+📋 分支類型說明：
+1. issue - 問題（專案障礙、延誤）
+2. bug - 錯誤（系統性錯誤）
+3. feature - 功能請求（新功能）
+4. enhancement - 增強（改進現有功能）
+5. blocker - 阻礙（關鍵問題）
+
+請選擇分支類型 [1-5]: 3
+🏷️  分支類型: feature
+
+# 自動生成分支
+📝 將建立分支: tom/feature/proj-123
+✅ 成功建立功能分支: tom/feature/proj-123
+```
+
+**分支命名規則**：
+
+- 格式：`{username}/{type}/{issue-key}`
+- 自動轉換為小寫
+- 範例：`jerry/bug/issue-456`、`mary/enhancement/jira-789`
 
 #### 專案擁有者 PR 管理
 
@@ -340,7 +381,7 @@ git checkout main && git pull
 **智慧內容產生**
 
 - commit 訊息：分析 git diff 自動產生符合 Conventional Commits 規範的訊息
-- 分支名稱：根據 issue 編號和功能描述產生 GitHub Flow 標準分支名
+- 分支名稱：基於 issue key、擁有者、分支類型自動生成標準格式（如 `username/type/issue-key`）
 - PR 內容：基於分支變更歷史產生專業的 PR 標題和描述
 - **即時驗證**：自動檢測分支名稱有效性並處理特殊字符
 
@@ -572,14 +613,15 @@ CMD ["git-auto-push", "--auto"]
 
 - **位置**：兩個腳本檔案的開頭部分
 - **git-auto-push.sh**：第 28-52 行 - AI 工具優先順序和提示詞配置
-- **git-auto-pr.sh**：第 25-78 行 - AI 提示詞模板、工具設定和分支設定
+- **git-auto-pr.sh**：第 25-125 行 - AI 提示詞模板、工具設定、分支設定和使用者設定
 - **修改原則**：所有設定都集中在檔案上方，便於維護和修改
 
 #### 分支設定系統（NEW! ✨）
 
 **git-auto-pr.sh** 新增智慧分支設定功能：
 
-- **主分支陣列設定**：`DEFAULT_MAIN_BRANCHES=("main" "master")
+- **主分支陣列設定**：`DEFAULT_MAIN_BRANCHES=("main" "master")`
+- **預設使用者設定**：`DEFAULT_USERNAME="jerry"` - 可自訂預設擁有者名字
 - **自動檢測機制**：按順序檢測第一個存在的分支
 - **錯誤處理**：找不到分支時提供詳細解決建議
 - **易於擴展**：可添加 `develop`、`dev` 等更多分支選項
@@ -618,10 +660,6 @@ CMD ["git-auto-push", "--auto"]
 
 ```bash
 # 修改位置：檔案開頭的 AI 提示詞配置區域
-generate_ai_branch_prompt() {
-    # 修改分支名稱生成邏輯
-}
-
 generate_ai_commit_prompt() {
     # 修改 commit 訊息生成邏輯
 }
@@ -630,6 +668,8 @@ generate_ai_pr_prompt() {
     # 修改 PR 內容生成邏輯
 }
 ```
+
+**注意**：分支名稱現已改為自動生成，不再使用 AI 產生。
 
 #### 2. AI 工具順序調整
 
@@ -651,7 +691,7 @@ readonly AI_TOOLS=(
 #### 4. 分支配置自定義 ✨
 
 ```bash
-# git-auto-pr.sh 分支配置修改（第 78 行）
+# git-auto-pr.sh 主分支配置修改（第 116 行）
 readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
 
 # 添加更多分支選項
@@ -659,11 +699,18 @@ readonly -a DEFAULT_MAIN_BRANCHES=("main" "master" "develop" "dev")
 
 # 只使用特定分支
 readonly -a DEFAULT_MAIN_BRANCHES=("main")
+
+# 預設使用者名稱配置（第 122 行）
+readonly DEFAULT_USERNAME="jerry"
+
+# 修改為您的名字或團隊慣例
+readonly DEFAULT_USERNAME="tom"
 ```
 
 **配置說明**：
 
 - **檢測順序**：腳本會按陣列順序檢測第一個存在的分支
+- **預設使用者**：分支建立時的預設擁有者名稱，可在執行時覆蓋
 - **錯誤處理**：找不到任何分支時會顯示詳細錯誤訊息和解決建議
 - **動態提示**：錯誤訊息會根據配置陣列動態生成修復指令
 
@@ -725,14 +772,36 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
-### ✨ 最新版本亮點 (v1.5.0)
+### ✨ 最新版本亮點 (v1.6.0)
 
-- **1372 行** git-auto-push.sh - 傳統 Git 工作流程自動化，含完整註解
-- **2263 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件
-- **6 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理
+- **1655 行** git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
+- **2872 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件與流程註解
+- **11 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
 - **Git 倉庫資訊查看** 🆕 - 一鍵瀏覽倉庫完整狀態
 - **智慧分支管理** - 安全刪除機制，主分支保護，多重確認
-- **專業文件標準** - 所有函數都有完整的企業級註解
+- **專業文件標準** ✨ - 所有主要流程函數都有完整的企業級註解
+- **流程清晰化** 🆕 - 每個工作流程都有詳細的步驟說明與參考資訊
+
+---
+
+### v1.6.0 - 流程註解完善與文件更新 (2025-10-24)
+
+**🔧 改進**
+
+- **流程函數註解完善**：為所有主要工作流程函數添加完整註解
+  - `execute_full_workflow()` - 完整 Git 流程（add → commit → push）
+  - `execute_local_commit()` - 本地提交流程（add → commit）
+  - `execute_add_only()` - 僅添加檔案流程
+  - `execute_create_branch()` - 功能分支建立流程
+  - `execute_create_pr()` - Pull Request 建立流程
+- **註解標準化**：統一函數註解格式，包含功能、參數、流程、副作用、參考
+- **步驟編號優化**：流程內步驟重新編號，更清晰反映實際執行順序
+- **文件更新**：README 更新最新行數統計與版本資訊
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：1655 行（+49 行流程註解）
+- `git-auto-pr.sh`：2872 行（+43 行流程註解）
 
 ---
 
@@ -782,7 +851,6 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - 安全設計：未合併分支需要額外確認，已合併分支可安全刪除
 - 遠端同步：可選擇同時刪除對應的遠端分支
 - 智慧偵測：自動識別分支狀態和合併情況
-
 - **程式碼品質提升**：
   - 統一函數註解格式（功能、參數、返回值、使用範例）
   - 完整的檔案標頭文件（版本、作者、使用指南、系統需求）

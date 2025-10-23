@@ -58,7 +58,13 @@
 generate_ai_branch_prompt() {
     local issue_key="$1"
     local description_hint="$2"
-    LC_ALL=zh_TW.UTF-8 printf '%s' "Generate branch name: feature/$issue_key-description. Issue: $issue_key, Description: $description_hint. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+    
+    # 如果描述為空，使用更通用的提示詞
+    if [ -z "$description_hint" ]; then
+        LC_ALL=zh_TW.UTF-8 printf '%s' "Generate a Git branch name for issue $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/issue-001-add-feature"
+    else
+        LC_ALL=zh_TW.UTF-8 printf '%s' "Generate branch name for: $description_hint. Issue: $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+    fi
 }
 
 # AI Commit 訊息生成提示詞模板  
@@ -80,9 +86,8 @@ generate_ai_pr_prompt() {
 # AI 工具優先順序配置
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 # 修改此陣列可以調整工具優先級或新增其他 AI 工具
-# readonly AI_TOOLS=( "codex" "gemini" "claude")
 # codex 會有語系的問題取得的 commit 訊息變成亂碼造成失敗
-readonly AI_TOOLS=( "gemini" "claude")
+readonly AI_TOOLS=( "codex" "gemini" "claude")
 
 # ==============================================
 # 分支配置區域
@@ -831,8 +836,17 @@ generate_branch_name_with_ai() {
     prompt=$(generate_ai_branch_prompt "$issue_key" "$description_hint")
     
     # 準備分支生成的上下文內容
-    # TODO 請確認這個內容 codex 是否會有問題
-    local content="Issue Key: ${issue_key}\nDescription: ${description_hint}"
+    local content
+    if [ -z "$description_hint" ]; then
+        content="Issue Key: ${issue_key}
+Task: Generate a meaningful branch name based on the issue key.
+Requirements: Use format feature/${issue_key}-description, lowercase only, max 40 chars."
+    else
+        content="Issue Key: ${issue_key}
+Description: ${description_hint}
+Task: Generate a branch name that captures the essence of this feature.
+Requirements: Use format feature/${issue_key}-description, lowercase only, max 40 chars."
+    fi
     
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
     
@@ -845,23 +859,35 @@ generate_branch_name_with_ai() {
             "codex")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_codex_command "$prompt" "$content" 30); then
+                    info_msg "🔍 調試: codex 原始輸出 result='$result'" >&2
                     result=$(clean_branch_name "$result")
+                    info_msg "🔍 調試: 清理後的 result='$result'" >&2
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
                         echo "$result"
                         return 0
+                    else
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空" >&2
                     fi
+                else
+                    warning_msg "⚠️  run_codex_command 執行失敗或返回空結果" >&2
                 fi
                 ;;
             "gemini"|"claude")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_stdin_ai_command "$tool" "$prompt" "$content" 30); then
+                    info_msg "🔍 調試: $tool 原始輸出 result='$result'" >&2
                     result=$(clean_branch_name "$result")
+                    info_msg "🔍 調試: 清理後的 result='$result'" >&2
                     if [ -n "$result" ]; then
                         success_msg "✅ $tool 生成分支名稱成功: $result" >&2
                         echo "$result"
                         return 0
+                    else
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空" >&2
                     fi
+                else
+                    warning_msg "⚠️  run_stdin_ai_command 執行失敗或返回空結果" >&2
                 fi
                 ;;
         esac
@@ -951,6 +977,7 @@ generate_pr_content_with_ai() {
                 
                 # 調用統一的 run_codex_command 函數
                 if result=$(run_codex_command "$prompt" "$content_text" "$timeout"); then
+                    info_msg "🔍 調試: codex PR 內容原始輸出 result='$result'" >&2
                     success_msg "✅ $tool 生成 PR 內容成功" >&2
                     rm -f "$temp_content"
                     echo "$result"
@@ -980,6 +1007,7 @@ generate_pr_content_with_ai() {
                 fi
                 
                 if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
+                    info_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'" >&2
                     success_msg "✅ $tool 生成 PR 內容成功" >&2
                     rm -f "$temp_content"
                     echo "$output"
@@ -1282,9 +1310,15 @@ execute_create_branch() {
     info_msg "📝 最終 issue key: $issue_key" >&2
     
     # 獲取功能描述
-    printf "請輸入功能簡短描述 (例: add user authentication): " >&2
+    echo >&2
+    printf "請輸入功能簡短描述 (選填，例: add user authentication): " >&2
     read -r description
     description=$(echo "$description" | xargs)
+    
+    # 如果描述為空，給予提示
+    if [ -z "$description" ]; then
+        info_msg "💡 未提供描述，AI 將根據 issue key 生成分支名稱" >&2
+    fi
     
     # 生成分支名稱（可選擇使用 AI）
     local branch_name

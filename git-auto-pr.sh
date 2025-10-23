@@ -1634,7 +1634,7 @@ execute_create_pr() {
     echo >&2
     info_msg "當前分支名稱: $current_branch"
     if [ -n "$suggested_key" ]; then
-        printf "請輸入 issue key (建議: %s): " "$suggested_key" >&2
+        printf "請輸入 issue key (預設: %s): " "$suggested_key" >&2
     else
         printf "請輸入 issue key (例: ISSUE-123, JIRA-456, PROJ-001, TASK-789): " >&2
     fi
@@ -2390,9 +2390,15 @@ execute_delete_branch() {
         return 1
     fi
     
+    # 將分支存入陣列
+    local branch_array=()
+    while IFS= read -r branch; do
+        branch_array+=("$branch")
+    done <<< "$branches"
+    
     # 顯示分支列表
     local branch_num=1
-    echo "$branches" | while read -r branch; do
+    for branch in "${branch_array[@]}"; do
         if [ "$branch" = "$current_branch" ]; then
             printf "\033[1;33m%d. %s\033[0m \033[0;31m(當前分支)\033[0m\n" "$branch_num" "$branch" >&2
         else
@@ -2402,32 +2408,31 @@ execute_delete_branch() {
     done
     
     echo >&2
-    printf "請輸入要刪除的分支名稱 (或按 Enter 取消): " >&2
-    read -r target_branch
-    target_branch=$(echo "$target_branch" | xargs)  # 去除前後空白
+    printf "請輸入要刪除的分支編號 [1-%d] (或按 Enter 取消): " "${#branch_array[@]}" >&2
+    read -r choice
     
-    # 如果用戶按 Enter 取消操作
-    if [ -z "$target_branch" ]; then
+    # 清理輸入：移除非數字字符
+    choice=$(echo "$choice" | LC_ALL=C tr -cd '0-9' | xargs)
+    
+    # 如果用戶按 Enter 或輸入為空
+    if [ -z "$choice" ]; then
         info_msg "已取消刪除分支操作"
         return 0
     fi
     
-    # 檢查輸入的分支是否存在
-    if ! git branch --list "$target_branch" | grep -q "$target_branch"; then
-        handle_error "分支 '$target_branch' 不存在"
+    # 驗證輸入範圍
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#branch_array[@]}" ]; then
+        warning_msg "⚠️  無效的選項，請輸入 1 到 ${#branch_array[@]} 之間的數字"
         return 1
     fi
     
-    # 檢查是否為主分支
-    for main_branch_candidate in "${DEFAULT_MAIN_BRANCHES[@]}"; do
-        if [ "$target_branch" = "$main_branch_candidate" ]; then
-            echo >&2
-            warning_msg "⚠️  禁止刪除主分支 '$target_branch'"
-            info_msg "💡 如需修改主分支設定，請編輯腳本中的 DEFAULT_MAIN_BRANCHES 變數"
-            info_msg "   當前設定: (${DEFAULT_MAIN_BRANCHES[*]})"
-            return 1
-        fi
-    done
+    # 獲取選中的分支名稱（陣列索引從 0 開始）
+    local target_branch="${branch_array[$((choice - 1))]}"
+    
+    info_msg "已選擇分支: $target_branch"
+    echo >&2
+    info_msg "已選擇分支: $target_branch"
+    echo >&2
     
     # 檢查是否為當前分支
     if [ "$target_branch" = "$current_branch" ]; then

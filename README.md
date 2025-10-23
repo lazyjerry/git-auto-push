@@ -241,7 +241,7 @@ git-auto-pr --auto
 ```bash
 # 1. 開始新功能開發
 ./git-auto-pr.sh
-# 選擇選項 1，輸入 JIRA-123 和功能描述，AI 生成分支名稱
+# 選擇選項 1，輸入 issue key、擁有者名字、選擇分支類型，自動生成分支
 
 # 2. 開發完成後建立 PR
 ./git-auto-pr.sh
@@ -273,7 +273,8 @@ git-auto-pr --auto
 ```bash
 # 1. 建立功能分支
 ./git-auto-pr.sh  # 選擇選項 1
-# 輸入 JIRA-123，開發完成後...
+# 輸入 issue key（如 PROJ-123）、擁有者名字（預設 jerry）、選擇分支類型
+# 系統自動生成分支：jerry/feature/proj-123
 
 # 2. 建立 PR
 ./git-auto-pr.sh  # 選擇選項 2
@@ -289,7 +290,9 @@ git-auto-pr --auto
 ```bash
 # 開發者：基於 main 分支開始新功能
 git checkout main && git pull
-./git-auto-pr.sh  # 選擇選項 1，建立 feature/JIRA-123-new-feature
+./git-auto-pr.sh  # 選擇選項 1
+# 輸入：issue key: PROJ-123, 擁有者: tom, 類型: feature
+# 自動建立分支：tom/feature/proj-123
 
 # 開發者：功能完成，建立 PR 供審查
 ./git-auto-pr.sh  # 選擇選項 2（建立 PR）
@@ -340,7 +343,7 @@ git checkout main && git pull
 **智慧內容產生**
 
 - commit 訊息：分析 git diff 自動產生符合 Conventional Commits 規範的訊息
-- 分支名稱：根據 issue 編號和功能描述產生 GitHub Flow 標準分支名
+- 分支名稱：基於 issue key、擁有者、分支類型自動生成標準格式（如 `username/type/issue-key`）
 - PR 內容：基於分支變更歷史產生專業的 PR 標題和描述
 - **即時驗證**：自動檢測分支名稱有效性並處理特殊字符
 

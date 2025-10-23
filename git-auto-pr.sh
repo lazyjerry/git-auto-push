@@ -53,17 +53,19 @@
 # ==============================================
 
 # AI 分支名稱生成提示詞模板
-# 參數：$1=issue_key, $2=description_hint
-# 輸出：符合 Git 規範的分支名稱 (feature/xxx-xxx 格式)
+# 參數：$1=username, $2=branch_type, $3=issue_key, $4=description_hint
+# 輸出：符合 Git 規範的分支名稱 (username/branch_type/issue_key-description 格式)
 generate_ai_branch_prompt() {
-    local issue_key="$1"
-    local description_hint="$2"
+    local username="$1"
+    local branch_type="$2"
+    local issue_key="$3"
+    local description_hint="$4"
     
     # 如果描述為空，使用更通用的提示詞
     if [ -z "$description_hint" ]; then
-        printf '%s' "Generate a Git branch name for issue $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/issue-001-add-feature"
+        printf '%s' "Generate a Git branch name. Format: $username/$branch_type/$issue_key-description. Use only lowercase, numbers, hyphens. Max 50 chars. Example: jerry/feature/issue-001-add-login"
     else
-        printf '%s' "Generate branch name for: $description_hint. Issue: $issue_key. Format: feature/$issue_key-description. Use only lowercase, numbers, hyphens. Max 40 chars. Example: feature/jira-456-add-auth"
+        printf '%s' "Generate branch name for: $description_hint. Username: $username, Type: $branch_type, Issue: $issue_key. Format: $username/$branch_type/$issue_key-description. Use only lowercase, numbers, hyphens. Max 50 chars. Example: jerry/feature/jira-456-add-auth"
     fi
 }
 
@@ -114,6 +116,11 @@ readonly AI_TOOLS=( "codex")
 # 可自行添加更多分支名稱，腳本會按順序檢測第一個存在的分支
 # 格式：("分支1" "分支2" "分支3" ...)
 readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+
+# 預設使用者名稱：用於分支名稱前綴
+# 可修改為您的名稱或團隊慣例
+# 格式：小寫英文字母，無特殊符號
+readonly DEFAULT_USERNAME="jerry"
 
 # ==============================================
 # 工具函數區域
@@ -988,23 +995,29 @@ clean_branch_name() {
 
 # 使用 AI 生成分支名稱
 generate_branch_name_with_ai() {
-    local issue_key="$1"
-    local description_hint="$2"
+    local username="$1"
+    local branch_type="$2"
+    local issue_key="$3"
+    local description_hint="$4"
     
     local prompt
-    prompt=$(generate_ai_branch_prompt "$issue_key" "$description_hint")
+    prompt=$(generate_ai_branch_prompt "$username" "$branch_type" "$issue_key" "$description_hint")
     
     # 準備分支生成的上下文內容
     local content
     if [ -z "$description_hint" ]; then
-        content="Issue Key: ${issue_key}
+        content="Username: ${username}
+Branch Type: ${branch_type}
+Issue Key: ${issue_key}
 Task: Generate a meaningful branch name based on the issue key.
-Requirements: Use format feature/${issue_key}-description, lowercase only, max 40 chars."
+Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lowercase only, max 50 chars."
     else
-        content="Issue Key: ${issue_key}
+        content="Username: ${username}
+Branch Type: ${branch_type}
+Issue Key: ${issue_key}
 Description: ${description_hint}
 Task: Generate a branch name that captures the essence of this feature.
-Requirements: Use format feature/${issue_key}-description, lowercase only, max 40 chars."
+Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lowercase only, max 50 chars."
     fi
     
     info_msg "🤖 使用 AI 生成分支名稱..." >&2
@@ -1471,66 +1484,93 @@ execute_create_branch() {
     issue_key=$(echo "$issue_key" | tr '[:lower:]' '[:upper:]')
     info_msg "📝 最終 issue key: $issue_key" >&2
     
-    # 獲取功能描述
+    # 輸入擁有者名字
     echo >&2
-    printf "請輸入功能簡短描述 (選填，例: add user authentication): " >&2
-    read -r description
-    description=$(echo "$description" | xargs)
+    printf "請輸入擁有者名字 [預設: %s]: " "$DEFAULT_USERNAME" >&2
+    read -r username
+    username=$(echo "$username" | xargs | tr '[:upper:]' '[:lower:]')
     
-    # 如果描述為空，給予提示
-    if [ -z "$description" ]; then
-        info_msg "💡 未提供描述，AI 將根據 issue key 生成分支名稱" >&2
+    if [ -z "$username" ]; then
+        username="$DEFAULT_USERNAME"
     fi
     
-    # 生成分支名稱（可選擇使用 AI）
-    local branch_name
-    printf "\n是否使用 AI 自動生成分支名稱？[Y/n]: " >&2
-    read -r use_ai
-    use_ai=$(echo "$use_ai" | xargs | tr '[:upper:]' '[:lower:]')
+    info_msg "👤 使用者名稱: $username" >&2
     
-    if [[ -z "$use_ai" ]] || [[ "$use_ai" =~ ^(y|yes|是|確定)$ ]]; then
-        if branch_name=$(generate_branch_name_with_ai "$issue_key" "$description"); then
-            info_msg "AI 生成的分支名稱: $branch_name"
-            printf "是否使用此分支名稱？[Y/n]: " >&2
-            read -r confirm_branch
-            confirm_branch=$(echo "$confirm_branch" | xargs | tr '[:upper:]' '[:lower:]')
-            
-            if [[ -n "$confirm_branch" ]] && [[ ! "$confirm_branch" =~ ^(y|yes|是|確定)$ ]]; then
-                branch_name=""
-            fi
-        else
-            warning_msg "AI 生成分支名稱失敗，將使用建議的名稱"
-        fi
-    fi
+    # 選擇分支類型
+    echo >&2
+    info_msg "📋 分支類型說明：" >&2
+    echo >&2
+    printf "\033[1;36m1. issue\033[0m - 問題 (Issue)\n" >&2
+    printf "   定義：專案過程中遇到的任何障礙、延誤或突發狀況，不一定是系統性的錯誤。\n" >&2
+    printf "   範例：需求變動、人力不足、進度落後等。\n" >&2
+    printf "   解決方式：通常透過調整資源與計劃來解決。\n" >&2
+    echo >&2
+    printf "\033[1;36m2. bug\033[0m - 錯誤 (Bug)\n" >&2
+    printf "   定義：軟體或系統中明確的錯誤，會影響最終產品的品質或功能。\n" >&2
+    printf "   範例：程式碼中的邏輯錯誤、流程錯誤，或 UI 介面問題。\n" >&2
+    printf "   解決方式：需要進行技術性修正。\n" >&2
+    echo >&2
+    printf "\033[1;36m3. feature\033[0m - 功能請求 (Feature Request)\n" >&2
+    printf "   定義：使用者或團隊希望在現有產品中新增或修改的功能。\n" >&2
+    printf "   範例：使用者希望增加一個「匯出成 CSV」的功能。\n" >&2
+    printf "   解決方式：將其納入未來的開發計劃中。\n" >&2
+    echo >&2
+    printf "\033[1;36m4. enhancement\033[0m - 增強 (Enhancement)\n" >&2
+    printf "   定義：對現有功能的改進，讓產品變得更好用或更有效率，但不是必須的修正。\n" >&2
+    printf "   範例：將按鈕的顏色從綠色改為藍色，或者優化某個流程的速度。\n" >&2
+    printf "   解決方式：通常被視為較不緊急的問題，可以安排在後續的開發階段處理。\n" >&2
+    echo >&2
+    printf "\033[1;36m5. blocker\033[0m - 阻礙 (Blocker)\n" >&2
+    printf "   定義：一種會完全阻止專案繼續進行的關鍵問題。\n" >&2
+    printf "   範例：伺服器當機，導致所有開發工作都無法進行。\n" >&2
+    printf "   解決方式：需要立即解決，以解除阻礙。\n" >&2
+    echo >&2
     
-    # 如果 AI 生成失敗或用戶不採用，手動輸入
-    if [ -z "$branch_name" ]; then
-        if [ -n "$description" ]; then
-            # 自動生成建議的分支名稱
-            local suggested_branch
-            suggested_branch="feature/${issue_key}-$(echo "$description" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')"
-            printf "建議的分支名稱: %s\n" "$suggested_branch" >&2
-            printf "請輸入分支名稱 (英文。直接按 Enter 使用建議): " >&2
-            read -r branch_input
-            branch_input=$(echo "$branch_input" | xargs)
-            
-            if [ -z "$branch_input" ]; then
-                branch_name="$suggested_branch"
-            else
-                branch_name="$branch_input"
-            fi
-        else
-            printf "請輸入完整分支名稱 (格式: feature/%s-description): " "$issue_key" >&2
-            read -r branch_name
-            branch_name=$(echo "$branch_name" | xargs)
-        fi
-    fi
+    local branch_type=""
+    while [ -z "$branch_type" ]; do
+        printf "請選擇分支類型 [1-5]: " >&2
+        read -r type_choice
+        type_choice=$(echo "$type_choice" | xargs)
+        
+        case "$type_choice" in
+            1|issue)
+                branch_type="issue"
+                ;;
+            2|bug)
+                branch_type="bug"
+                ;;
+            3|feature)
+                branch_type="feature"
+                ;;
+            4|enhancement)
+                branch_type="enhancement"
+                ;;
+            5|blocker)
+                branch_type="blocker"
+                ;;
+            *)
+                warning_msg "❌ 無效的選擇，請輸入 1-5" >&2
+                ;;
+        esac
+    done
+    
+    info_msg "🏷️  分支類型: $branch_type" >&2
+    
+    # 自動生成分支名稱
+    echo >&2
+    local branch_name="${username}/${branch_type}/${issue_key}"
+    
+    # 標準化分支名稱：轉換為小寫
+    branch_name=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
+    
+    info_msg "📝 將建立分支: $branch_name" >&2
     
     if [ -z "$branch_name" ]; then
         handle_error "分支名稱不能為空"
     fi
     
     # 檢查分支是否已存在
+    echo >&2
     if git show-ref --verify --quiet "refs/heads/$branch_name"; then
         warning_msg "分支 '$branch_name' 已存在"
         printf "是否切換到現有分支？[Y/n]: " >&2

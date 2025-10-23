@@ -5,39 +5,47 @@
 ### 📁 建立的檔案
 
 1. **test_helpers.py** (420+ 行)
+
    - `GitTestRepo` 類別：模擬 Git 倉庫環境
    - `MockAITool` 類別：模擬 AI 工具行為
    - 多個輔助函數：腳本執行、格式驗證等
 
 2. **test_git_auto_push.py** (580+ 行)
+
    - 7 個測試類別
    - 27 個測試案例
    - 覆蓋所有 6 種操作模式
 
 3. **test_git_auto_pr.py** (700+ 行)
+
    - 9 個測試類別
    - 36 個測試案例
    - 覆蓋 GitHub Flow 完整流程
 
 4. **test_integration.py** (650+ 行)
+
    - 5 個測試類別
    - 18 個測試案例
    - 真實場景模擬
 
 5. **run_all_tests.py** (250+ 行)
+
    - 彩色輸出測試執行器
    - 多種執行模式
    - 詳細的測試報告
 
 6. **verify_tests.py** (200+ 行)
+
    - 測試框架驗證工具
    - 自動統計測試案例
 
 7. **quick_start.sh** (100+ 行)
+
    - 互動式測試執行腳本
    - 環境檢查
 
 8. **README.md** (500+ 行)
+
    - 完整的測試文檔
    - 使用指南和範例
 
@@ -55,6 +63,7 @@
 ## 🎯 測試覆蓋範圍
 
 ### git-auto-push.sh (27 測試)
+
 ✅ 配置讀取和解析
 ✅ Git 狀態檢查（有/無變更、有/無 remote）
 ✅ AI 工具調用邏輯（優先順序、降級、手動輸入）
@@ -64,6 +73,7 @@
 ✅ 6 種工作流程模式
 
 ### git-auto-pr.sh (36 測試)
+
 ✅ 配置讀取（AI 工具、主分支、使用者名稱）
 ✅ 分支操作（建立、格式驗證、刪除安全）
 ✅ AI 生成（分支名稱、PR 標題、描述）
@@ -75,6 +85,7 @@
 ✅ GitHub Flow 完整流程
 
 ### 整合測試 (18 測試)
+
 ✅ 5 種完整工作流程場景
 ✅ 腳本協作（push → PR）
 ✅ 錯誤恢復
@@ -84,16 +95,19 @@
 ## 🚀 快速開始
 
 ### 方式 1：驗證測試框架
+
 ```bash
 python3 test/verify_tests.py
 ```
 
 ### 方式 2：互動式執行
+
 ```bash
 ./test/quick_start.sh
 ```
 
 ### 方式 3：直接執行
+
 ```bash
 # 執行所有測試
 python3 test/run_all_tests.py
@@ -113,12 +127,14 @@ python3 test/run_all_tests.py --quick
 ## 🎨 特色功能
 
 ### 1. 彩色輸出
+
 - ✅ 綠色：成功測試
 - ❌ 紅色：錯誤
 - ⚠️ 黃色：失敗
 - ⊘ 青色：跳過
 
 ### 2. 多種執行模式
+
 - 完整測試
 - 分類測試（push/pr/integration）
 - 快速測試
@@ -126,12 +142,14 @@ python3 test/run_all_tests.py --quick
 - Fail-fast 模式
 
 ### 3. 詳細報告
+
 - 測試數量統計
 - 成功率計算
 - 執行時間
 - 失敗詳情
 
 ### 4. 環境隔離
+
 - 每個測試使用臨時 Git 倉庫
 - 自動清理
 - 不影響實際專案
@@ -145,21 +163,25 @@ python3 test/run_all_tests.py --quick
 ## 🔧 技術亮點
 
 ### 1. GitTestRepo 類別
+
 - 完整的 Git 倉庫模擬
 - 支援所有基本 Git 操作
 - 自動環境建立和清理
 
 ### 2. MockAITool 類別
+
 - 模擬 AI 工具回應
 - 記錄調用歷史
 - 可配置行為
 
 ### 3. 輔助函數
+
 - 腳本執行與輸入模擬
 - 格式驗證
 - 輸出斷言
 
 ### 4. 測試組織
+
 - 清晰的測試分類
 - 獨立的測試案例
 - 完整的 setUp/tearDown
@@ -175,6 +197,7 @@ python3 test/run_all_tests.py --quick
 ## 🎯 下一步建議
 
 ### 可選的改進
+
 1. 增加代碼覆蓋率報告（coverage.py）
 2. 增加效能基準測試
 3. 增加 CI/CD 整合（GitHub Actions）
@@ -182,6 +205,7 @@ python3 test/run_all_tests.py --quick
 5. 模擬 GitHub API 回應（避免網路依賴）
 
 ### 維護建議
+
 1. 定期執行測試確保功能正常
 2. 新增功能時同步更新測試
 3. 保持測試的獨立性和可維護性

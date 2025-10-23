@@ -105,8 +105,8 @@ EOF
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個
 # 修改此陣列可以調整工具優先級或新增其他 AI 工具
 # codex 會有語系的問題取得的 commit 訊息變成亂碼造成失敗
-readonly AI_TOOLS=( "gemini")
-# readonly AI_TOOLS=( "codex" "gemini" "claude")
+# readonly AI_TOOLS=( "gemini")
+readonly AI_TOOLS=( "codex" "gemini" "claude")
 
 # ==============================================
 # 分支配置區域
@@ -490,7 +490,7 @@ run_command_with_loading() {
         
         # 顯示游標並清理終端
         printf "\r\033[K\033[?25h" >&2
-        warning_msg "操作已被用戶中斷" >&2
+        warning_msg "操作已被用戶中斷"
         exit 130  # SIGINT 的標準退出碼
     }
     
@@ -526,7 +526,7 @@ run_command_with_loading() {
         sleep 1
         kill -KILL "$cmd_pid" 2>/dev/null
         wait "$cmd_pid" 2>/dev/null
-        warning_msg "命令執行超時" >&2
+        warning_msg "命令執行超時"
         rm -f "$temp_file" "${temp_file}.exit_code"
         trap - INT TERM  # 清理信號處理
         return 124  # timeout 的標準退出碼
@@ -579,17 +579,17 @@ run_codex_command() {
     local content="$2"
     local timeout="${3:-60}"
     
-    info_msg "正在調用 codex..." >&2
+    info_msg "正在調用 codex..."
     
     # 檢查 codex 是否可用
     if ! command -v codex >/dev/null 2>&1; then
-        warning_msg "codex 工具未安裝" >&2
+        warning_msg "codex 工具未安裝"
         return 1
     fi
     
     # 檢查內容是否為空
     if [ -z "$content" ]; then
-        warning_msg "沒有內容可供分析" >&2
+        warning_msg "沒有內容可供分析"
         return 1
     fi
     
@@ -605,13 +605,13 @@ run_codex_command() {
         printf '%s\n\n%s' "$prompt" "$content"
     } > "$temp_prompt" || {
         rm -f "$temp_prompt"
-        warning_msg "寫入臨時檔案失敗" >&2
+        warning_msg "寫入臨時檔案失敗"
         return 1
     }
     
     # 驗證臨時檔案是否為有效的 UTF-8
     if ! file "$temp_prompt" | grep -q "UTF-8\|ASCII"; then
-        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")" >&2
+        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")"
     fi
     
     # 🔍 調試輸出：印出即將傳遞給 codex 的內容
@@ -646,7 +646,7 @@ run_codex_command() {
     # 確保 exit_code 是乾淨的數字（清理所有可能的隱藏字符）
     exit_code=$(echo "$exit_code" | tr -d '\r\n\t ' | tr -cd '0-9')
     if ! [[ "$exit_code" =~ ^[0-9]+$ ]] || [ -z "$exit_code" ]; then
-        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1" >&2
+        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1"
         exit_code=1
     fi
     
@@ -695,12 +695,12 @@ run_codex_command() {
                 debug_msg "🔍 調試: 過濾後的輸出 filtered_output='$filtered_output'"
                 
                 if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
-                    success_msg "codex 回應完成" >&2
+                    success_msg "codex 回應完成"
                     echo "$filtered_output"
                     return 0
                 fi
             fi
-            warning_msg "codex 沒有返回有效內容" >&2
+            warning_msg "codex 沒有返回有效內容"
             ;;
         124)
             handle_error "❌ codex 執行超時（${timeout}秒）"
@@ -747,17 +747,17 @@ run_stdin_ai_command() {
     local content="$3"
     local timeout="${4:-45}"
     
-    info_msg "正在調用 $tool_name..." >&2
+    info_msg "正在調用 $tool_name..."
     
     # 首先檢查工具是否可用
     if ! command -v "$tool_name" >/dev/null 2>&1; then
-        warning_msg "$tool_name 工具未安裝" >&2
+        warning_msg "$tool_name 工具未安裝"
         return 1
     fi
     
     # 檢查內容是否為空
     if [ -z "$content" ]; then
-        warning_msg "沒有內容可供 $tool_name 分析" >&2
+        warning_msg "沒有內容可供 $tool_name 分析"
         return 1
     fi
     
@@ -832,7 +832,7 @@ run_stdin_ai_command() {
         return 1
     fi
     
-    success_msg "$tool_name 回應完成" >&2
+    success_msg "$tool_name 回應完成"
     echo "$output"
     return 0
 }
@@ -1067,7 +1067,7 @@ Task: Generate a branch name that captures the essence of this feature.
 Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lowercase only, max 50 chars."
     fi
     
-    info_msg "🤖 使用 AI 生成分支名稱..." >&2
+    info_msg "🤖 使用 AI 生成分支名稱..."
     
     # 嘗試使用不同的 AI 工具
     for tool in "${AI_TOOLS[@]}"; do
@@ -1078,43 +1078,43 @@ Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lo
             "codex")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_codex_command "$prompt" "$content" 30); then
-                    debug_msg "🔍 調試: codex 原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: codex 原始輸出 result='$result'"
                     result=$(clean_branch_name "$result")
-                    debug_msg "🔍 調試: 清理後的 result='$result'" >&2
+                    debug_msg "🔍 調試: 清理後的 result='$result'"
                     if [ -n "$result" ]; then
-                        success_msg "✅ $tool 生成分支名稱成功: $result" >&2
+                        success_msg "✅ $tool 生成分支名稱成功: $result"
                         echo "$result"
                         return 0
                     else
-                        warning_msg "⚠️  clean_branch_name 清理後結果為空" >&2
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空"
                     fi
                 else
-                    warning_msg "⚠️  run_codex_command 執行失敗或返回空結果" >&2
+                    warning_msg "⚠️  run_codex_command 執行失敗或返回空結果"
                 fi
                 ;;
             "gemini"|"claude")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_stdin_ai_command "$tool" "$prompt" "$content" 30); then
-                    debug_msg "🔍 調試: $tool 原始輸出 result='$result'" >&2
+                    debug_msg "🔍 調試: $tool 原始輸出 result='$result'"
                     result=$(clean_branch_name "$result")
-                    debug_msg "🔍 調試: 清理後的 result='$result'" >&2
+                    debug_msg "🔍 調試: 清理後的 result='$result'"
                     if [ -n "$result" ]; then
-                        success_msg "✅ $tool 生成分支名稱成功: $result" >&2
+                        success_msg "✅ $tool 生成分支名稱成功: $result"
                         echo "$result"
                         return 0
                     else
-                        warning_msg "⚠️  clean_branch_name 清理後結果為空" >&2
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空"
                     fi
                 else
-                    warning_msg "⚠️  run_stdin_ai_command 執行失敗或返回空結果" >&2
+                    warning_msg "⚠️  run_stdin_ai_command 執行失敗或返回空結果"
                 fi
                 ;;
         esac
         
-        warning_msg "⚠️  $tool 無法生成分支名稱，嘗試下一個工具..." >&2
+        warning_msg "⚠️  $tool 無法生成分支名稱，嘗試下一個工具..."
     done
     
-    warning_msg "所有 AI 工具都無法生成分支名稱" >&2
+    warning_msg "所有 AI 工具都無法生成分支名稱"
     return 1
 }
 
@@ -1133,7 +1133,7 @@ generate_pr_content_with_ai() {
     commits=$(git log --pretty=format:"- %s" "$main_branch".."$branch_name" 2>/dev/null)
     
     if [ -z "$commits" ]; then
-        warning_msg "分支 '$branch_name' 沒有新的 commit" >&2
+        warning_msg "分支 '$branch_name' 沒有新的 commit"
         return 1
     fi
     
@@ -1146,18 +1146,18 @@ generate_pr_content_with_ai() {
     local commit_count
     commit_count=$(echo "$commits" | wc -l | xargs)
     
-    info_msg "📊 分析分支資訊：" >&2
-    info_msg "   - Issue Key: $issue_key" >&2
-    info_msg "   - 分支名稱: $branch_name" >&2
-    info_msg "   - Commit 數量: $commit_count" >&2
-    info_msg "   - 檔案變更: $(echo "$file_changes" | wc -l | xargs) 個檔案" >&2
+    info_msg "📊 分析分支資訊："
+    info_msg "   - Issue Key: $issue_key"
+    info_msg "   - 分支名稱: $branch_name"
+    info_msg "   - Commit 數量: $commit_count"
+    info_msg "   - 檔案變更: $(echo "$file_changes" | wc -l | xargs) 個檔案"
     echo >&2
     
     # 使用提示詞模板生成 prompt（只包含指令，不包含實際數據）
     local prompt
     prompt=$(generate_ai_pr_prompt "$issue_key" "$branch_name")
     
-    info_msg "🤖 使用 AI 根據 commit 訊息生成 PR 內容..." >&2
+    info_msg "🤖 使用 AI 根據 commit 訊息生成 PR 內容..."
     
     # 創建臨時檔案存儲 commit 訊息和檔案變更
     local temp_content
@@ -1186,7 +1186,7 @@ generate_pr_content_with_ai() {
             "codex")
                 # 檢查 codex 是否可用
                 if ! command -v codex >/dev/null 2>&1; then
-                    warning_msg "codex 工具未安裝" >&2
+                    warning_msg "codex 工具未安裝"
                     continue
                 fi
                 
@@ -1196,19 +1196,19 @@ generate_pr_content_with_ai() {
                 
                 # 調用統一的 run_codex_command 函數
                 if result=$(run_codex_command "$prompt" "$content_text" "$timeout"); then
-                    debug_msg "🔍 調試: codex PR 內容原始輸出 result='$result'" >&2
-                    success_msg "✅ $tool 生成 PR 內容成功" >&2
+                    debug_msg "🔍 調試: codex PR 內容原始輸出 result='$result'"
+                    success_msg "✅ $tool 生成 PR 內容成功"
                     rm -f "$temp_content"
                     echo "$result"
                     return 0
                 else
-                    warning_msg "$tool 無法生成 PR 內容" >&2
+                    warning_msg "$tool 無法生成 PR 內容"
                 fi
                 ;;
             "gemini"|"claude")
                 # 檢查工具是否可用
                 if ! command -v "$tool" >/dev/null 2>&1; then
-                    warning_msg "$tool 工具未安裝" >&2
+                    warning_msg "$tool 工具未安裝"
                     continue
                 fi
                 
@@ -1226,38 +1226,38 @@ generate_pr_content_with_ai() {
                 fi
                 
                 if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
-                    debug_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'" >&2
-                    success_msg "✅ $tool 生成 PR 內容成功" >&2
+                    debug_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'"
+                    success_msg "✅ $tool 生成 PR 內容成功"
                     rm -f "$temp_content"
                     echo "$output"
                     return 0
                 else
                     if [ $exit_code -eq 124 ]; then
-                        warning_msg "$tool 執行超時（${timeout}秒）" >&2
+                        warning_msg "$tool 執行超時（${timeout}秒）"
                         if [ -n "$output" ]; then
                             debug_msg "💬 $tool 部分輸出："
                             echo "$output" | head -n 10 | sed 's/^/  /' >&2
                         fi
                     elif [ $exit_code -ne 0 ]; then
-                        warning_msg "$tool 執行失敗" >&2
+                        warning_msg "$tool 執行失敗"
                         if [ -n "$output" ]; then
                             debug_msg "💬 $tool 輸出："
                             echo "$output" | sed 's/^/  /' >&2
                         fi
                     elif [ -z "$output" ]; then
-                        warning_msg "$tool 沒有產生輸出" >&2
+                        warning_msg "$tool 沒有產生輸出"
                     fi
                 fi
                 ;;
         esac
         
-        warning_msg "⚠️  $tool 無法生成 PR 內容，嘗試下一個工具..." >&2
+        warning_msg "⚠️  $tool 無法生成 PR 內容，嘗試下一個工具..."
     done
     
     # 清理臨時文件
     rm -f "$temp_content"
     
-    warning_msg "所有 AI 工具都無法生成 PR 內容" >&2
+    warning_msg "所有 AI 工具都無法生成 PR 內容"
     return 1
 }
 
@@ -1270,7 +1270,7 @@ show_operation_menu() {
     
     echo >&2
     echo "==================================================" >&2
-    info_msg "請選擇要執行的 GitHub Flow PR 操作:" >&2
+    info_msg "請選擇要執行的 GitHub Flow PR 操作:"
     cyan_msg "📋 偵測到的主分支: $main_branch"
     
     # 顯示當前分支資訊
@@ -1889,7 +1889,7 @@ Summary: Implement feature as described in $issue_key"
     # 顯示最終格式化的 PR 預覽
     echo >&2
     echo "==================================================" >&2
-    info_msg "📋 最終 PR 預覽:" >&2
+    info_msg "📋 最終 PR 預覽:"
     echo "==================================================" >&2
     cyan_msg "標題: $pr_title"
     echo >&2
@@ -2078,7 +2078,7 @@ handle_open_pr() {
     
     echo >&2
     echo "==================================================" >&2
-    info_msg "請選擇對開放中 PR 的處理方式:" >&2
+    info_msg "請選擇對開放中 PR 的處理方式:"
     echo "==================================================" >&2
     success_msg "1. 🚫 關閉 PR（保留分支）"
     warning_msg "2. 💬 添加評論後保持開放"

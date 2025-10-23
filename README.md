@@ -25,7 +25,7 @@
 
 ```
 ├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1655 行，完整註解與流程說明）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2872 行，企業級文件與流程註解）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2896 行，企業級文件與流程註解）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 智慧錯誤偵測      # 認證過期、網路錯誤自動識別
 │   ├── 友善錯誤提示      # 提供具體解決方案
@@ -691,7 +691,7 @@ readonly AI_TOOLS=(
 #### 4. 分支配置自定義 ✨
 
 ```bash
-# git-auto-pr.sh 主分支配置修改（第 116 行）
+# git-auto-pr.sh 主分支配置修改（第 200 行）
 readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
 
 # 添加更多分支選項
@@ -700,17 +700,29 @@ readonly -a DEFAULT_MAIN_BRANCHES=("main" "master" "develop" "dev")
 # 只使用特定分支
 readonly -a DEFAULT_MAIN_BRANCHES=("main")
 
-# 預設使用者名稱配置（第 122 行）
+# 預設使用者名稱配置（第 211 行）
 readonly DEFAULT_USERNAME="jerry"
 
 # 修改為您的名字或團隊慣例
 readonly DEFAULT_USERNAME="tom"
+
+# PR 合併後分支刪除策略配置（第 217 行）🆕
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
+
+# 自動刪除分支（適合短期功能分支）
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
+
+# 保留分支（適合需要追蹤的分支，預設值）
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 ```
 
 **配置說明**：
 
 - **檢測順序**：腳本會按陣列順序檢測第一個存在的分支
 - **預設使用者**：分支建立時的預設擁有者名稱，可在執行時覆蓋
+- **分支刪除策略** 🆕：控制 PR 合併後是否自動刪除功能分支
+  - `false`（預設）：合併後保留分支，適合需要追蹤歷史的專案
+  - `true`：合併後自動刪除分支，適合短期功能分支，保持倉庫整潔
 - **錯誤處理**：找不到任何分支時會顯示詳細錯誤訊息和解決建議
 - **動態提示**：錯誤訊息會根據配置陣列動態生成修復指令
 
@@ -772,7 +784,60 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
-### ✨ 最新版本亮點 (v1.6.0)
+### ✨ 最新版本亮點 (v1.7.0)
+
+- **1655 行** git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
+- **2896 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件與流程註解
+- **11 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
+- **Git 倉庫資訊查看** 🆕 - 一鍵瀏覽倉庫完整狀態
+- **智慧分支管理** - 安全刪除機制，主分支保護，多重確認
+- **專業文件標準** ✨ - 所有主要流程函數都有完整的企業級註解
+- **流程清晰化** 🆕 - 每個工作流程都有詳細的步驟說明與參考資訊
+- **可配置分支刪除策略** 🆕 - 合併後可選擇保留或刪除分支
+
+---
+
+### v1.7.0 - PR 合併分支刪除策略配置 (2025-10-24)
+
+**🆕 新功能**
+
+- **分支刪除策略配置** 🆕：新增 `AUTO_DELETE_BRANCH_AFTER_MERGE` 配置變數
+  - 預設值：`false`（保守策略，保留分支）
+  - 可配置：`true`（自動刪除）或 `false`（保留分支）
+  - 位置：`git-auto-pr.sh` 第 217 行
+  - 影響範圍：「審查與合併 PR」功能（選項 4）
+
+**🔧 改進**
+
+- **智慧合併流程**：根據配置自動選擇合併策略
+  - `AUTO_DELETE_BRANCH_AFTER_MERGE=true`：使用 `gh pr merge --squash --delete-branch`
+  - `AUTO_DELETE_BRANCH_AFTER_MERGE=false`：使用 `gh pr merge --squash`（保留分支）
+- **友善提示訊息**：合併後顯示分支保留狀態與後續操作建議
+- **配置說明完善**：詳細的註解說明配置用途、安全考量與修改範例
+
+**📊 行數統計更新**
+
+- `git-auto-pr.sh`：2872 行 → 2896 行（+24 行配置與邏輯）
+
+**🎯 使用場景**
+
+- **保留分支（預設）**：適合需要追蹤功能分支歷史的專案
+- **自動刪除**：適合短期功能分支，保持倉庫整潔
+
+**⚙️ 配置方式**
+
+```bash
+# 修改 git-auto-pr.sh 第 217 行
+# 保留分支（預設）
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
+
+# 自動刪除分支
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
+```
+
+---
+
+### v1.6.0 - 流程註解完善與文件更新 (2025-10-24)
 
 - **1655 行** git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
 - **2872 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件與流程註解

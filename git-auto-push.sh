@@ -1160,6 +1160,197 @@ get_operation_choice() {
     done
 }
 
+# 函式：show_help
+# 功能說明：顯示詳細的使用說明文檔，包含功能介紹、使用方式、配置說明等。
+# 輸入參數：無
+# 輸出結果：
+#   STDERR 輸出格式化的 help 文檔，包含 ANSI 彩色碼與 Unicode 圖示
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 讀取當前配置值（AI 工具、預設選項等）
+#   2. 使用 cat 與 heredoc 輸出格式化文檔
+#   3. 動態插入當前配置資訊
+# 副作用：輸出至 stderr
+# 參考：由 main 函數在收到 -h/--help 參數時調用
+show_help() {
+    # 讀取當前配置值
+    local ai_tools_list="${AI_TOOLS[*]}"
+    local default_option="$DEFAULT_OPTION"
+    local default_mode_name
+    case "$default_option" in
+        1) default_mode_name="完整流程 (add → commit → push)" ;;
+        2) default_mode_name="本地提交 (add → commit)" ;;
+        3) default_mode_name="僅添加檔案 (add)" ;;
+        4) default_mode_name="全自動模式 (add → AI commit → push)" ;;
+        5) default_mode_name="僅提交 (commit)" ;;
+        6) default_mode_name="顯示倉庫資訊" ;;
+        *) default_mode_name="未知" ;;
+    esac
+    
+    echo >&2
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    highlight_success_msg "  Git 自動推送工具（傳統工作流程）v2.0.0"
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo >&2
+    
+    purple_msg "📝 用途說明："
+    white_msg "  提供完整的 Git 傳統工作流程自動化，從檔案暫存（add）到遠端推送（push）。"
+    white_msg "  支援 AI 輔助生成 commit 訊息，提供互動式選單與全自動模式。"
+    white_msg "  適用於個人開發與小型團隊的日常 Git 操作自動化需求。"
+    echo >&2
+    
+    purple_msg "🚀 使用方式："
+    cyan_msg "  互動模式：    ./git-auto-push.sh"
+    cyan_msg "  全自動模式：  ./git-auto-push.sh --auto"
+    cyan_msg "                ./git-auto-push.sh -a"
+    cyan_msg "  顯示說明：    ./git-auto-push.sh -h"
+    cyan_msg "                ./git-auto-push.sh --help"
+    cyan_msg "  全域使用：    git-auto-push"
+    cyan_msg "                git-auto-push --auto"
+    echo >&2
+    
+    purple_msg "📋 六種操作模式："
+    echo >&2
+    
+    highlight_success_msg "  1️⃣  完整流程 (add → commit → push)"
+    white_msg "      • 自動添加所有變更到暫存區"
+    white_msg "      • 支援手動輸入或 AI 生成 commit 訊息"
+    white_msg "      • 提交到本地倉庫後推送至遠端"
+    white_msg "      • 適用場景：日常開發的標準流程"
+    echo >&2
+    
+    info_msg "  2️⃣  本地提交 (add → commit)"
+    white_msg "      • 自動添加所有變更到暫存區"
+    white_msg "      • 支援手動輸入或 AI 生成 commit 訊息"
+    white_msg "      • 僅提交到本地倉庫，不推送"
+    white_msg "      • 適用場景：離線開發、需多次本地提交後再推送"
+    echo >&2
+    
+    cyan_msg "  3️⃣  僅添加變更 (add)"
+    white_msg "      • 執行 git add -A 將所有變更暫存"
+    white_msg "      • 不執行 commit 或 push"
+    white_msg "      • 適用場景：暫存變更但尚未準備好提交"
+    echo >&2
+    
+    purple_msg "  4️⃣  全自動流程 (add → AI commit → push)"
+    white_msg "      • 完全無需手動輸入，AI 自動生成 commit 訊息"
+    white_msg "      • 自動完成 add → commit → push 全流程"
+    white_msg "      • 適用場景：CI/CD 整合、快速提交小型變更"
+    white_msg "      • 使用方式：./git-auto-push.sh --auto"
+    echo >&2
+    
+    warning_msg "  5️⃣  僅提交 (commit)"
+    white_msg "      • 針對已暫存的變更執行提交"
+    white_msg "      • 支援手動輸入或 AI 生成 commit 訊息"
+    white_msg "      • 不推送至遠端"
+    white_msg "      • 適用場景：分階段暫存與提交"
+    echo >&2
+    
+    info_msg "  6️⃣  顯示倉庫資訊"
+    white_msg "      • 顯示當前分支名稱"
+    white_msg "      • 顯示遠端倉庫 URL 與追蹤狀態"
+    white_msg "      • 顯示最近 5 次 commit 記錄"
+    white_msg "      • 顯示本地與遠端的同步狀態"
+    white_msg "      • 顯示工作區狀態（已修改/未追蹤檔案）"
+    white_msg "      • 適用場景：檢查倉庫狀態、診斷同步問題"
+    echo >&2
+    
+    purple_msg "🔧 相依工具："
+    highlight_success_msg "  必需："
+    white_msg "    • bash >= 4.0       腳本執行環境"
+    white_msg "    • git >= 2.0        版本控制操作"
+    echo >&2
+    
+    cyan_msg "  支援 AI 工具（可設定選項）："
+    white_msg "    • codex             OpenAI Codex CLI"
+    white_msg "    • gemini            Google Gemini CLI"
+    white_msg "    • claude            Anthropic Claude CLI"
+    echo >&2
+    
+    info_msg "  安裝方式："
+    white_msg "    # Git 通常已預裝，若無請使用套件管理器安裝"
+    cyan_msg "    brew install git                   # macOS"
+    echo >&2
+    white_msg "    # AI 工具為可選，請參考各自的安裝文檔"
+    white_msg "    # 未安裝 AI 工具時會降級至手動輸入 commit 訊息"
+    echo >&2
+    
+    purple_msg "⚙️  目前配置："
+    cyan_msg "  預設操作模式："
+    white_msg "    選項編號：${default_option}"
+    white_msg "    模式名稱：${default_mode_name}"
+    white_msg "    修改方式：腳本中 DEFAULT_OPTION 變數（約 674 行）"
+    white_msg "    說明：互動模式下直接按 Enter 會執行此模式"
+    echo >&2
+    
+    cyan_msg "  AI 工具順序："
+    white_msg "    當前設定：${ai_tools_list}"
+    white_msg "    修改方式：腳本頂部 AI_TOOLS 陣列（約 28-32 行）"
+    white_msg "    執行邏輯：依序嘗試，失敗時自動切換下一個"
+    white_msg "    超時設定：基準 45 秒，大型 diff（>500行）延長至 90 秒"
+    echo >&2
+    
+    cyan_msg "  AI 提示詞模板："
+    white_msg "    位置：腳本頂部 AI_COMMIT_PROMPT 常數（約 52 行）"
+    white_msg "    用途：定義 AI 生成 commit 訊息的風格與格式"
+    white_msg "    修改：可自訂提示詞以符合團隊 commit 規範"
+    white_msg "    範例輸出：新增用戶登入功能、修正檔案上傳錯誤"
+    echo >&2
+    
+    purple_msg "🔐 安全機制："
+    white_msg "  • 變更檢查：執行前檢查是否有待提交的變更"
+    white_msg "  • 中斷處理：Ctrl+C 安全中斷並清理資源"
+    white_msg "  • 超時控制：AI 工具調用有超時機制（45-90 秒）"
+    white_msg "  • 確認機制：提交前顯示 commit 訊息供確認"
+    white_msg "  • 權限控制：不需要 root 權限，僅操作當前倉庫"
+    echo >&2
+    
+    purple_msg "📤 退出碼："
+    highlight_success_msg "  0     成功完成操作"
+    error_msg "  1     一般錯誤（參數錯誤、Git 操作失敗、使用者取消）"
+    warning_msg "  130   使用者中斷（Ctrl+C）"
+    echo >&2
+    
+    purple_msg "💡 使用技巧："
+    white_msg "  • 離線模式：模式 2、3、5 不需要網路連線"
+    white_msg "  • AI 失敗降級：所有 AI 工具失敗時自動切換手動輸入"
+    white_msg "  • 空白輸入觸發 AI：在 commit 訊息提示時直接按 Enter 會調用 AI"
+    white_msg "  • 全自動模式：使用 --auto 參數跳過所有互動提示"
+    white_msg "  • 倉庫診斷：使用模式 6 快速檢查同步狀態與 commit 歷史"
+    echo >&2
+    
+    purple_msg "📚 參考文檔："
+    cyan_msg "  • Git 使用說明：       docs/git-usage.md"
+    cyan_msg "  • Git 倉庫資訊功能：   docs/git-info-feature.md"
+    cyan_msg "  • 專案 README：        README.md"
+    cyan_msg "  • Conventional Commits：https://www.conventionalcommits.org/"
+    echo >&2
+    
+    purple_msg "💡 使用範例："
+    white_msg "  # 互動式執行（推薦）"
+    cyan_msg "  ./git-auto-push.sh"
+    echo >&2
+    white_msg "  # 全自動模式（CI/CD 整合）"
+    cyan_msg "  ./git-auto-push.sh --auto"
+    echo >&2
+    white_msg "  # 顯示幫助"
+    cyan_msg "  ./git-auto-push.sh --help"
+    echo >&2
+    white_msg "  # 安裝為全域命令"
+    cyan_msg "  sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push"
+    cyan_msg "  git-auto-push"
+    echo >&2
+    
+    purple_msg "📧 作者：Lazy Jerry"
+    purple_msg "🔗 倉庫：https://github.com/lazyjerry/git-auto-push"
+    purple_msg "📜 授權：MIT License"
+    echo >&2
+    
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo >&2
+}
+
 # ============================================
 # 主函數 - Git 傳統工作流程自動化執行引擎
 # 功能：統一入口，處理命令行參數、環境檢查、信號處理和工作流程調度
@@ -1199,9 +1390,15 @@ main() {
     # 設置中斷信號處理
     trap global_cleanup INT TERM
 
+    # 檢查命令行參數 - help
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+        show_help
+        exit 0
+    fi
+
     warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
-    # 檢查命令行參數
+    # 檢查命令行參數 - auto mode
     local auto_mode=false
     if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
         auto_mode=true

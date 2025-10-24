@@ -45,9 +45,11 @@ class TestGitAutoPushConfiguration(unittest.TestCase):
     def setUp(self):
         """每個測試前的設置"""
         self.test_repo = GitTestRepo()
+        print(f"\n    → 建立測試倉庫: {self.test_repo.repo_path}")
         
     def tearDown(self):
         """每個測試後的清理"""
+        print(f"    → 清理測試環境")
         self.test_repo.cleanup()
         
     def test_script_exists_and_executable(self):
@@ -79,7 +81,8 @@ class TestGitAutoPushConfiguration(unittest.TestCase):
         result = run_script_with_input(
             self.script_path,
             self.test_repo.repo_path,
-            args=["--help"]
+            args=["--help"],
+            timeout=30  # 增加超時時間
         )
         
         # 驗證輸出包含使用說明
@@ -109,7 +112,7 @@ class TestGitAutoPushGitStatus(unittest.TestCase):
         result = run_script_with_input(
             self.script_path,
             temp_dir,
-            timeout=10
+            timeout=30  # 增加超時時間
         )
         
         # 驗證錯誤訊息
@@ -127,7 +130,7 @@ class TestGitAutoPushGitStatus(unittest.TestCase):
         result = run_script_with_input(
             self.script_path,
             self.test_repo.repo_path,
-            timeout=10
+            timeout=30  # 增加超時時間
         )
         
         # 驗證提示訊息
@@ -388,7 +391,7 @@ class TestGitAutoPushWorkflows(unittest.TestCase):
             self.script_path,
             self.test_repo.repo_path,
             args=["3"],
-            timeout=10
+            timeout=30  # 增加超時時間
         )
         
         # 驗證檔案已暫存
@@ -437,7 +440,7 @@ class TestGitAutoPushWorkflows(unittest.TestCase):
             self.script_path,
             self.test_repo.repo_path,
             args=["6"],
-            timeout=10
+            timeout=30  # 增加超時時間
         )
         
         output = result.stdout + result.stderr

@@ -48,11 +48,17 @@ class GitTestRepo:
             subprocess.CompletedProcess 對象
         """
         cmd = ["git"] + list(args)
+        env = os.environ.copy()
+        env['LC_ALL'] = 'en_US.UTF-8'
+        env['LANG'] = 'en_US.UTF-8'
+        
         return subprocess.run(
             cmd,
             cwd=self.repo_path,
             capture_output=True,
-            text=True
+            text=True,
+            env=env,
+            errors='replace'  # 處理無法解碼的字元
         )
         
     def create_file(self, filename: str, content: str = "test content"):
@@ -278,6 +284,10 @@ def run_script_with_input(
     process_env = os.environ.copy()
     if env:
         process_env.update(env)
+    
+    # 設置語言環境為 UTF-8
+    process_env['LC_ALL'] = 'en_US.UTF-8'
+    process_env['LANG'] = 'en_US.UTF-8'
         
     return subprocess.run(
         cmd,
@@ -286,7 +296,8 @@ def run_script_with_input(
         capture_output=True,
         text=True,
         timeout=timeout,
-        env=process_env
+        env=process_env,
+        errors='replace'  # 處理無法解碼的字元
     )
 
 

@@ -18,7 +18,6 @@
 - AI 驅動的智慧內容產生（commit 訊息、分支名稱、PR 內容）
 - 企業級錯誤處理與智慧修復建議
 - 多 AI 工具整合與自動容錯機制
-- 完整測試套件（81 個測試案例，通過率 88.9%，涵蓋所有功能場景）
 - 專業級程式碼文件（為所有主要函數加入企業級註解標準）
 - 中斷復原和信號處理機制
 
@@ -56,20 +55,6 @@
 │   ├── pr-cancel-feature.md     # PR 撤銷功能說明
 │   ├── git-info-feature.md      # Git 倉庫資訊顯示功能說明
 │   └── git-usage.md             # Git 使用說明
-├── test/                # 測試套件目錄（81 個測試案例，通過率 88.9%）
-│   ├── test_helpers.py          # 測試輔助工具類（420+ 行）
-│   ├── test_git_auto_push.py    # git-auto-push.sh 測試（27 個測試）
-│   ├── test_git_auto_pr.py      # git-auto-pr.sh 測試（36 個測試）
-│   ├── test_integration.py      # 整合測試（18 個測試）
-│   ├── run_all_tests.py         # 彩色測試執行器
-│   ├── quick_test.py            # 快速測試工具
-│   ├── verify_tests.py          # 測試框架驗證工具
-│   ├── quick_start.sh           # 互動式測試執行腳本
-│   ├── README.md                # 測試套件完整說明
-│   ├── 測試執行指南.md           # 詳細執行步驟
-│   ├── 測試檢查清單.md           # 測試覆蓋範圍清單
-│   ├── 測試改進總結.md           # 測試改進記錄
-│   └── SUMMARY.md               # 建立完成總結
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
@@ -380,129 +365,6 @@ git checkout main && git pull
 # 4. 智慧處理已合併/未合併分支
 # 5. 可選擇同時清理對應的遠端分支
 ```
-
-## 測試
-
-專案包含完整的測試套件（81 個測試案例，通過率 88.9%）：
-
-### 快速開始測試
-
-```bash
-# 驗證測試框架
-python3 test/verify_tests.py
-
-# 快速核心功能測試（推薦）
-python3 test/quick_test.py
-
-# 執行所有測試
-python3 test/run_all_tests.py
-
-# 只測試特定腳本
-python3 test/run_all_tests.py --push   # git-auto-push.sh (27 個測試)
-python3 test/run_all_tests.py --pr     # git-auto-pr.sh (36 個測試)
-python3 test/run_all_tests.py --integration  # 整合測試 (18 個測試)
-
-# 詳細輸出模式
-python3 test/run_all_tests.py --verbose
-
-# 快速測試（跳過耗時測試）
-python3 test/run_all_tests.py --quick
-
-# 遇到失敗就停止
-python3 test/run_all_tests.py --failfast
-
-# 互動式測試執行
-bash test/quick_start.sh
-```
-
-### 測試覆蓋範圍（7 大類別）
-
-**1. 配置與環境測試**
-
-- ✅ 腳本存在性和可執行權限驗證
-- ✅ AI 工具配置讀取（codex、gemini、claude）
-- ✅ AI 提示詞配置檢查
-- ✅ 預設主分支配置（main、master）
-- ✅ --help 選項顯示
-
-**2. Git 狀態模擬測試**
-
-- ✅ 非 Git 倉庫錯誤處理
-- ✅ 無變更時的提示訊息
-- ✅ 有未提交變更的檢測
-- ✅ 已暫存變更的處理
-- ✅ 有/無遠端倉庫的處理
-
-**3. AI 工具調用測試**
-
-- ✅ AI 工具優先順序（codex 優先）
-- ✅ AI 工具失敗時的降級邏輯
-- ✅ 所有 AI 工具失敗時降級到手動輸入
-- ✅ AI 生成 commit message
-- ✅ AI 生成分支名稱
-- ✅ AI 生成 PR 標題和描述
-
-**4. 格式驗證測試**
-
-- ✅ Commit message 格式驗證
-- ✅ Commit message 中文要求
-- ✅ 空 commit message 拒絕
-- ✅ PR 標題格式驗證
-- ✅ PR 描述格式驗證
-- ✅ 分支名稱格式驗證
-
-**5. 工作流程測試**
-
-- ✅ 模式 1：完整流程（add → commit → push）
-- ✅ 模式 2：本地提交（add → commit）
-- ✅ 模式 3：僅添加（add）
-- ✅ 模式 4：全自動（add → AI commit → push）
-- ✅ 模式 5：僅提交（commit 已暫存）
-- ✅ 模式 6：顯示 Git 資訊
-- ✅ GitHub Flow 完整流程（分支 → PR → 審查 → 合併）
-
-**6. 錯誤處理測試**
-
-- ✅ Git 未安裝錯誤
-- ✅ GitHub CLI 未安裝錯誤
-- ✅ 無遠端倉庫警告
-- ✅ 用戶取消操作
-- ✅ 網路錯誤處理
-- ✅ 無效分支名稱錯誤
-
-**7. 整合與場景測試**
-
-- ✅ 傳統工作流程
-- ✅ GitHub Flow 工作流程
-- ✅ 多次提交工作流程
-- ✅ 功能分支生命週期
-- ✅ 熱修復工作流程
-- ✅ 日常開發循環
-- ✅ 並發操作限制
-- ✅ 大型 diff 處理
-
-### 測試結果 ✅
-
-最新測試執行結果（2025-10-24）：
-
-| 項目      | 數量 | 百分比    |
-| --------- | ---- | --------- |
-| 總測試數  | 81   | 100%      |
-| ✅ 成功   | 72   | **88.9%** |
-| ⚠️ 需改進 | 9    | 11.1%     |
-
-**測試品質評估：優秀** ✨
-
-- 所有檔案語法正確，無編譯錯誤
-- 核心功能測試通過率高
-- 配置、AI、工作流程、錯誤處理測試完整
-- 失敗測試主要集中在邊緣情況和非互動模式
-
-詳細說明請參閱：
-
-- [test/README.md](test/README.md) - 測試套件完整說明
-- [test/測試執行指南.md](test/測試執行指南.md) - 詳細執行步驟
-- [test/測試檢查清單.md](test/測試檢查清單.md) - 完整覆蓋範圍
 
 ## 特色功能
 
@@ -880,15 +742,12 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 - **提示詞優化**：兩個檔案的提示詞風格應保持一致
 - **錯誤處理**：統一的錯誤處理模式和輸出格式
 
-#### 測試要求
+#### 功能測試
 
 ```bash
 # 語法檢查
 bash -n git-auto-push.sh
 bash -n git-auto-pr.sh
-
-# Python 測試檔案語法檢查
-python3 -m py_compile test/*.py
 
 # 功能測試
 ./git-auto-push.sh --help
@@ -897,11 +756,6 @@ python3 -m py_compile test/*.py
 # AI 工具測試
 source git-auto-push.sh
 for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
-
-# 執行測試套件
-python3 test/verify_tests.py      # 驗證測試框架
-python3 test/quick_test.py        # 快速核心測試
-python3 test/run_all_tests.py     # 完整測試套件
 ```
 
 #### 版本控制
@@ -942,34 +796,14 @@ python3 test/run_all_tests.py     # 完整測試套件
 - 專業文件標準 - 所有主要流程函數都有完整的企業級註解
 - 流程清晰化 - 每個工作流程都有詳細的步驟說明與參考資訊
 - 可配置分支刪除策略 - 合併後可選擇保留或刪除分支
-- 完整測試套件 - 81 個測試案例，通過率 88.9%，確保程式碼品質
 
 ---
 
-### v2.0.0 - 測試套件與程式碼品質提升 (2025-10-24)
+### v2.0.0 - 程式碼品質與分支管理提升 (2025-10-24)
 
-新功能
+**新功能**
 
-- 完整測試套件：新增 81 個測試案例涵蓋所有核心功能
-  - test_git_auto_push.py：27 個測試案例（配置、AI 工具、工作流程等）
-  - test_git_auto_pr.py：36 個測試案例（分支操作、PR 流程、安全機制等）
-  - test_integration.py：18 個整合測試（完整工作流程、場景模擬等）
-  - 測試通過率：88.9%（72 個成功，9 個需改進）
-- 測試工具完善：
-  - run_all_tests.py：彩色測試執行器，支援多種執行模式（--push、--pr、--integration、--verbose、--quick、--failfast）
-  - quick_test.py：快速核心功能測試工具（約 10-20 秒）
-  - verify_tests.py：測試框架驗證工具（檢查檔案、模組、案例統計）
-  - quick_start.sh：互動式測試執行腳本（6 種測試選項）
-  - test_helpers.py：測試輔助工具類（420+ 行，包含 Git 倉庫模擬、腳本執行等）
-- 測試文檔完善：
-  - test/README.md：測試套件完整說明（422 行）
-  - 測試執行指南.md：詳細的測試執行步驟說明（250 行）
-  - 測試檢查清單.md：完整的測試覆蓋範圍清單（161 行）
-  - 測試改進總結.md：測試改進記錄與編碼問題解決方案（218 行）
-- 測試覆蓋範圍：
-  - 7 大類別測試（配置、Git 狀態、AI 工具、格式驗證、工作流程、錯誤處理、整合場景）
-  - 涵蓋所有操作模式（6 種 push 模式 + 5 種 PR 模式）
-  - 真實場景模擬（日常開發、功能開發、熱修復、並發操作等）
+- **可配置分支刪除策略** 🆕：PR 合併後分支處理策略
   - 預設值：`false`（保守策略，保留分支）
   - 可配置：`true`（自動刪除）或 `false`（保留分支）
   - 位置：`git-auto-pr.sh` 第 217 行

@@ -402,6 +402,44 @@ cyan_msg() {
     printf "\033[0;36m%s\033[0m\n" "$1" >&2
 }
 
+# 函式：white_msg
+# 功能說明：輸出白色訊息至 stderr，用於一般內容文字顯示。
+# 輸入參數：
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出亮白色 ANSI 彩色文字，格式：\033[1;37m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 亮白色碼（\033[1;37m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於顯示說明文字、選單選項、一般內容
+white_msg() {
+    printf "\033[1;37m%s\033[0m\n" "$1" >&2
+}
+
+# 函式：highlight_success_msg
+# 功能說明：輸出亮綠色高亮成功訊息至 stderr，用於強調重要的成功結果。
+# 輸入參數：
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出亮綠色 ANSI 彩色文字，格式：\033[1;32m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 亮綠色碼（\033[1;32m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於顯示重要的成功訊息、關鍵操作完成提示
+highlight_success_msg() {
+    printf "\033[1;32m%s\033[0m\n" "$1" >&2
+}
+
 # 函式：show_ai_debug_info
 # 功能說明：統一格式顯示 AI 工具的調試資訊，包含工具名稱、輸入與輸出內容。
 # 輸入參數：
@@ -1595,6 +1633,189 @@ get_operation_choice() {
 #   4. 審查與合併 PR - execute_review_and_merge()
 #   5. 刪除分支 - execute_delete_branch()
 # ============================================
+
+# 函式：show_help
+# 功能說明：顯示腳本使用說明與完整幫助資訊。
+# 輸入參數：無
+# 輸出結果：
+#   STDERR 輸出彩色格式化的幫助文檔，包含：
+#   - 腳本用途說明
+#   - 使用方式與命令範例
+#   - 五種操作模式詳細說明
+#   - 相依工具清單與版本需求
+#   - 配置說明與注意事項
+#   - 退出碼表
+#   - 參考文檔連結
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 輸出腳本標題與版本資訊
+#   2. 輸出用途說明
+#   3. 輸出使用方式與命令範例
+#   4. 輸出五種操作模式的詳細說明
+#   5. 輸出相依工具清單
+#   6. 輸出配置說明
+#   7. 輸出退出碼表
+#   8. 輸出參考文檔
+# 副作用：輸出至 stderr
+# 參考：由 main() 函數在接收到 -h 或 --help 參數時調用
+show_help() {
+    # 讀取當前配置值
+    local ai_tools_list="${AI_TOOLS[*]}"
+    local main_branches_list="${DEFAULT_MAIN_BRANCHES[*]}"
+    local username="$DEFAULT_USERNAME"
+    local auto_delete="$AUTO_DELETE_BRANCH_AFTER_MERGE"
+    
+    echo >&2
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    highlight_success_msg "  Git 自動 Pull Request 工具（GitHub Flow）v2.0.0"
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo >&2
+    
+    purple_msg "📝 用途說明："
+    white_msg "  提供完整的 GitHub Flow 工作流程自動化，從分支建立到 PR 合併。"
+    white_msg "  支援 AI 輔助生成分支名稱、PR 內容，並整合企業級安全機制。"
+    white_msg "  適用於團隊協作開發環境，涵蓋分支管理、PR 審查、合併與撤銷等完整流程。"
+    echo >&2
+    
+    purple_msg "🚀 使用方式："
+    cyan_msg "  互動模式：    ./git-auto-pr.sh"
+    cyan_msg "  顯示說明：    ./git-auto-pr.sh -h"
+    cyan_msg "                ./git-auto-pr.sh --help"
+    cyan_msg "  全域使用：    git-auto-pr"
+    cyan_msg "                git-auto-pr --help"
+    echo >&2
+    
+    purple_msg "📋 五種操作模式："
+    echo >&2
+    
+    warning_msg "  1️⃣  建立功能分支"
+    white_msg "      • 基於主分支建立新的功能分支"
+    white_msg "      • 支援 AI 智慧生成分支名稱"
+    white_msg "      • 自動檢測並切換至主分支"
+    white_msg "      • 分支格式：username/type/issue-key-description"
+    white_msg "      • 分支類型：issue、bug、feature、enhancement、blocker"
+    echo >&2
+    
+    highlight_success_msg "  2️⃣  建立 Pull Request"
+    white_msg "      • 基於當前分支建立 PR"
+    white_msg "      • AI 自動生成 PR 標題與詳細內容"
+    white_msg "      • 自動收集 commit 訊息與檔案變更"
+    white_msg "      • 支援多種 AI 工具（目前設定：${ai_tools_list}）"
+    white_msg "      • 建立後自動顯示 PR 連結"
+    echo >&2
+    
+    error_msg "  3️⃣  撤銷 PR（智慧模式）"
+    white_msg "      • 關閉開放中的 PR"
+    white_msg "      • Revert 已合併的 PR（需明確確認）"
+    white_msg "      • 自動檢測 PR 狀態並提供對應操作"
+    white_msg "      • 顯示受影響的 commit 範圍"
+    white_msg "      • 安全確認機制避免誤操作"
+    echo >&2
+    
+    purple_msg "  4️⃣  審查並合併 PR"
+    white_msg "      • 互動式 PR 審查流程"
+    white_msg "      • 檢視 PR 詳情、diff 與 CI 狀態"
+    white_msg "      • 支援雙向審查（approve/comment/request-changes）"
+    white_msg "      • 使用 squash merge 策略合併"
+    white_msg "      • 合併後分支刪除：$([ "$auto_delete" = "true" ] && echo "自動刪除" || echo "保留分支")"
+    echo >&2
+    
+    cyan_msg "  5️⃣  刪除分支（安全模式）"
+    white_msg "      • 同時刪除本地與遠端分支"
+    white_msg "      • 主分支保護機制"
+    white_msg "      • 多重確認避免誤刪"
+    white_msg "      • 禁止刪除當前所在分支"
+    white_msg "      • 自動檢查分支合併狀態"
+    echo >&2
+    
+    purple_msg "🔧 相依工具："
+    highlight_success_msg "  必需："
+    white_msg "    • bash >= 4.0       腳本執行環境"
+    white_msg "    • git >= 2.0        版本控制操作"
+    white_msg "    • gh >= 2.0         GitHub CLI，用於 PR 操作"
+    echo >&2
+    
+    cyan_msg "  支援 AI 工具（可設定選項）："
+    white_msg "    • codex             OpenAI Codex CLI"
+    white_msg "    • gemini            Google Gemini CLI"
+    white_msg "    • claude            Anthropic Claude CLI"
+    echo >&2
+    
+    info_msg "  安裝方式："
+    cyan_msg "    brew install gh                    # GitHub CLI"
+    cyan_msg "    gh auth login                      # GitHub 認證"
+    white_msg "    # AI 工具請參考各自的安裝文檔"
+    echo >&2
+    
+    purple_msg "⚙️  目前配置："
+    cyan_msg "  主分支候選："
+    white_msg "    檢測順序：${main_branches_list}"
+    white_msg "    修改方式：腳本頂部 DEFAULT_MAIN_BRANCHES 陣列"
+    echo >&2
+    
+    cyan_msg "  預設使用者："
+    white_msg "    當前設定：${username}"
+    white_msg "    修改方式：腳本頂部 DEFAULT_USERNAME 變數"
+    white_msg "    用途說明：用於生成分支名稱前綴"
+    echo >&2
+    
+    cyan_msg "  AI 工具順序："
+    white_msg "    當前設定：${ai_tools_list}"
+    white_msg "    修改方式：腳本頂部 AI_TOOLS 陣列"
+    white_msg "    執行邏輯：依序嘗試，失敗時自動切換下一個"
+    echo >&2
+    
+    cyan_msg "  分支刪除策略："
+    white_msg "    當前設定：AUTO_DELETE_BRANCH_AFTER_MERGE=${auto_delete}"
+    white_msg "    修改方式：腳本頂部 AUTO_DELETE_BRANCH_AFTER_MERGE 變數"
+    white_msg "    說明：設為 true 時合併 PR 後自動刪除遠端分支"
+    echo >&2
+    
+    purple_msg "🔐 安全機制："
+    white_msg "  • 主分支保護：無法在主分支上建立 PR 或執行危險操作"
+    white_msg "  • CI 狀態檢查：合併前檢查 CI 通過狀態"
+    white_msg "  • 多重確認：危險操作需多次確認"
+    white_msg "  • 中斷處理：Ctrl+C 安全中斷並清理資源"
+    white_msg "  • 超時控制：AI 工具調用有 45 秒超時機制"
+    echo >&2
+    
+    purple_msg "📤 退出碼："
+    highlight_success_msg "  0     成功完成操作"
+    error_msg "  1     一般錯誤（參數錯誤、操作失敗、使用者取消）"
+    warning_msg "  2     相依工具不足（git 或 gh 未安裝）"
+    warning_msg "  130   使用者中斷（Ctrl+C）"
+    echo >&2
+    
+    purple_msg "📚 參考文檔："
+    cyan_msg "  • GitHub Flow：      docs/github-flow.md"
+    cyan_msg "  • PR 撤銷功能：      docs/pr-cancel-feature.md"
+    cyan_msg "  • Git 倉庫資訊：     docs/git-info-feature.md"
+    cyan_msg "  • 專案 README：      README.md"
+    cyan_msg "  • GitHub CLI 文檔：  https://cli.github.com/manual/"
+    echo >&2
+    
+    purple_msg "💡 使用範例："
+    white_msg "  # 互動式執行（推薦）"
+    cyan_msg "  ./git-auto-pr.sh"
+    echo >&2
+    white_msg "  # 顯示幫助"
+    cyan_msg "  ./git-auto-pr.sh --help"
+    echo >&2
+    white_msg "  # 安裝為全域命令"
+    cyan_msg "  sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr"
+    cyan_msg "  git-auto-pr"
+    echo >&2
+    
+    purple_msg "📧 作者：Lazy Jerry"
+    purple_msg "🔗 倉庫：https://github.com/lazyjerry/git-auto-push"
+    purple_msg "📜 授權：MIT License"
+    echo >&2
+    
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo >&2
+}
+
 main() {
     # 設置全局信號處理
     global_cleanup() {
@@ -1606,13 +1827,19 @@ main() {
     # 設置中斷信號處理
     trap global_cleanup INT TERM
 
-    warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。"
+    # 檢查命令行參數
+    if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+        show_help
+        exit 0
+    fi
     
     # 檢查命令行參數（移除自動模式支援）
     if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
         warning_msg "⚠️  全自動模式已移除，請使用互動式選單操作"
         echo >&2
     fi
+
+    warning_msg "使用前請確認 git 指令、gh CLI 與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
     # 顯示工具標題
     info_msg "Git 自動建立 Pull Request 工具（GitHub Flow）"

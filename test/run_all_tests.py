@@ -34,12 +34,22 @@ class ColoredTextTestResult(unittest.TextTestResult):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.test_start_time = None
+        self.current_test_index = 0
+        self.total_tests = 0
         
     def startTest(self, test):
         super().startTest(test)
         self.test_start_time = time.time()
+        self.current_test_index += 1
+        
         if self.showAll:
-            self.stream.write("\033[1;34m")  # 藍色
+            # 顯示測試進度和描述
+            test_name = str(test).split()[0]
+            test_doc = test.shortDescription() or "無描述"
+            self.stream.write(f"\n\033[1;36m[{self.current_test_index}/{self.total_tests}]\033[0m ")
+            self.stream.write(f"\033[1;34m{test_name}\033[0m\n")
+            self.stream.write(f"    {test_doc} ... ")
+            self.stream.flush()
             
     def addSuccess(self, test):
         super().addSuccess(test)
@@ -79,6 +89,38 @@ class ColoredTextTestResult(unittest.TextTestResult):
 class ColoredTextTestRunner(unittest.TextTestRunner):
     """使用彩色輸出的測試執行器"""
     resultclass = ColoredTextTestResult
+    
+    def run(self, test):
+        """執行測試並設置總測試數"""
+        result = self._makeResult()
+        result.total_tests = test.countTestCases()
+        result.current_test_index = 0
+        
+        # 註冊結果觀察者
+        unittest.registerResult(result)
+        
+        result.failfast = self.failfast
+        result.buffer = self.buffer
+        
+        startTime = time.time()
+        startTestRun = getattr(result, 'startTestRun', None)
+        if startTestRun is not None:
+            startTestRun()
+        try:
+            test(result)
+        finally:
+            stopTestRun = getattr(result, 'stopTestRun', None)
+            if stopTestRun is not None:
+                stopTestRun()
+        stopTime = time.time()
+        
+        timeTaken = stopTime - startTime
+        result.printErrors()
+        
+        if hasattr(result, 'separator2'):
+            self.stream.writeln(result.separator2)
+        
+        return result
 
 
 def print_banner(text, color="\033[1;36m"):
@@ -114,9 +156,26 @@ def print_summary(result, elapsed_time):
 
 def run_test_suite(suite, verbosity=2):
     """執行測試套件"""
+    # 計算總測試數
+    total_tests = suite.countTestCases()
+    
+    print(f"\033[1;36m準備執行 {total_tests} 個測試...\033[0m\n")
+    
     runner = ColoredTextTestRunner(verbosity=verbosity)
+    # 設置總測試數
+    if hasattr(runner.resultclass, 'total_tests'):
+        runner.resultclass.total_tests = total_tests
+    
     start_time = time.time()
     result = runner.run(suite)
+    
+    # 設置總測試數到結果對象
+    if hasattr(result, 'total_tests'):
+        result.total_tests = total_tests
+    else:
+        result.current_test_index = 0
+        result.total_tests = total_tests
+    
     elapsed = time.time() - start_time
     
     return result, elapsed
@@ -201,21 +260,40 @@ def main():
     
     # 執行測試
     try:
+        print("\033[1;32m▶ 開始執行測試...\033[0m")
+        print("=" * 70)
+        
         result, elapsed = run_test_suite(suite, verbosity)
+        
+        print("\n" + "=" * 70)
+        print("\033[1;32m✓ 測試執行完成\033[0m\n")
+        
         success = print_summary(result, elapsed)
         
         # 顯示失敗詳情
         if result.failures:
-            print_banner("失敗詳情", "\033[1;33m")
-            for test, traceback in result.failures:
-                print(f"\033[1;33m{test}\033[0m")
+            print_banner("失敗詳情 (Failures)", "\033[1;33m")
+            for i, (test, traceback) in enumerate(result.failures, 1):
+                print(f"\033[1;33m失敗 #{i}: {test}\033[0m")
+                print("-" * 70)
                 print(traceback)
+                print()
                 
         if result.errors:
-            print_banner("錯誤詳情", "\033[1;31m")
-            for test, traceback in result.errors:
-                print(f"\033[1;31m{test}\033[0m")
+            print_banner("錯誤詳情 (Errors)", "\033[1;31m")
+            for i, (test, traceback) in enumerate(result.errors, 1):
+                print(f"\033[1;31m錯誤 #{i}: {test}\033[0m")
+                print("-" * 70)
                 print(traceback)
+                print()
+        
+        # 提供建議
+        if not success:
+            print("\033[1;33m💡 提示:\033[0m")
+            print("  - 使用 --verbose 查看更詳細的輸出")
+            print("  - 使用 --failfast 在第一個錯誤時停止")
+            print("  - 查看個別測試文件以了解測試內容")
+            print()
         
         # 返回適當的退出碼
         sys.exit(0 if success else 1)

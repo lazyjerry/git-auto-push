@@ -1,22 +1,25 @@
 # Git 工作流程自動化工具集
 
-完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 Github Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
+完整的 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和現代 GitHub Flow PR 流程。整合 AI 驅動的智慧產生功能和企業級錯誤處理機制。
+
+版本：v2.0.0
 
 ## 專案簡介
 
-一句話價值主張：**讓 Git 工作流程變得像按一個按鈕一樣簡單**
+**讓 Git 工作流程變得像按一個按鈕一樣簡單**
 
-主要功能亮點：
+### 主要功能亮點
 
 - 傳統 Git 工作流程完全自動化（新增、提交、推送）
-- **Git 倉庫資訊查看** 🆕（分支狀態、遠端配置、同步狀態、提交歷史一覽）
+- Git 倉庫資訊查看（分支狀態、遠端配置、同步狀態、提交歷史一覽）
 - GitHub Flow PR 流程端到端自動化（分支建立到 PR 建立）
-- **PR 生命週期完整管理**（建立、撤銷、審查、合併）
-- **智慧分支管理系統** 🆕（安全刪除、主分支保護、多重確認）
+- PR 生命週期完整管理（建立、撤銷、審查、合併）
+- 智慧分支管理系統（安全刪除、主分支保護、多重確認）
 - AI 驅動的智慧內容產生（commit 訊息、分支名稱、PR 內容）
 - 企業級錯誤處理與智慧修復建議
 - 多 AI 工具整合與自動容錯機制
-- **專業級程式碼文件** ✨：為所有主要函數加入企業級註解標準
+- 完整測試套件（81 個測試案例，涵蓋所有功能場景）
+- 專業級程式碼文件（為所有主要函數加入企業級註解標準）
 - 中斷復原和信號處理機制
 
 ## 系統架構
@@ -48,12 +51,22 @@
 ├── .github/             # GitHub 相關設定
 │   ├── copilot-instructions.md    # AI 代理開發指導
 │   └── instructions/              # 程式碼產生規範
-│       ├── copilot-readme.instructions.md
-│       └── copilot-bash-doc-tw.instructions.md
 ├── docs/                # 文件目錄
 │   ├── github-flow.md           # GitHub Flow 流程說明
 │   ├── pr-cancel-feature.md     # PR 撤銷功能說明
-│   └── git-info-feature.md      # Git 倉庫資訊顯示功能說明
+│   ├── git-info-feature.md      # Git 倉庫資訊顯示功能說明
+│   └── git-usage.md             # Git 使用說明
+├── test/                # 測試套件目錄
+│   ├── test_helpers.py          # 測試輔助工具類（420+ 行）
+│   ├── test_git_auto_push.py    # git-auto-push.sh 測試（27 個測試案例）
+│   ├── test_git_auto_pr.py      # git-auto-pr.sh 測試（36 個測試案例）
+│   ├── test_integration.py      # 整合測試（18 個測試案例）
+│   ├── run_all_tests.py         # 彩色測試執行器
+│   ├── verify_tests.py          # 測試框架驗證工具
+│   ├── quick_start.sh           # 互動式測試執行腳本
+│   ├── README.md                # 測試套件完整說明
+│   ├── 測試檢查清單.md           # 測試覆蓋範圍清單
+│   └── SUMMARY.md               # 建立完成總結
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
@@ -87,6 +100,8 @@ sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push
 # 安裝 git-auto-pr 到系統路徑
 sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
 ```
+
+安裝完之後能夠直接呼叫 git-auto-push 或 git-auto-pr 啟動腳本。
 
 ### 4. 相依工具安裝
 
@@ -137,16 +152,14 @@ git-auto-push --auto
 
 #### git-auto-push.sh 操作模式
 
-| 模式            | 功能描述                     | 使用情境           |
-| --------------- | ---------------------------- | ------------------ |
-| 1. 完整流程     | add → 互動輸入 commit → push | 日常開發提交       |
-| 2. 本機提交     | add → 互動輸入 commit        | 離線開發或測試提交 |
-| 3. 僅新增檔案   | add                          | 暫存檔案變更       |
-| 4. 全自動模式   | add → AI 產生 commit → push  | CI/CD 或快速提交   |
-| 5. 僅提交       | commit                       | 提交已暫存的檔案   |
-| 6. 顯示倉庫資訊 | 顯示 Git 倉庫詳細資訊        | 查看倉庫狀態與配置 |
+1. 完整流程：add → 互動輸入 commit → push（日常開發提交）
+2. 本機提交：add → 互動輸入 commit（離線開發或測試提交）
+3. 僅新增檔案：add（暫存檔案變更）
+4. 全自動模式：add → AI 產生 commit → push（CI/CD 或快速提交）
+5. 僅提交：commit（提交已暫存的檔案）
+6. 顯示倉庫資訊：顯示 Git 倉庫詳細資訊（查看倉庫狀態與配置）
 
-### git-auto-pr.sh - GitHub Flow PR 自動化 ✨
+### git-auto-pr.sh - GitHub Flow PR 自動化
 
 ```bash
 # 互動式模式（預設）
@@ -163,26 +176,24 @@ git-auto-pr --auto
 
 #### git-auto-pr.sh 操作模式
 
-| 模式             | 功能描述                                   | 使用情境           |
-| ---------------- | ------------------------------------------ | ------------------ |
-| 1. 建立功能分支  | 輸入 issue key、擁有者、類型，自動生成分支 | 開始新功能開發     |
-| 2. 建立 PR       | 基於目前分支建立 Pull Request              | 提交程式碼審查     |
-| 3. 撤銷目前 PR   | 關閉開放 PR / Revert 已合併 PR             | PR 錯誤修正        |
-| 4. 審查與合併 PR | 審查 → 批准/請求變更 → 合併                | 專案擁有者 PR 管理 |
-| 5. 刪除分支      | 安全刪除本地/遠端功能分支                  | 分支清理與維護     |
+1. 建立功能分支：輸入 issue key、擁有者、類型，自動生成分支（開始新功能開發）
+2. 建立 PR：基於目前分支建立 Pull Request（提交程式碼審查）
+3. 撤銷目前 PR：關閉開放 PR / Revert 已合併 PR（PR 錯誤修正）
+4. 審查與合併 PR：審查 → 批准/請求變更 → 合併（專案擁有者 PR 管理）
+5. 刪除分支：安全刪除本地/遠端功能分支（分支清理與維護）
 
 #### GitHub Flow 工作流程特色
 
-- **Issue 整合**: 支援 JIRA、GitHub Issue 等多種編號格式
-- **分支類型分類**: 提供 issue、bug、feature、enhancement、blocker 五種分支類型
-- **自動分支命名**: 基於 `{username}/{type}/{issue-key}` 格式自動生成標準分支名
-- **AI 智慧產生**: commit message、PR 標題和內容可由 AI 輔助生成
-- **PR 生命週期管理**: 建立 → 撤銷 → 審查 → 合併，完整涵蓋 PR 各階段操作
-- **智慧撤銷機制**: 自動偵測 PR 狀態，提供安全的關閉或 revert 選項
-- **完整驗證**: 檢查 Git 儲存庫、gh CLI 登入狀態、分支狀態
-- **企業級錯誤處理**: 智慧錯誤偵測與友善修復建議
-- **中斷復原**: 支援 Ctrl+C 中斷與優雅清理
-- **多分支支援**: 自動偵測 main/master 主分支
+- Issue 整合：支援 JIRA、GitHub Issue 等多種編號格式
+- 分支類型分類：提供 issue、bug、feature、enhancement、blocker 五種分支類型
+- 自動分支命名：基於 `{username}/{type}/{issue-key}` 格式自動生成標準分支名
+- AI 智慧產生：commit message、PR 標題和內容可由 AI 輔助生成
+- PR 生命週期管理：建立 → 撤銷 → 審查 → 合併，完整涵蓋 PR 各階段操作
+- 智慧撤銷機制：自動偵測 PR 狀態，提供安全的關閉或 revert 選項
+- 完整驗證：檢查 Git 儲存庫、gh CLI 登入狀態、分支狀態
+- 企業級錯誤處理：智慧錯誤偵測與友善修復建議
+- 中斷復原：支援 Ctrl+C 中斷與優雅清理
+- 多分支支援：自動偵測 main/master 主分支
 
 ## 使用情境
 
@@ -303,7 +314,7 @@ git checkout main && git pull
 ./git-auto-pr.sh  # 選擇選項 4，審查 → 批准 → 合併
 ```
 
-#### 分支建立流程說明 🆕
+#### 分支建立流程說明
 
 ```bash
 # 執行分支建立
@@ -353,7 +364,7 @@ git checkout main && git pull
 # 5. 更新本地 main 分支
 ```
 
-#### 分支管理與清理 🆕
+#### 分支管理與清理
 
 ```bash
 # 清理不需要的功能分支
@@ -367,6 +378,41 @@ git checkout main && git pull
 # 5. 可選擇同時清理對應的遠端分支
 ```
 
+## 測試
+
+專案包含完整的測試套件（81 個測試案例）：
+
+```bash
+# 執行所有測試
+python3 test/run_all_tests.py
+
+# 只測試特定腳本
+python3 test/run_all_tests.py --push   # git-auto-push.sh
+python3 test/run_all_tests.py --pr     # git-auto-pr.sh
+
+# 詳細輸出
+python3 test/run_all_tests.py --verbose
+
+# 快速測試
+python3 test/run_all_tests.py --quick
+
+# 互動式測試執行
+bash test/quick_start.sh
+```
+
+### 測試覆蓋範圍
+
+- 配置讀取和解析
+- Git 狀態模擬（有/無變更、有/無 remote）
+- AI 工具調用邏輯（優先順序、降級、手動輸入）
+- 格式驗證（commit message、PR 標題和描述）
+- 錯誤處理（無倉庫、無 gh CLI、網路錯誤）
+- 用戶互動（選單、確認、輸入）
+- 完整工作流程（6 種 push 模式 + 5 種 PR 模式）
+- 真實場景模擬（日常開發、功能開發、熱修復）
+
+詳細說明請參閱 [test/README.md](test/README.md)
+
 ## 特色功能
 
 ### AI 智慧產生系統
@@ -376,14 +422,14 @@ git checkout main && git pull
 - 支援 codex、gemini、claude 三種 AI CLI 工具
 - 自動容錯機制：當一個 AI 工具失效時自動嘗試下一個
 - 智慧輸出清理：過濾 AI 工具的元數據和技術雜訊
-- **提示優化**：精簡 70%+ 提示長度，提升處理速度和準確性
+- 提示優化：精簡 70%+ 提示長度，提升處理速度和準確性
 
 **智慧內容產生**
 
 - commit 訊息：分析 git diff 自動產生符合 Conventional Commits 規範的訊息
 - 分支名稱：基於 issue key、擁有者、分支類型自動生成標準格式（如 `username/type/issue-key`）
 - PR 內容：基於分支變更歷史產生專業的 PR 標題和描述
-- **即時驗證**：自動檢測分支名稱有效性並處理特殊字符
+- 即時驗證：自動檢測分支名稱有效性並處理特殊字符
 
 ### 企業級錯誤處理
 
@@ -391,7 +437,7 @@ git checkout main && git pull
 
 - 自動偵測 `401 Unauthorized` 和 `token_expired` 認證錯誤
 - 偵測 `stream error`、網路超時等連接問題
-- **GitHub 政策合規**：自動偵測 PR 自我批准限制並提供替代方案
+- GitHub 政策合規：自動偵測 PR 自我批准限制並提供替代方案
 - 提供具體的修復命令和操作步驟
 
 **用戶體驗優化**
@@ -406,21 +452,21 @@ git checkout main && git pull
 **傳統 Git 流程（git-auto-push.sh）**
 
 - 6 種操作模式滿足不同開發場景
-- **Git 倉庫資訊查看** 🆕：快速瀏覽分支、遠端、同步狀態、提交歷史
+- Git 倉庫資訊查看：快速瀏覽分支、遠端、同步狀態、提交歷史
 - 支援離線開發和 CI/CD 整合
 - 分階段操作支援：添加 → 提交 → 推送
 
 **GitHub Flow 流程（git-auto-pr.sh）**
 
 - 端到端 PR 流程自動化
-- **智慧 PR 撤銷系統** 🆕：自動偵測 PR 狀態，安全處理開放和已合併 PR
-- **智慧分支設定系統** ✨：可設定主分支候選清單，按優先順序自動偵測
+- 智慧 PR 撤銷系統：自動偵測 PR 狀態，安全處理開放和已合併 PR
+- 智慧分支設定系統：可設定主分支候選清單，按優先順序自動偵測
 - 分支錯誤處理：找不到主分支時提供詳細解決建議和修復命令
 - 分支狀態智慧驗證
-- **PR 審查管理**：自動偵測用戶身份避免自我批准，提供團隊審查或直接合併選項
-- **安全保護機制**：revert 操作預設為否，顯示詳細影響分析
-- **智慧分支管理** 🆕：安全的分支刪除功能，主分支保護與多重確認機制
-- **分支生命週期管理** 🆕：完整的分支建立、使用、清理流程，主分支保護機制
+- PR 審查管理：自動偵測用戶身份避免自我批准，提供團隊審查或直接合併選項
+- 安全保護機制：revert 操作預設為否，顯示詳細影響分析
+- 智慧分支管理：安全的分支刪除功能，主分支保護與多重確認機制
+- 分支生命週期管理：完整的分支建立、使用、清理流程，主分支保護機制
 
 ## 錯誤排除
 
@@ -438,7 +484,7 @@ git init  # 或移動到正確的 Git 儲存庫目錄
 - 檢查是否有檔案變更：`git status`
 - 或選擇推送現有提交到遠端
 
-**AI 工具認證錯誤**
+AI 工具認證錯誤
 
 ```bash
 ❌ codex 認證錯誤: 認證令牌已過期
@@ -448,7 +494,7 @@ git init  # 或移動到正確的 Git 儲存庫目錄
 
 當出現 `401 Unauthorized` 或 `token_expired` 錯誤時，按提示重新認證。
 
-**GitHub CLI 相關錯誤（git-auto-pr.sh）**
+GitHub CLI 相關錯誤（git-auto-pr.sh）
 
 ```bash
 ❌ 未安裝 gh CLI 工具！請執行：brew install gh
@@ -481,10 +527,13 @@ GitHub 安全政策不允許開發者批准自己的 PR。解決方案：
 
 **PR 撤銷相關錯誤**
 
-```bash
+````bash
 ❌ 當前分支沒有找到相關的 PR
-⚠️  PR 已經合併，執行 revert 會影響到後續變更
-```
+```bash
+⚠️ PR 已經合併，執行 revert 會影響到後續變更
+````
+
+````
 
 PR 撤銷功能的常見情況處理：
 
@@ -493,7 +542,7 @@ PR 撤銷功能的常見情況處理：
 - **revert 衝突**：按提示手動解決衝突後完成操作
 - **權限不足**：確保有關閉 PR 或推送到主分支的權限
 
-**主分支自動偵測**
+主分支自動偵測
 
 工具智慧偵測主分支名稱：
 
@@ -502,16 +551,16 @@ PR 撤銷功能的常見情況處理：
 - 本地分支作為最後選項
 - 同時支援現代儲存庫（main）和傳統儲存庫（master）
 
-**AI 工具網路錯誤**
+AI 工具網路錯誤
 
 ```bash
 ❌ codex 網路錯誤: stream error: unexpected status
 💡 請檢查網路連接或稍後重試
-```
+````
 
 網路問題會自動檢測並提供具體建議。
 
-**AI 工具無法使用**
+AI 工具無法使用
 
 ```bash
 # 檢查 AI CLI 工具是否已安裝並可執行
@@ -520,7 +569,7 @@ which gemini
 which claude
 ```
 
-**權限不足錯誤**
+權限不足錯誤
 
 ```bash
 # 確認腳本具有執行權限
@@ -570,7 +619,7 @@ git-auto-pr                    # 選擇選項 3（建立 PR）
 
 兩個工具均支援 `--auto` 無互動模式，適合自動化環境：
 
-**GitHub Actions 範例**
+GitHub Actions 範例
 
 ```yaml
 name: Auto Git Workflow
@@ -594,7 +643,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-**Docker 容器整合**
+Docker 容器整合
 
 ```dockerfile
 # 在容器中使用工具
@@ -688,7 +737,7 @@ readonly AI_TOOLS=(
 2. 在對應函數中添加 case 分支處理
 3. 實現對應的 `run_*_command()` 函數
 
-#### 4. 分支配置自定義 ✨
+#### 4. 分支配置自定義
 
 ```bash
 # git-auto-pr.sh 主分支配置修改（第 200 行）
@@ -784,24 +833,28 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
-### ✨ 最新版本亮點 (v1.7.0)
+### 最新版本亮點 (v2.0.0)
 
-- **1655 行** git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
-- **2896 行** git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件與流程註解
-- **11 種操作模式** - 完整涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
-- **Git 倉庫資訊查看** 🆕 - 一鍵瀏覽倉庫完整狀態
-- **智慧分支管理** - 安全刪除機制，主分支保護，多重確認
-- **專業文件標準** ✨ - 所有主要流程函數都有完整的企業級註解
-- **流程清晰化** 🆕 - 每個工作流程都有詳細的步驟說明與參考資訊
-- **可配置分支刪除策略** 🆕 - 合併後可選擇保留或刪除分支
+- 1655 行 git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
+- 2896 行 git-auto-pr.sh - GitHub Flow PR 自動化，企業級程式碼文件與流程註解
+- 11 種操作模式 - 完整涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
+- Git 倉庫資訊查看 - 一鍵瀏覽倉庫完整狀態
+- 智慧分支管理 - 安全刪除機制，主分支保護，多重確認
+- 專業文件標準 - 所有主要流程函數都有完整的企業級註解
+- 流程清晰化 - 每個工作流程都有詳細的步驟說明與參考資訊
+- 可配置分支刪除策略 - 合併後可選擇保留或刪除分支
+- 完整測試套件 - 81 個測試案例確保程式碼品質
 
 ---
 
-### v1.7.0 - PR 合併分支刪除策略配置 (2025-10-24)
+### v2.0.0 - 測試套件與程式碼品質提升 (2025-10-24)
 
-**🆕 新功能**
+新功能
 
-- **分支刪除策略配置** 🆕：新增 `AUTO_DELETE_BRANCH_AFTER_MERGE` 配置變數
+- 完整測試套件：新增 81 個測試案例涵蓋所有核心功能
+- 測試框架：Python unittest 測試框架
+- 彩色測試執行器：視覺化測試結果展示
+- 互動式測試執行：bash 腳本快速測試執行
   - 預設值：`false`（保守策略，保留分支）
   - 可配置：`true`（自動刪除）或 `false`（保留分支）
   - 位置：`git-auto-pr.sh` 第 217 行
@@ -853,17 +906,17 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 **🔧 改進**
 
-- **流程函數註解完善**：為所有主要工作流程函數添加完整註解
+- 流程函數註解完善：為所有主要工作流程函數添加完整註解
   - `execute_full_workflow()` - 完整 Git 流程（add → commit → push）
   - `execute_local_commit()` - 本地提交流程（add → commit）
   - `execute_add_only()` - 僅添加檔案流程
   - `execute_create_branch()` - 功能分支建立流程
   - `execute_create_pr()` - Pull Request 建立流程
-- **註解標準化**：統一函數註解格式，包含功能、參數、流程、副作用、參考
-- **步驟編號優化**：流程內步驟重新編號，更清晰反映實際執行順序
-- **文件更新**：README 更新最新行數統計與版本資訊
+- 註解標準化：統一函數註解格式，包含功能、參數、流程、副作用、參考
+- 步驟編號優化：流程內步驟重新編號，更清晰反映實際執行順序
+- 文件更新：README 更新最新行數統計與版本資訊
 
-**📊 行數統計更新**
+行數統計更新
 
 - `git-auto-push.sh`：1655 行（+49 行流程註解）
 - `git-auto-pr.sh`：2872 行（+43 行流程註解）
@@ -872,29 +925,29 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 ### v1.5.0 - Git 倉庫資訊查看功能 (2025-10-21)
 
-**🆕 新功能**
+新功能
 
-- **Git 倉庫資訊顯示** 🆕：新增選項 6，提供完整的 Git 倉庫狀態概覽
-  - 🌿 當前分支名稱和倉庫路徑
-  - 🌐 所有遠端倉庫 URL（fetch 和 push）
-  - 🔗 追蹤分支資訊和設定狀態
-  - 📈 同步狀態分析（領先/落後提交數）
-  - 🌳 分支來源追蹤（從哪個主分支分出）
-  - 📝 最近 5 筆 commit 歷史記錄
-  - 📋 工作區狀態檢查（未提交變更）
+- Git 倉庫資訊顯示：新增選項 6，提供完整的 Git 倉庫狀態概覽
+  - 當前分支名稱和倉庫路徑
+  - 所有遠端倉庫 URL（fetch 和 push）
+  - 追蹤分支資訊和設定狀態
+  - 同步狀態分析（領先/落後提交數）
+  - 分支來源追蹤（從哪個主分支分出）
+  - 最近 5 筆 commit 歷史記錄
+  - 工作區狀態檢查（未提交變更）
 
-**🔧 改進**
+改進
 
 - 選單擴展：從 5 選項擴展為 6 選項，新增倉庫資訊查看
 - 智慧分析：自動判斷分支來源和與主分支的關係
 - 彩色輸出：使用顏色和 emoji 增強資訊可讀性
 - 安全設計：純查詢操作，不會修改任何 Git 狀態
 
-**📁 新增文檔**
+新增文檔
 
 - `docs/git-info-feature.md` - Git 倉庫資訊功能詳細說明
 
-**📊 行數統計更新**
+行數統計更新
 
 - `git-auto-push.sh`：1372 行（+78 行新功能）
 
@@ -951,31 +1004,31 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 ### v1.2.0 - 分支配置系統 (2025-09-14)
 
-**🆕 新功能**
+新功能
 
-- **智慧分支配置**：git-auto-pr.sh 新增 `DEFAULT_MAIN_BRANCHES` 陣列配置
-- **自動檢測機制**：按優先順序自動檢測第一個存在的主分支
-- **錯誤處理優化**：找不到分支時提供詳細解決建議和動態修復命令
+- 智慧分支配置：git-auto-pr.sh 新增 `DEFAULT_MAIN_BRANCHES` 陣列配置
+- 自動檢測機制：按優先順序自動檢測第一個存在的主分支
+- 錯誤處理優化：找不到分支時提供詳細解決建議和動態修復命令
 
-**🔧 改進**
+改進
 
 - 配置集中化：所有分支相關設定移至檔案頂部
 - 錯誤訊息彩色化：使用表情符號和顏色提升可讀性
 - 動態建議生成：根據配置陣列自動產生對應的 Git 命令
 
-**📍 設定位置**
+設定位置
 
 - `git-auto-pr.sh` 第 78 行：`readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")`
 
 ### v1.1.0 - AI 配置整合 (2025-09-13)
 
-**🔧 重構**
+重構
 
 - AI 提示詞提取至檔案頂部作為配置變數
 - 統一 AI_TOOLS 變數，便於維護
 - 新增 README 開發修改指導說明
 
-### 📚 參考資源
+### 參考資源
 
 - [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理開發指導
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
@@ -984,13 +1037,15 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 ## 截圖展示
 
-| 功能            | 描述                            | 截圖                                             |
-| --------------- | ------------------------------- | ------------------------------------------------ |
-| 主選單介面      | git-auto-pr.sh 主要操作選單     | ![主選單](screenshots/main-menu.png)             |
-| AI 提交訊息生成 | AI 自動生成 Git 提交訊息        | ![AI 提交](screenshots/ai-commit-generation.png) |
-| 全自動模式      | git-auto-push.sh 全自動操作模式 | ![自動模式](screenshots/auto-mode.png)           |
-| PR 建立（CLI）  | 命令列 PR 建立流程              | ![PR CLI](screenshots/pr-screenshot-cli.png)     |
-| PR 建立（Web）  | GitHub 網頁 PR 建立結果         | ![PR Web](screenshots/pr-screenshot-web.png)     |
+git-auto-pr.sh 主要操作選單：![主選單](screenshots/main-menu.png)
+
+AI 自動生成 Git 提交訊息：![AI 提交](screenshots/ai-commit-generation.png)
+
+git-auto-push.sh 全自動操作模式：![自動模式](screenshots/auto-mode.png)
+
+命令列 PR 建立流程：![PR CLI](screenshots/pr-screenshot-cli.png)
+
+GitHub 網頁 PR 建立結果：![PR Web](screenshots/pr-screenshot-web.png)
 
 ## 授權條款
 

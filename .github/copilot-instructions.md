@@ -192,7 +192,7 @@ loading_cleanup() {
 ```bash
 # 步驟 1：只更新需要修改的腳本配置
 # 例如只修改 git-auto-pr.sh
-readonly AI_TOOLS=("gpt" "codex" "gemini" "claude")
+readonly AI_TOOLS=("codex" "gemini" "claude")
 
 # 步驟 2：實作調用函數（依工具特性選擇模式）
 run_gpt_command() {

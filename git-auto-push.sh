@@ -79,7 +79,7 @@
 #   - Conventional Commits：https://www.conventionalcommits.org/
 #
 # 作者：Lazy Jerry
-# 版本：v1.5.0
+# 版本：v2.0.0
 # 最後更新：2025-10-24
 # 授權：MIT License
 # 倉庫：https://github.com/lazyjerry/git-auto-push

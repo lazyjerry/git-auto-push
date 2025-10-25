@@ -483,7 +483,7 @@ PR 撤銷功能的常見情況處理：
 
 主分支自動偵測
 
-工具智慧偵測主分支名稱：
+工具自動偵測主分支名稱：
 
 - 優先偵測遠端 `origin/main` 分支
 - 備選偵測 `origin/master` 分支
@@ -804,8 +804,8 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 **🔧 改進**
 
-- 流程函數註解完善：為所有主要工作流程函數添加完整註解
-  - `execute_full_workflow()` - 完整 Git 流程（add → commit → push）
+- 流程函數註解更新：為所有主要工作流程函數添加註解
+  - `execute_full_workflow()` - Git 流程（add → commit → push）
   - `execute_local_commit()` - 本地提交流程（add → commit）
   - `execute_add_only()` - 僅添加檔案流程
   - `execute_create_branch()` - 功能分支建立流程

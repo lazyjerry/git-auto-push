@@ -245,13 +245,6 @@ git-auto-pr
 # AI 產生 PR 標題和內容
 ```
 
-#### 快速 PR 建立
-
-```bash
-# 在功能分支上快速建立 PR
-./git-auto-pr.sh --auto
-```
-
 #### 撤銷 Pull Request
 
 ```bash

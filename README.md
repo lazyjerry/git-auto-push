@@ -153,13 +153,8 @@ git-auto-push --auto
 # 互動式模式（預設）
 ./git-auto-pr.sh
 
-# 全自動模式
-./git-auto-pr.sh --auto
-./git-auto-pr.sh -a
-
 # 全域安裝後使用
 git-auto-pr
-git-auto-pr --auto
 ```
 
 #### git-auto-pr.sh 操作模式

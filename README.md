@@ -54,8 +54,7 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ├── LICENSE              # MIT 授權條款
 ├── README.md            # 專案說明文件
 ├── .github/             # GitHub 相關設定
-│   ├── copilot-instructions.md    # AI 代理開發指導
-│   └── instructions/              # 程式碼產生規範
+│   └── copilot-instructions.md    # AI 代理開發指導
 ├── docs/                # 文件目錄
 │   ├── github-flow.md           # GitHub Flow 流程說明
 │   ├── pr-cancel-feature.md     # PR 撤銷功能說明

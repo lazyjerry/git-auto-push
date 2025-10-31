@@ -32,7 +32,7 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1655 行，完整註解與流程說明）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（1655 行，註解與流程說明）
 ├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2896 行，程式碼文件與流程註解）
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 錯誤偵測          # 認證過期、網路錯誤自動識別
@@ -146,7 +146,7 @@ git-auto-push --auto
 
 #### git-auto-push.sh 操作模式
 
-1. 完整流程：add → 互動輸入 commit → push（日常開發提交）
+1. 流程：add → 互動輸入 commit → push（日常開發提交）
 2. 本機提交：add → 互動輸入 commit（離線開發或測試提交）
 3. 僅新增檔案：add（暫存檔案變更）
 4. 全自動模式：add → AI 產生 commit → push（CI/CD 或快速提交）
@@ -191,7 +191,7 @@ git-auto-pr
 #### 日常開發流程
 
 ```bash
-# 修改程式碼後，執行完整流程
+# 修改程式碼後，執行流程
 ./git-auto-push.sh
 # 選擇選項 1，輸入 commit message，自動推送
 ```
@@ -739,18 +739,18 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 1. 修改 `execute_*_workflow()` 函數
 2. 更新選單顯示
-3. 測試完整流程
+3. 測試流程
 
 ## 📋 更新日誌
 
 ### 最新版本亮點 (v2.0.0)
 
-- 1655 行 git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
+- 1655 行 git-auto-push.sh - 傳統 Git 工作流程自動化，註解與流程說明
 - 2896 行 git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
 - 11 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
 - Git 倉庫資訊查看 - 一鍵瀏覽倉庫狀態
 - 分支管理 - 安全刪除機制，主分支保護，多重確認
-- 文件標準 - 所有主要流程函數都有完整的註解
+- 文件標準 - 所有主要流程函數都有註解
 - 流程清晰化 - 每個工作流程都有詳細的步驟說明與參考資訊
 - 可配置分支刪除策略 - 合併後可選擇保留或刪除分支
 

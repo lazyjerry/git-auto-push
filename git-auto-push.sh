@@ -1017,8 +1017,11 @@ append_ticket_number_to_message() {
 get_commit_message() {
     echo >&2
     echo "==================================================" >&2
-    info_msg "請輸入 commit message (直接按 Enter 可使用 AI 自動生成):"
+    highlight_success_msg "💬 請輸入 commit 訊息"
     echo "==================================================" >&2
+    cyan_msg "📝 輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
+    echo >&2
+    printf "➤ " >&2  # 提供明確的輸入提示符號
     
     read -r message
     message=$(echo "$message" | xargs)  # 去除前後空白

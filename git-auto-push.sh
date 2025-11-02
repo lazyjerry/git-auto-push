@@ -116,6 +116,20 @@ readonly AI_TOOLS=(
 # 輸出範例：新增用戶登入功能、修正檔案上傳錯誤、改善搜尋效能
 readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標題，格式如：新增用戶登入功能、修正檔案上傳錯誤、改善搜尋效能。只輸出標題："
 
+# 任務編號自動帶入設定
+# 說明：控制是否在 commit 訊息前自動加入任務編號（從分支名稱偵測）。
+#       任務編號格式如：JIRA-123、PROJ-456、feat-001 等。
+# 效果：
+#   - true：自動在 commit 訊息前加上 [任務編號] 前綴
+#   - false：保持原始 commit 訊息，不加任務編號
+# 範例：
+#   啟用時：[feat-001] 新增用戶登入功能
+#   停用時：新增用戶登入功能
+# 適用場景：
+#   - 團隊要求 commit 關聯任務編號時啟用
+#   - 個人專案或不需要任務編號時停用
+AUTO_INCLUDE_TICKET=false
+
 # ==============================================
 # 訊息輸出函數區域
 # ==============================================
@@ -949,7 +963,7 @@ generate_auto_commit_message() {
 }
 
 # 函式：append_ticket_number_to_message
-# 功能說明：在 commit 訊息中自動帶入任務編號（如果啟用且偵測到任務編號）。
+# 功能說明：在 commit 訊息中帶入任務編號（根據設定自動或詢問使用者）。
 # 輸入參數：
 #   $1 <message> 原始 commit 訊息
 # 輸出結果：
@@ -957,20 +971,14 @@ generate_auto_commit_message() {
 # 例外/失敗：
 #   無例外，總是返回 0
 # 流程：
-#   1. 檢查 AUTO_INCLUDE_TICKET 開關是否啟用
-#   2. 檢查全域 TICKET_NUMBER 變數是否有值
-#   3. 檢查原訊息是否已包含任務編號（避免重複）
-#   4. 如符合條件則在訊息前方加入任務編號
-# 副作用：無
+#   1. 檢查全域 TICKET_NUMBER 變數是否有值
+#   2. 檢查原訊息是否已包含任務編號（避免重複）
+#   3. 若 AUTO_INCLUDE_TICKET=true，自動加入任務編號
+#   4. 若 AUTO_INCLUDE_TICKET=false，詢問使用者是否要加入
+# 副作用：可能輸出至 stderr（詢問提示）
 # 參考：全域變數 AUTO_INCLUDE_TICKET、TICKET_NUMBER
 append_ticket_number_to_message() {
     local message="$1"
-    
-    # 檢查是否啟用自動帶入任務編號功能
-    if [[ "$AUTO_INCLUDE_TICKET" != "true" ]]; then
-        echo "$message"
-        return 0
-    fi
     
     # 檢查是否有偵測到任務編號
     if [[ -z "$TICKET_NUMBER" ]]; then
@@ -984,8 +992,25 @@ append_ticket_number_to_message() {
         return 0
     fi
     
-    # 在訊息前方加入任務編號
-    echo "[$TICKET_NUMBER] $message"
+    # 根據設定決定是否加入任務編號
+    if [[ "$AUTO_INCLUDE_TICKET" == "true" ]]; then
+        # 自動加入任務編號
+        echo "[$TICKET_NUMBER] $message"
+    else
+        # 詢問使用者是否要加入任務編號
+        echo >&2
+        cyan_msg "🎫 偵測到任務編號: $TICKET_NUMBER"
+        printf "是否在 commit 訊息中加入任務編號前綴？[Y/n]: " >&2
+        read -r add_ticket
+        add_ticket=$(echo "$add_ticket" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        # 預設為同意（直接按 Enter 或輸入確認）
+        if [[ -z "$add_ticket" ]] || [[ "$add_ticket" =~ ^(y|yes|是|確認)$ ]]; then
+            echo "[$TICKET_NUMBER] $message"
+        else
+            echo "$message"
+        fi
+    fi
 }
 
 # 獲取用戶輸入的 commit message
@@ -1144,9 +1169,8 @@ push_to_remote() {
 # 配置變數
 DEFAULT_OPTION=1  # 預設選項：1=完整流程, 2=add+commit, 3=僅add
 
-# 任務編號自動帶入設定
-AUTO_INCLUDE_TICKET=false    # 是否自動在 commit 訊息中加入任務編號：true=啟用, false=停用
-TICKET_NUMBER=""             # 全域任務編號變數，在腳本執行時自動偵測並填入
+# 全域任務編號變數（執行時自動初始化，請勿手動修改）
+TICKET_NUMBER=""             # 從分支名稱自動偵測的任務編號，在腳本執行時填入
 
 # 函式：initialize_ticket_number
 # 功能說明：從當前分支名稱中偵測任務編號，並設定全域 TICKET_NUMBER 變數。

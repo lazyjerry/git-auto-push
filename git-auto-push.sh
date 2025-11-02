@@ -1145,7 +1145,7 @@ push_to_remote() {
 DEFAULT_OPTION=1  # 預設選項：1=完整流程, 2=add+commit, 3=僅add
 
 # 任務編號自動帶入設定
-AUTO_INCLUDE_TICKET=true     # 是否自動在 commit 訊息中加入任務編號：true=啟用, false=停用
+AUTO_INCLUDE_TICKET=false    # 是否自動在 commit 訊息中加入任務編號：true=啟用, false=停用
 TICKET_NUMBER=""             # 全域任務編號變數，在腳本執行時自動偵測並填入
 
 # 函式：initialize_ticket_number

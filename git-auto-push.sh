@@ -854,7 +854,9 @@ generate_auto_commit_message_silent() {
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
             info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
             highlight_success_msg "🔖 $generated_message"
-            echo "$generated_message"
+            local final_message
+            final_message=$(append_ticket_number_to_message "$generated_message")
+            echo "$final_message"
             return 0
         else
             warning_msg "⚠️  AI 生成的訊息太短或無效: '$generated_message'"
@@ -865,7 +867,9 @@ generate_auto_commit_message_silent() {
     warning_msg "⚠️  所有 AI 工具都執行失敗，使用預設 commit message"
     local default_message="自動提交：更新專案檔案"
     info_msg "🔖 使用預設訊息: $default_message"
-    echo "$default_message"
+    local final_message
+    final_message=$(append_ticket_number_to_message "$default_message")
+    echo "$final_message"
     return 0
 }
 
@@ -944,6 +948,46 @@ generate_auto_commit_message() {
     return 1
 }
 
+# 函式：append_ticket_number_to_message
+# 功能說明：在 commit 訊息中自動帶入任務編號（如果啟用且偵測到任務編號）。
+# 輸入參數：
+#   $1 <message> 原始 commit 訊息
+# 輸出結果：
+#   STDOUT 輸出處理後的 commit 訊息（可能包含任務編號）
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 檢查 AUTO_INCLUDE_TICKET 開關是否啟用
+#   2. 檢查全域 TICKET_NUMBER 變數是否有值
+#   3. 檢查原訊息是否已包含任務編號（避免重複）
+#   4. 如符合條件則在訊息前方加入任務編號
+# 副作用：無
+# 參考：全域變數 AUTO_INCLUDE_TICKET、TICKET_NUMBER
+append_ticket_number_to_message() {
+    local message="$1"
+    
+    # 檢查是否啟用自動帶入任務編號功能
+    if [[ "$AUTO_INCLUDE_TICKET" != "true" ]]; then
+        echo "$message"
+        return 0
+    fi
+    
+    # 檢查是否有偵測到任務編號
+    if [[ -z "$TICKET_NUMBER" ]]; then
+        echo "$message"
+        return 0
+    fi
+    
+    # 檢查訊息是否已包含任務編號（避免重複加入）
+    if [[ "$message" =~ $TICKET_NUMBER ]]; then
+        echo "$message"
+        return 0
+    fi
+    
+    # 在訊息前方加入任務編號
+    echo "[$TICKET_NUMBER] $message"
+}
+
 # 獲取用戶輸入的 commit message
 get_commit_message() {
     echo >&2
@@ -954,9 +998,11 @@ get_commit_message() {
     read -r message
     message=$(echo "$message" | xargs)  # 去除前後空白
     
-    # 如果用戶有輸入內容，直接返回
+    # 如果用戶有輸入內容，帶入任務編號後返回
     if [ -n "$message" ]; then
-        echo "$message"
+        local final_message
+        final_message=$(append_ticket_number_to_message "$message")
+        echo "$final_message"
         return 0
     fi
     
@@ -974,7 +1020,9 @@ get_commit_message() {
         
         # 如果用戶直接按 Enter 或輸入確認，使用 AI 生成的訊息
         if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
-            echo "$auto_message"
+            local final_message
+            final_message=$(append_ticket_number_to_message "$auto_message")
+            echo "$final_message"
             return 0
         fi
     fi
@@ -1000,14 +1048,18 @@ get_commit_message() {
                 confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
                 
                 if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
-                    echo "$auto_message"
+                    local final_message
+                    final_message=$(append_ticket_number_to_message "$auto_message")
+                    echo "$final_message"
                     return 0
                 fi
             else
                 warning_msg "AI 生成仍然失敗，請手動輸入"
             fi
         elif [ -n "$manual_message" ]; then
-            echo "$manual_message"
+            local final_message
+            final_message=$(append_ticket_number_to_message "$manual_message")
+            echo "$final_message"
             return 0
         else
             warning_msg "請輸入有效的 commit message，或輸入 'q' 取消，'ai' 重新嘗試 AI 生成"
@@ -1092,8 +1144,63 @@ push_to_remote() {
 # 配置變數
 DEFAULT_OPTION=1  # 預設選項：1=完整流程, 2=add+commit, 3=僅add
 
-# 顯示操作選單
+# 任務編號自動帶入設定
+AUTO_INCLUDE_TICKET=true     # 是否自動在 commit 訊息中加入任務編號：true=啟用, false=停用
+TICKET_NUMBER=""             # 全域任務編號變數，在腳本執行時自動偵測並填入
+
+# 函式：initialize_ticket_number
+# 功能說明：從當前分支名稱中偵測任務編號，並設定全域 TICKET_NUMBER 變數。
+# 輸入參數：無
+# 輸出結果：
+#   設定全域變數 TICKET_NUMBER（如偵測到任務編號）
+# 例外/失敗：
+#   無例外，若偵測不到任務編號則 TICKET_NUMBER 保持空字串
+# 流程：
+#   1. 使用 git branch --show-current 取得目前分支名稱
+#   2. 使用正規表達式偵測分支名稱中的任務編號（格式：專案代號-數字）
+#   3. 將偵測結果存入全域變數 TICKET_NUMBER
+# 副作用：修改全域變數 TICKET_NUMBER
+# 參考：支援格式包含 JIRA-123、ABC-456、PROJ-789、feat-001 等
+initialize_ticket_number() {
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || echo "")
+    
+    # 重置任務編號
+    TICKET_NUMBER=""
+    
+    # 檢查分支名稱中是否包含常見的任務編號格式
+    # 格式範例：feature/JIRA-123, fix/ABC-456, jerry/task/PROJ-789, feat-001
+    if [[ -n "$current_branch" && "$current_branch" =~ ([A-Z]+-[0-9]+)|([A-Z]{2,}-[0-9]+)|([a-zA-Z0-9]+-[0-9]+) ]]; then
+        TICKET_NUMBER="${BASH_REMATCH[0]}"
+    fi
+}
+
+# 函式：show_operation_menu
+# 功能說明：顯示 Git 操作選單，包含目前分支名稱與任務編號偵測。
+# 輸入參數：無
+# 輸出結果：
+#   STDERR 輸出格式化的操作選單，包含分支資訊與 6 個操作選項
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 git branch --show-current 取得目前分支名稱
+#   2. 使用正規表達式偵測分支名稱中的任務編號（格式：專案代號-數字）
+#   3. 顯示 6 個操作選項選單
+#   4. 在選項下方顯示分支資訊作為輸入提示（包含任務編號如有偵測到）
+#   5. 顯示使用者輸入提示
+# 副作用：輸出至 stderr
+# 參考：cyan_msg()、info_msg() 等顏色訊息函數；get_operation_choice() 函數會呼叫此函數
 show_operation_menu() {
+    # 取得目前分支名稱
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || echo "未知分支")
+    
+    # 使用全域任務編號變數設定分支資訊
+    local branch_info=""
+    if [[ -n "$TICKET_NUMBER" ]]; then
+        branch_info=" 🎫 任務編號: $TICKET_NUMBER"
+    fi
+    
     echo >&2
     echo "==================================================" >&2
     info_msg "請選擇要執行的 Git 操作:"
@@ -1105,6 +1212,7 @@ show_operation_menu() {
     cyan_msg "5. 💾 僅提交 (commit)"
     white_msg "6. 📊 顯示 Git 倉庫資訊"
     echo "==================================================" >&2
+    cyan_msg "🌿 目前分支: $current_branch$branch_info"
     printf "請輸入選項 [1-6] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
 
@@ -1413,6 +1521,9 @@ main() {
     if ! check_git_repository; then
         handle_error "當前目錄不是 Git 倉庫！請在 Git 倉庫目錄中執行此腳本。"
     fi
+    
+    # 步驟 1.5: 初始化任務編號
+    initialize_ticket_number
     
     # 步驟 2: 檢查是否有變更需要提交
     local status

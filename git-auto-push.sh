@@ -257,6 +257,25 @@ cyan_msg() {
     printf "\033[1;36m%s\033[0m\n" "$1" >&2
 }
 
+# 函式：yellow_msg
+# 功能說明：輸出黃色訊息至 stderr，用於重要提示或注意事項。
+# 輸入參數：
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出黃色 ANSI 彩色文字，格式：\033[1;33m<message>\033[0m\n
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 使用 printf 輸出 ANSI 粗體黃色碼（\033[1;33m）
+#   2. 輸出訊息內容
+#   3. 重置顏色（\033[0m）並換行
+#   4. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於重要操作提示、需要注意的選項
+yellow_msg() {
+    printf "\033[1;33m%s\033[0m\n" "$1" >&2
+}
+
 # 函式：debug_msg
 # 功能說明：輸出灰色調試訊息至 stderr，用於開發階段除錯。
 # 輸入參數：
@@ -1180,6 +1199,111 @@ push_to_remote() {
     fi
 }
 
+# 函式：amend_last_commit
+# 功能說明：修改最後一次 commit 的訊息，支援任務編號自動帶入。
+# 輸入參數：無
+# 輸出結果：
+#   成功修改回傳 0，失敗回傳 1
+# 例外/失敗：
+#   1. 檢測到尚未 commit 的變更時，警告並退出
+#   2. 沒有任何 commit 歷史時，錯誤並退出
+#   3. git commit --amend 執行失敗
+# 流程：
+#   1. 檢查是否有尚未 commit 的變更（git status --porcelain）
+#   2. 取得最後一次 commit 訊息作為參考
+#   3. 提示使用者輸入新的 commit 訊息
+#   4. 根據 AUTO_INCLUDE_TICKET 設定處理任務編號前綴
+#   5. 使用 git commit --amend 更新 commit 訊息
+# 副作用：修改最後一次 commit 的訊息
+# 參考：append_ticket_number_to_message()、confirm_commit()
+amend_last_commit() {
+    # 步驟 1: 檢查是否有尚未 commit 的變更
+    local uncommitted_changes
+    uncommitted_changes=$(git status --porcelain 2>/dev/null)
+    
+    if [[ -n "$uncommitted_changes" ]]; then
+        warning_msg "⚠️  偵測到尚未提交的變更！"
+        echo >&2
+        error_msg "請先提交或暫存 (stash) 目前的變更，再修改最後一次 commit 訊息。"
+        echo >&2
+        info_msg "未提交的變更："
+        echo "$uncommitted_changes" >&2
+        return 1
+    fi
+    
+    # 步驟 2: 取得最後一次 commit 訊息
+    local last_commit_message
+    last_commit_message=$(git log -1 --pretty=%B 2>/dev/null)
+    
+    if [[ -z "$last_commit_message" ]]; then
+        error_msg "無法取得最後一次 commit 訊息，可能沒有任何 commit 歷史。"
+        return 1
+    fi
+    
+    # 顯示目前的 commit 訊息供參考
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "📝 目前的 commit 訊息："
+    echo "「$last_commit_message」" >&2
+    echo "==================================================" >&2
+    echo >&2
+    
+    # 步驟 3: 提示使用者輸入新的 commit 訊息
+    cyan_msg "💬 請輸入新的 commit 訊息"
+    echo "==================================================" >&2
+    
+    # 顯示任務編號資訊（如果有）
+    if [[ -n "$TICKET_NUMBER" ]]; then
+        if [[ "$AUTO_INCLUDE_TICKET" == "true" ]]; then
+            white_msg "🎫 任務編號: $TICKET_NUMBER (將自動加入前綴)"
+        else
+            white_msg "🎫 任務編號: $TICKET_NUMBER (稍後詢問是否加入)"
+        fi
+        echo >&2
+    fi
+    
+    printf "➤ " >&2
+    read -r new_message
+    
+    # 移除前後空白
+    new_message=$(echo "$new_message" | xargs)
+    
+    # 檢查輸入是否為空
+    if [[ -z "$new_message" ]]; then
+        warning_msg "未輸入新的 commit 訊息，操作已取消。"
+        return 1
+    fi
+    
+    # 步驟 4: 處理任務編號前綴
+    local final_message
+    final_message=$(append_ticket_number_to_message "$new_message")
+    
+    # 步驟 5: 確認是否修改
+    echo >&2
+    echo "==================================================" >&2
+    highlight_success_msg "🔄 將要修改為："
+    echo "「$final_message」" >&2
+    echo "==================================================" >&2
+    
+    if ! confirm_commit "$final_message"; then
+        warning_msg "已取消修改 commit 訊息。"
+        return 1
+    fi
+    
+    # 步驟 6: 執行 git commit --amend
+    info_msg "正在修改最後一次 commit 訊息..."
+    if git commit --amend -m "$final_message" 2>/dev/null; then
+        success_msg "✅ Commit 訊息修改成功！"
+        echo >&2
+        info_msg "修改後的訊息："
+        echo "「$final_message」" >&2
+        return 0
+    else
+        error_msg "❌ 修改 commit 訊息失敗"
+        return 1
+    fi
+}
+
 # 配置變數
 DEFAULT_OPTION=1  # 預設選項：1=完整流程, 2=add+commit, 3=僅add
 
@@ -1249,6 +1373,7 @@ show_operation_menu() {
     purple_msg "4. 🤖 全自動模式 (add → AI commit → push)"
     cyan_msg "5. 💾 僅提交 (commit)"
     white_msg "6. 📊 顯示 Git 倉庫資訊"
+    yellow_msg "7. 🔄 變更最後一次 commit 訊息"
     echo "==================================================" >&2
     cyan_msg "🌿 目前分支: $current_branch$branch_info"
     
@@ -1263,7 +1388,7 @@ show_operation_menu() {
         white_msg "⚙️  沒有偵測到任務編號（ticket number）"
     fi
     
-    printf "請輸入選項 [1-6] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
+    printf "請輸入選項 [1-7] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
 
 # 獲取用戶選擇的操作
@@ -1310,8 +1435,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            7)
+                info_msg "✅ 已選擇：變更最後一次 commit 訊息"
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6"
+                warning_msg "無效選項：$choice，請輸入 1-7"
                 echo >&2
                 ;;
         esac
@@ -1343,6 +1473,7 @@ show_help() {
         4) default_mode_name="全自動模式 (add → AI commit → push)" ;;
         5) default_mode_name="僅提交 (commit)" ;;
         6) default_mode_name="顯示倉庫資訊" ;;
+        7) default_mode_name="變更最後一次 commit 訊息" ;;
         *) default_mode_name="未知" ;;
     esac
     
@@ -1368,7 +1499,7 @@ show_help() {
     cyan_msg "                git-auto-push --auto"
     echo >&2
     
-    purple_msg "📋 六種操作模式："
+    purple_msg "📋 七種操作模式："
     echo >&2
     
     highlight_success_msg "  1️⃣  完整流程 (add → commit → push)"
@@ -1412,6 +1543,16 @@ show_help() {
     white_msg "      • 顯示本地與遠端的同步狀態"
     white_msg "      • 顯示工作區狀態（已修改/未追蹤檔案）"
     white_msg "      • 適用場景：檢查倉庫狀態、診斷同步問題"
+    echo >&2
+    
+    yellow_msg "  7️⃣  變更最後一次 commit 訊息"
+    white_msg "      • 修改最近一次的 commit 訊息內容"
+    white_msg "      • 自動檢查是否有未提交的變更（有則警告並中止）"
+    white_msg "      • 顯示目前的 commit 訊息供參考"
+    white_msg "      • 支援任務編號自動帶入功能"
+    white_msg "      • 使用 git commit --amend 執行修改"
+    white_msg "      • 適用場景：修正 commit 訊息錯誤、補充說明"
+    white_msg "      • ⚠️  注意：請勿修改已推送至遠端的 commit"
     echo >&2
     
     purple_msg "🔧 相依工具："
@@ -1665,6 +1806,10 @@ main() {
         6)
             # 顯示 Git 倉庫資訊
             show_git_info
+            ;;
+        7)
+            # 變更最後一次 commit 訊息
+            amend_last_commit
             ;;
     esac
     

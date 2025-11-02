@@ -128,7 +128,7 @@ readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標�
 # 適用場景：
 #   - 團隊要求 commit 關聯任務編號時啟用
 #   - 個人專案或不需要任務編號時停用
-AUTO_INCLUDE_TICKET=true
+AUTO_INCLUDE_TICKET=false
 
 # ==============================================
 # 訊息輸出函數區域

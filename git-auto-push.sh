@@ -1740,6 +1740,45 @@ main() {
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
         
+        # 如果不是自動模式，顯示選單讓使用者選擇操作
+        if [ "$auto_mode" != true ]; then
+            echo >&2
+            info_msg "您可以選擇："
+            white_msg "  • 推送本地提交到遠端 (按 p)"
+            white_msg "  • 修改最後一次 commit 訊息 (按 7)"
+            white_msg "  • 查看倉庫資訊 (按 6)"
+            white_msg "  • 或按其他鍵取消"
+            echo >&2
+            printf "請選擇操作 [p/7/6/取消]: " >&2
+            read -r choice
+            choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)
+            
+            case "$choice" in
+                p|push)
+                    if push_to_remote; then
+                        success_msg "🎉 推送完成！"
+                    else
+                        warning_msg "❌ 推送失敗"
+                        exit 1
+                    fi
+                    exit 0
+                    ;;
+                7|amend)
+                    amend_last_commit
+                    exit 0
+                    ;;
+                6|info)
+                    show_git_info
+                    exit 0
+                    ;;
+                *)
+                    info_msg "已取消操作。"
+                    exit 0
+                    ;;
+            esac
+        fi
+        
+        # 自動模式：直接詢問是否推送
         printf "是否嘗試將本地提交推送到遠端倉庫？[Y/n]: " >&2
         read -r push_confirm
         push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)

@@ -18,6 +18,7 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 
 - 傳統 Git 工作流程自動化（新增、提交、推送）
 - Git 倉庫資訊查看（分支狀態、遠端配置、同步狀態、提交歷史）
+- Commit 訊息修改功能 🆕（安全修改最後一次 commit 訊息，支援任務編號）
 - GitHub Flow PR 流程自動化（分支建立到 PR 建立）
 - PR 生命週期管理（建立、撤銷、審查、合併）
 - 分支管理系統（安全刪除、主分支保護、多重確認）
@@ -59,6 +60,7 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 │   ├── github-flow.md           # GitHub Flow 流程說明
 │   ├── pr-cancel-feature.md     # PR 撤銷功能說明
 │   ├── git-info-feature.md      # Git 倉庫資訊顯示功能說明
+│   ├── FEATURE-AMEND.md         # 變更 commit 訊息功能說明 🆕
 │   └── git-usage.md             # Git 使用說明
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
@@ -145,12 +147,13 @@ git-auto-push --auto
 
 #### git-auto-push.sh 操作模式
 
-1. 流程：add → 互動輸入 commit → push（日常開發提交）
+1. 完整流程：add → 互動輸入 commit → push（日常開發提交）
 2. 本機提交：add → 互動輸入 commit（離線開發或測試提交）
 3. 僅新增檔案：add（暫存檔案變更）
 4. 全自動模式：add → AI 產生 commit → push（CI/CD 或快速提交）
 5. 僅提交：commit（提交已暫存的檔案）
 6. 顯示倉庫資訊：顯示 Git 倉庫詳細資訊（查看倉庫狀態與配置）
+7. 變更最後一次 commit 訊息 🆕：修改最近一次提交的訊息內容（修正錯誤或補充說明）
 
 ### git-auto-pr.sh - GitHub Flow PR 自動化
 
@@ -233,6 +236,21 @@ git-auto-pr
 # - 分支來源分析
 # - 同步狀態（領先/落後）
 # - 工作區狀態
+```
+
+#### 修改最後一次 commit 訊息 🆕
+
+```bash
+# 修正 commit 訊息錯誤或補充說明
+./git-auto-push.sh
+# 選擇選項 7
+# 功能特色：
+# - 自動檢查是否有未提交的變更（有則警告並中止）
+# - 顯示目前的 commit 訊息供參考
+# - 支援任務編號自動帶入
+# - 二次確認機制
+# - 安全執行 git commit --amend
+# ⚠️ 注意：僅適用於尚未推送的本地 commit
 ```
 
 ### git-auto-pr.sh 使用情境 ✨
@@ -742,11 +760,48 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
+### v2.1.0 - Commit 訊息修改功能 (2025-11-02)
+
+**🆕 新功能**
+
+- **變更最後一次 commit 訊息** 🆕：新增選項 7，安全修改最近一次提交的訊息
+  - 智慧安全檢查：自動偵測未提交的變更並警告
+  - 參考訊息顯示：修改前顯示目前的 commit 訊息
+  - 任務編號整合：支援自動帶入或詢問加入任務編號前綴
+  - 二次確認機制：顯示完整新訊息並要求確認
+  - 清楚反饋：成功後顯示修改結果
+- **快速選項** 🆕：無變更時提供 p/7/6 快速選項（推送/修改/查看）
+- **黃色訊息函數** 🆕：新增 `yellow_msg()` 用於重要提示
+
+**🔧 改進**
+
+- 操作模式擴展：從 6 選項擴展為 7 選項
+- 選單更新：輸入提示範圍更新為 `[1-7]`
+- 說明文件完善：新增「7️⃣ 變更最後一次 commit 訊息」完整說明
+- 無變更流程優化：提供更多操作選項而非僅推送
+
+**📁 新增文檔**
+
+- `docs/FEATURE-AMEND.md` - 變更 commit 訊息功能詳細說明
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：2184 行（+129 行新功能）
+
+**⚠️ 使用注意**
+
+- ✅ 適用於尚未推送的本地 commit
+- ⚠️ 避免修改已推送至遠端的 commit
+- 💡 團隊協作時建議使用新 commit 而非 amend
+
+---
+
 ### 最新版本亮點 (v2.0.0)
 
-- 1655 行 git-auto-push.sh - 傳統 Git 工作流程自動化，註解與流程說明
+- 2184 行 git-auto-push.sh - 傳統 Git 工作流程自動化，註解與流程說明
 - 2896 行 git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
-- 11 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
+- 12 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（7 種 push + 5 種 PR）
+- Commit 訊息修改功能 🆕 - 安全修改最後一次 commit 訊息
 - Git 倉庫資訊查看 - 一鍵瀏覽倉庫狀態
 - 分支管理 - 安全刪除機制，主分支保護，多重確認
 - 文件標準 - 所有主要流程函數都有註解
@@ -939,6 +994,7 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
 - [docs/pr-cancel-feature.md](docs/pr-cancel-feature.md) - PR 撤銷功能詳細說明
 - [docs/git-info-feature.md](docs/git-info-feature.md) - Git 倉庫資訊功能說明
+- [docs/FEATURE-AMEND.md](docs/FEATURE-AMEND.md) - 變更 commit 訊息功能說明 🆕
 
 ## 截圖展示
 

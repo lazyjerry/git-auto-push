@@ -1,0 +1,343 @@
+sequenceDiagram
+    autonumber
+
+    %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e8f4f8','primaryTextColor':'#333','primaryBorderColor':'#7C9CB8','lineColor':'#5B9BD5','secondaryColor':'#fff9e6','tertiaryColor':'#f5f5f5','background':'#ffffff','mainBkg':'#ffffff','noteBkgColor':'#fff9db','noteTextColor':'#333','noteBorderColor':'#d4aa00','actorBorder':'#7C9CB8','actorBkg':'#e8f4f8','actorTextColor':'#333','actorLineColor':'#7C9CB8','signalColor':'#333','signalTextColor':'#333','labelBoxBkgColor':'#e8f4f8','labelBoxBorderColor':'#7C9CB8','labelTextColor':'#333','loopTextColor':'#333','activationBorderColor':'#7C9CB8','activationBkgColor':'#d4e9f7','sequenceNumberColor':'white'}}}%%
+
+    %% 定義參與者
+    actor 開發者
+    participant 腳本 as git-auto-pr.sh
+    participant Git
+    participant GitHub_CLI as GitHub CLI (gh)
+    participant AI工具 as AI 工具<br/>(codex/gemini/claude)
+    participant GitHub as GitHub 伺服器
+    participant 分支管理 as 分支管理系統
+    participant PR管理 as PR 管理系統
+
+    %% 初始化與環境檢查
+    rect rgb(240,255,240)
+        note over 開發者,GitHub: 【初始化與環境檢查階段】
+        開發者->>腳本: 執行腳本 (./git-auto-pr.sh)
+        腳本->>Git: 檢查是否為 Git 倉庫
+        Git-->>腳本: 回傳倉庫狀態
+        
+        alt Git 倉庫不存在
+            腳本-->>開發者: 錯誤：非 Git 倉庫
+        else Git 倉庫存在
+            腳本->>GitHub_CLI: 檢查 gh CLI 可用性
+            GitHub_CLI-->>腳本: 回傳安裝狀態
+            
+            alt gh CLI 未安裝
+                腳本-->>開發者: 錯誤：請安裝 GitHub CLI
+            else gh CLI 已安裝
+                腳本->>GitHub_CLI: 檢查認證狀態
+                GitHub_CLI->>GitHub: 驗證認證
+                GitHub-->>GitHub_CLI: 認證結果
+                GitHub_CLI-->>腳本: 回傳認證狀態
+                
+                alt 認證失效
+                    腳本-->>開發者: 提示：請執行 gh auth login
+                end
+            end
+        end
+    end
+
+    %% 操作模式選擇
+    rect rgb(230,242,255)
+        note over 開發者,AI工具: 【操作模式選擇階段】
+        腳本->>開發者: 顯示五種操作模式選單
+        開發者->>腳本: 選擇操作模式 (1-5)
+        
+        alt 模式 1: 建立功能分支
+            note over 腳本: 基於主分支建立新分支
+        else 模式 2: 建立 Pull Request
+            note over 腳本: 建立 PR 並生成內容
+        else 模式 3: 撤銷 PR
+            note over 腳本: 關閉或 revert PR
+        else 模式 4: 審查並合併 PR
+            note over 腳本: 互動式 PR 審查與合併
+        else 模式 5: 刪除分支
+            note over 腳本: 安全刪除本地與遠端分支
+        end
+    end
+
+    %% 模式 1: 建立功能分支流程
+    rect rgb(255,245,230)
+        note over 腳本,分支管理: 【模式 1：建立功能分支流程】
+        
+        alt 模式 1 被選擇
+            腳本->>分支管理: 偵測主分支 (uat/main/master)
+            分支管理->>Git: 檢查主分支存在性
+            Git-->>分支管理: 回傳主分支資訊
+            分支管理-->>腳本: 確定主分支名稱
+            
+            腳本->>開發者: 要求輸入分支資訊
+            開發者->>腳本: 提供 issue key, 分支類型, 描述
+            
+            alt 選擇 AI 生成分支名稱
+                腳本->>AI工具: 發送分支資訊與提示詞 (嘗試 codex)
+                
+                alt codex 成功
+                    AI工具-->>腳本: 回傳 AI 生成分支名稱
+                else codex 失敗
+                    腳本->>AI工具: 嘗試 gemini
+                    alt gemini 成功
+                        AI工具-->>腳本: 回傳 AI 生成分支名稱
+                    else gemini 失敗
+                        腳本->>AI工具: 嘗試 claude
+                        alt claude 成功
+                            AI工具-->>腳本: 回傳 AI 生成分支名稱
+                        else 所有工具失敗
+                            腳本->>腳本: 使用預設命名規則生成
+                        end
+                    end
+                end
+                
+            else 使用預設命名規則
+                腳本->>腳本: 依規則生成分支名稱
+            end
+            
+            腳本->>開發者: 顯示生成的分支名稱，確認建立
+            開發者->>腳本: 確認分支名稱
+            
+            腳本->>Git: git checkout 主分支
+            腳本->>Git: git pull origin 主分支
+            腳本->>Git: git checkout -b 新分支名稱
+            Git-->>腳本: 分支建立完成
+            
+            腳本-->>開發者: 顯示分支建立成功與後續建議
+        end
+    end
+
+    %% 模式 2: 建立 PR 流程
+    rect rgb(255,240,240)
+        note over 腳本,GitHub: 【模式 2：建立 Pull Request 流程】
+        
+        alt 模式 2 被選擇
+            腳本->>Git: 檢查當前分支是否為主分支
+            Git-->>腳本: 回傳分支資訊
+            
+            alt 在主分支上
+                腳本-->>開發者: 錯誤：不能在主分支建立 PR
+            else 在功能分支上
+                腳本->>Git: 檢查是否有未提交變更
+                Git-->>腳本: 回傳變更狀態
+                
+                alt 有未提交變更
+                    腳本-->>開發者: 警告：請先提交變更
+                else 沒有未提交變更
+                    腳本->>Git: git push origin 當前分支
+                    Git->>GitHub: 推送分支
+                    GitHub-->>Git: 推送結果
+                    Git-->>腳本: 推送完成
+                    
+                    腳本->>Git: 收集 commits 資訊
+                    Git-->>腳本: 回傳 commit 歷史
+                    
+                    alt 選擇 AI 生成 PR 內容
+                        腳本->>AI工具: 發送 commits 與提示詞 (嘗試 codex)
+                        
+                        alt codex 成功
+                            AI工具-->>腳本: 回傳 AI 生成 PR 標題與內容
+                        else codex 失敗
+                            腳本->>AI工具: 嘗試 gemini
+                            alt gemini 成功
+                                AI工具-->>腳本: 回傳 AI 生成 PR 標題與內容
+                            else gemini 失敗
+                                腳本->>AI工具: 嘗試 claude
+                                alt claude 成功
+                                    AI工具-->>腳本: 回傳 AI 生成 PR 標題與內容
+                                else 所有工具失敗
+                                    腳本->>開發者: 提示手動輸入 PR 內容
+                                    開發者->>腳本: 輸入 PR 標題與描述
+                                end
+                            end
+                        end
+                        
+                    else 手動輸入 PR 內容
+                        開發者->>腳本: 輸入 PR 標題與描述
+                    end
+                    
+                    腳本->>開發者: 顯示 PR 內容預覽，確認建立
+                    開發者->>腳本: 確認建立 PR
+                    
+                    腳本->>GitHub_CLI: gh pr create 建立 PR
+                    GitHub_CLI->>GitHub: 建立 PR 請求
+                    GitHub-->>GitHub_CLI: PR 建立結果
+                    GitHub_CLI-->>腳本: 回傳 PR URL 與編號
+                    
+                    腳本-->>開發者: 顯示 PR 建立成功與 URL
+                end
+            end
+        end
+    end
+
+    %% 模式 3: 撤銷 PR 流程
+    rect rgb(255,240,240)
+        note over 腳本,PR管理: 【模式 3：撤銷 PR 流程（智慧模式）】
+        
+        alt 模式 3 被選擇
+            腳本->>GitHub_CLI: gh pr list --state=open 列出開放 PR
+            GitHub_CLI->>GitHub: 查詢開放 PR
+            GitHub-->>GitHub_CLI: 回傳 PR 清單
+            GitHub_CLI-->>腳本: 開放 PR 清單
+            
+            alt 沒有開放的 PR
+                腱本->>GitHub_CLI: gh pr list --state=merged 查詢已合併 PR
+                GitHub_CLI->>GitHub: 查詢已合併 PR
+                GitHub-->>GitHub_CLI: 回傳已合併 PR 清單
+                GitHub_CLI-->>腳本: 已合併 PR 清單
+                
+                alt 有已合併 PR
+                    腳本->>開發者: 顯示已合併 PR，詢問是否 revert
+                    開發者->>腳本: 選擇要 revert 的 PR
+                    
+                    腳本->>開發者: 二次確認 revert 操作
+                    開發者->>腳本: 確認 revert
+                    
+                    腳本->>GitHub_CLI: gh pr revert PR編號
+                    GitHub_CLI->>GitHub: 執行 revert 操作
+                    GitHub-->>GitHub_CLI: Revert 結果
+                    GitHub_CLI-->>腳本: 回傳 revert 狀態
+                    
+                else 沒有可操作的 PR
+                    腳本-->>開發者: 提示：沒有可撤銷的 PR
+                end
+                
+            else 有開放的 PR
+                腳本->>開發者: 顯示開放 PR 清單
+                開發者->>腳本: 選擇要關閉的 PR
+                
+                腳本->>開發者: 確認關閉 PR
+                開發者->>腳本: 確認關閉
+                
+                腳本->>GitHub_CLI: gh pr close PR編號
+                GitHub_CLI->>GitHub: 關閉 PR
+                GitHub-->>GitHub_CLI: 關閉結果
+                GitHub_CLI-->>腳本: 回傳關閉狀態
+            end
+            
+            腳本-->>開發者: 顯示撤銷操作完成
+        end
+    end
+
+    %% 模式 4: 審查並合併 PR 流程
+    rect rgb(230,242,255)
+        note over 腳本,GitHub: 【模式 4：審查並合併 PR 流程】
+        
+        alt 模式 4 被選擇
+            腳本->>GitHub_CLI: gh pr list --state=open 列出開放 PR
+            GitHub_CLI->>GitHub: 查詢開放 PR
+            GitHub-->>GitHub_CLI: 回傳 PR 清單
+            GitHub_CLI-->>腳本: 開放 PR 清單
+            
+            alt 沒有開放的 PR
+                腳本-->>開發者: 提示：沒有可審查的 PR
+            else 有開放的 PR
+                腳本->>開發者: 顯示 PR 清單
+                開發者->>腳本: 選擇要審查的 PR
+                
+                腳本->>GitHub_CLI: gh pr view PR編號 --comments
+                GitHub_CLI->>GitHub: 取得 PR 詳細資訊
+                GitHub-->>GitHub_CLI: 回傳 PR 內容與留言
+                GitHub_CLI-->>腳本: PR 詳細資訊
+                
+                腳本->>GitHub_CLI: gh pr checks PR編號
+                GitHub_CLI->>GitHub: 查詢 CI 狀態
+                GitHub-->>GitHub_CLI: 回傳 CI 檢查結果
+                GitHub_CLI-->>腳本: CI 狀態資訊
+                
+                腳本->>開發者: 顯示 PR 詳情與 CI 狀態
+                腳本->>開發者: 詢問是否繼續合併
+                開發者->>腳本: 確認合併決定
+                
+                alt 決定合併
+                    腳本->>開發者: 選擇合併策略 (squash/merge/rebase)
+                    開發者->>腳本: 選擇 squash merge（預設）
+                    
+                    腳本->>GitHub_CLI: gh pr merge PR編號 --squash
+                    GitHub_CLI->>GitHub: 執行 squash merge
+                    GitHub-->>GitHub_CLI: 合併結果
+                    GitHub_CLI-->>腳本: 回傳合併狀態
+                    
+                    腳本-->>開發者: 顯示合併成功
+                    
+                else 決定不合併
+                    腳本->>開發者: 是否需要添加審查留言
+                    開發者->>腳本: 輸入審查意見
+                    
+                    腳本->>GitHub_CLI: gh pr comment PR編號
+                    GitHub_CLI->>GitHub: 添加留言
+                    GitHub-->>GitHub_CLI: 留言結果
+                    GitHub_CLI-->>腳本: 留言完成
+                end
+            end
+        end
+    end
+
+    %% 模式 5: 刪除分支流程
+    rect rgb(255,245,230)
+        note over 腳本,分支管理: 【模式 5：刪除分支流程（安全模式）】
+        
+        alt 模式 5 被選擇
+            腳本->>分支管理: 檢查主分支保護清單
+            分支管理-->>腳本: 回傳保護分支清單
+            
+            腳本->>Git: git branch --list 列出本地分支
+            Git-->>腳本: 回傳本地分支清單
+            
+            腳本->>分支管理: 過濾掉受保護的主分支
+            分支管理-->>腳本: 回傳可刪除分支清單
+            
+            alt 沒有可刪除的分支
+                腳本-->>開發者: 提示：沒有可刪除的分支
+            else 有可刪除的分支
+                腳本->>開發者: 顯示可刪除分支清單
+                開發者->>腳本: 選擇要刪除的分支
+                
+                腳本->>Git: 檢查分支是否已合併
+                Git-->>腳本: 回傳合併狀態
+                
+                alt 分支未合併
+                    腳本->>開發者: 警告：分支未合併，確認強制刪除
+                    開發者->>腳本: 確認是否強制刪除
+                    
+                    alt 拒絕強制刪除
+                        腳本-->>開發者: 取消刪除操作
+                    end
+                end
+                
+                alt 繼續刪除流程
+                    腳本->>開發者: 多重確認刪除操作
+                    開發者->>腳本: 最終確認刪除
+                    
+                    腳本->>Git: git branch -D 分支名稱（強制刪除本地）
+                    Git-->>腳本: 本地分支刪除結果
+                    
+                    腳本->>GitHub_CLI: gh repo view 檢查遠端分支存在
+                    GitHub_CLI->>GitHub: 查詢遠端分支
+                    GitHub-->>GitHub_CLI: 遠端分支資訊
+                    GitHub_CLI-->>腳本: 遠端分支存在狀態
+                    
+                    alt 遠端分支存在
+                        腳本->>Git: git push origin --delete 分支名稱
+                        Git->>GitHub: 刪除遠端分支
+                        GitHub-->>Git: 遠端刪除結果
+                        Git-->>腳本: 遠端分支刪除完成
+                    end
+                    
+                    腳本-->>開發者: 顯示分支刪除完成狀態
+                end
+            end
+        end
+    end
+
+    %% 完成與清理階段
+    rect rgb(245,245,245)
+        note over 開發者,腳本: 【完成與清理階段】
+        腳本->>腳本: 清理暫存資源
+        腳本-->>開發者: 顯示操作完成訊息與後續建議
+        
+        alt 發生錯誤
+            腳本-->>開發者: 提供詳細錯誤資訊與修復指引
+        end
+    end

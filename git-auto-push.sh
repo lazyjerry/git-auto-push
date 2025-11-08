@@ -719,7 +719,7 @@ add_all_files() {
     # 列出所有變更的檔案（包含未追蹤的檔案）
     local all_files=()
     local git_status_output
-    git_status_output=$(git status --porcelain 2>/dev/null)
+    git_status_output=$(get_git_status)
     if [[ -n "$git_status_output" ]]; then
         while IFS= read -r file; do
             # git status --porcelain 格式：前兩個字元是狀態，後面是檔案路徑
@@ -2020,7 +2020,7 @@ push_to_remote() {
 amend_last_commit() {
     # 步驟 1: 檢查是否有尚未 commit 的變更
     local uncommitted_changes
-    uncommitted_changes=$(git status --porcelain 2>/dev/null)
+    uncommitted_changes=$(get_git_status)
     
     if [[ -n "$uncommitted_changes" ]]; then
         warning_msg "⚠️  偵測到尚未提交的變更！"

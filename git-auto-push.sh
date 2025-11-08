@@ -130,6 +130,24 @@ readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標�
 #   - 個人專案或不需要任務編號時停用
 AUTO_INCLUDE_TICKET=false
 
+# Commit 訊息品質檢查設定
+# 說明：在 commit 前使用 AI 檢查訊息是否具有明確的目的和功能性。
+#       確保 commit 訊息清楚描述變更內容，避免無意義或模糊的訊息。
+# 效果：
+#   - true：自動使用 AI 檢查 commit 訊息品質，若意義不明則警告
+#   - false：提示是否要檢查，預設不檢查（按 Enter 跳過）
+# 檢查標準：
+#   - 訊息是否描述了具體的變更內容
+#   - 是否有明確的目的（新增功能、修復問題、改善效能等）
+#   - 避免過於簡短或模糊的描述（如「update」、「fix」、「changes」）
+# 範例：
+#   ✅ 良好：「新增使用者登入功能」、「修復檔案上傳時的記憶體洩漏」
+#   ❌ 不良：「update」、「修改」、「調整程式碼」、「fix bug」
+# 適用場景：
+#   - 團隊要求高品質 commit 訊息時啟用
+#   - 個人專案或快速提交時可停用
+AUTO_CHECK_COMMIT_QUALITY=true
+
 # ==============================================
 # 訊息輸出函數區域
 # ==============================================
@@ -1125,19 +1143,230 @@ get_commit_message() {
     done
 }
 
+# 函式：run_simple_ai_command
+# 功能說明：執行簡單的 AI 命令（不需要 git diff），用於品質檢查等場景。
+# 輸入參數：
+#   $1 <tool_name> AI 工具名稱（codex/gemini/claude）
+#   $2 <prompt> 提示詞內容
+# 輸出結果：
+#   STDOUT 輸出 AI 回應內容（已清理）
+#   返回 0 表示成功，1 表示失敗
+# 流程：
+#   1. 檢查工具是否可用
+#   2. 建立臨時檔案儲存提示詞
+#   3. 執行 AI 工具並捕捉輸出
+#   4. 清理輸出內容
+#   5. 處理錯誤情況
+# 副作用：建立並清理臨時檔案
+# 參考：clean_ai_message()
+run_simple_ai_command() {
+    local tool_name="$1"
+    local prompt="$2"
+    local timeout=45
+    
+    # 檢查工具是否可用
+    if ! command -v "$tool_name" &>/dev/null; then
+        debug_msg "$tool_name 工具未安裝"
+        return 1
+    fi
+    
+    local output=""
+    local exit_code=0
+    
+    # 建立臨時檔案
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    echo "$prompt" > "$temp_prompt"
+    
+    # 根據不同工具使用不同的調用方式
+    case "$tool_name" in
+        "codex")
+            # codex 使用檔案輸入
+            if command -v timeout >/dev/null 2>&1; then
+                output=$(timeout ${timeout}s codex < "$temp_prompt" 2>&1)
+                exit_code=$?
+            else
+                output=$(codex < "$temp_prompt" 2>&1)
+                exit_code=$?
+            fi
+            ;;
+        "gemini"|"claude")
+            # gemini 和 claude 使用 stdin
+            if command -v timeout >/dev/null 2>&1; then
+                output=$(timeout ${timeout}s "$tool_name" < "$temp_prompt" 2>&1)
+                exit_code=$?
+            else
+                output=$("$tool_name" < "$temp_prompt" 2>&1)
+                exit_code=$?
+            fi
+            ;;
+        *)
+            debug_msg "不支援的 AI 工具: $tool_name"
+            rm -f "$temp_prompt"
+            return 1
+            ;;
+    esac
+    
+    # 清理臨時檔案
+    rm -f "$temp_prompt"
+    
+    # 檢查執行結果
+    if [ $exit_code -eq 124 ]; then
+        debug_msg "$tool_name 執行超時（${timeout}秒）"
+        return 1
+    elif [ $exit_code -ne 0 ]; then
+        debug_msg "$tool_name 執行失敗（退出碼: $exit_code）"
+        return 1
+    fi
+    
+    if [ -z "$output" ]; then
+        debug_msg "$tool_name 沒有返回內容"
+        return 1
+    fi
+    
+    # 清理輸出
+    output=$(clean_ai_message "$output")
+    
+    if [ -z "$output" ]; then
+        debug_msg "$tool_name 輸出清理後為空"
+        return 1
+    fi
+    
+    # 輸出結果
+    echo "$output"
+    return 0
+}
+
+# 函式：check_commit_message_quality
+# 功能說明：使用 AI 檢查 commit 訊息是否具有明確的目的和功能性。
+# 輸入參數：
+#   $1 <message> commit 訊息內容
+# 輸出結果：
+#   0 - 訊息品質良好或使用者選擇繼續
+#   1 - 訊息品質不佳且使用者選擇取消
+# 流程：
+#   1. 根據 AUTO_CHECK_COMMIT_QUALITY 決定是否檢查
+#   2. 使用 AI 工具分析訊息品質
+#   3. 若品質不佳，顯示警告並讓使用者決定是否繼續
+# 副作用：輸出至 stderr
+# 參考：AI_TOOLS 陣列、run_simple_ai_command()
+check_commit_message_quality() {
+    local message="$1"
+    local should_check=false
+    
+    # 步驟 1: 根據設定決定是否檢查
+    if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+        should_check=true
+    else
+        # 詢問使用者是否要檢查（預設 no）
+        echo >&2
+        printf "是否檢查 commit 訊息品質？[y/N]: " >&2
+        read -r check_confirm
+        check_confirm=$(echo "$check_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        if [[ "$check_confirm" =~ ^(y|yes|是)$ ]]; then
+            should_check=true
+        else
+            info_msg "ℹ️  跳過品質檢查"
+            return 0  # 使用者選擇不檢查，直接通過
+        fi
+    fi
+    
+    # 如果不檢查，直接返回
+    if [[ "$should_check" != "true" ]]; then
+        return 0
+    fi
+    
+    # 步驟 2: 使用 AI 檢查訊息品質
+    echo >&2
+    info_msg "🔍 正在檢查 commit 訊息品質..."
+    
+    local check_prompt="請分析以下 commit 訊息是否具有明確的目的和功能性。
+判斷標準：
+1. 是否描述了具體的變更內容（新增、修改、刪除了什麼）
+2. 是否有明確的目的（為什麼要做這個變更）
+3. 避免過於簡短或模糊的描述（如「update」、「fix」、「changes」、「調整」）
+
+Commit 訊息：「$message」
+
+請只回答以下其中一項：
+- 「良好」：訊息清楚描述了變更內容和目的
+- 「不良」：訊息過於模糊或缺乏明確目的，並簡短說明原因（一行）"
+    
+    local ai_response=""
+    local tool_used=""
+    
+    # 嘗試使用 AI 工具檢查
+    for tool in "${AI_TOOLS[@]}"; do
+        if ai_response=$(run_simple_ai_command "$tool" "$check_prompt"); then
+            tool_used="$tool"
+            success_msg "✓ 使用 $tool 完成品質檢查"
+            break
+        fi
+    done
+    
+    # 步驟 3: 如果 AI 檢查失敗，直接通過（不影響提交流程）
+    if [[ -z "$ai_response" ]]; then
+        warning_msg "⚠️  AI 品質檢查失敗（所有工具都無法使用），將繼續提交流程"
+        return 0
+    fi
+    
+    # 步驟 4: 分析 AI 回應
+    ai_response=$(echo "$ai_response" | xargs)
+    
+    if [[ "$ai_response" =~ ^良好 ]] || [[ "$ai_response" =~ ^Good ]] || [[ "$ai_response" =~ ^GOOD ]]; then
+        success_msg "✅ Commit 訊息品質良好"
+        return 0
+    elif [[ "$ai_response" =~ ^不良 ]] || [[ "$ai_response" =~ ^Bad ]] || [[ "$ai_response" =~ ^BAD ]] || [[ "$ai_response" =~ 模糊 ]] || [[ "$ai_response" =~ 不明確 ]]; then
+        # 顯示警告
+        echo >&2
+        warning_msg "⚠️  Commit 訊息品質警告"
+        echo "==================================================" >&2
+        error_msg "AI 分析結果："
+        echo "$ai_response" >&2
+        echo "==================================================" >&2
+        echo >&2
+        
+        # 詢問是否繼續
+        printf "是否仍要繼續提交？[y/N]: " >&2
+        read -r continue_confirm
+        continue_confirm=$(echo "$continue_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        if [[ "$continue_confirm" =~ ^(y|yes|是)$ ]]; then
+            info_msg "使用者選擇繼續提交"
+            return 0
+        else
+            warning_msg "已取消提交，請修改 commit 訊息"
+            return 1
+        fi
+    else
+        # AI 回應無法判斷，顯示內容並預設通過
+        debug_msg "AI 回應內容: $ai_response"
+        warning_msg "⚠️  無法判斷訊息品質，將繼續提交流程"
+        return 0
+    fi
+}
+
 # 確認是否要提交變更
 confirm_commit() {
     local message="$1"
     
+    # 步驟 1: 檢查 commit 訊息品質（在顯示確認訊息之前）
+    if ! check_commit_message_quality "$message"; then
+        return 1  # 使用者取消提交
+    fi
+    
     # 清空輸入緩衝區，避免前一個 read 的 Enter 鍵影響此次輸入
     read -r -t 0.1 dummy 2>/dev/null || true
     
+    # 步驟 2: 顯示確認訊息
     echo >&2
     echo "==================================================" >&2
     highlight_success_msg "💬 確認提交資訊:"
     echo "Commit Message: $message" >&2
     echo "==================================================" >&2
     
+    # 步驟 3: 詢問使用者確認
     # 持續詢問直到獲得有效回應
     while true; do
         printf "是否確認提交？[Y/n]: " >&2
@@ -1612,10 +1841,28 @@ show_help() {
     white_msg "    適用場景：團隊規範、專案管理工具整合"
     echo >&2
     
+    cyan_msg "  Commit 訊息品質檢查："
+    white_msg "    當前設定：AUTO_CHECK_COMMIT_QUALITY=${AUTO_CHECK_COMMIT_QUALITY}"
+    white_msg "    位置：腳本頂部 AUTO_CHECK_COMMIT_QUALITY 變數（約 133 行）"
+    white_msg "    功能說明："
+    if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+        white_msg "      ✓ 自動檢查模式：提交前自動使用 AI 檢查訊息品質"
+        white_msg "      ✓ 檢查標準：描述具體變更、明確目的、避免模糊描述"
+        white_msg "      ✓ 範例警告：'fix bug'（過於簡略）、'update'（缺乏目的）"
+    else
+        white_msg "      ✓ 詢問模式：提交前詢問是否使用 AI 檢查（預設 N）"
+        white_msg "      ✓ 使用者可選擇檢查或跳過，不影響快速提交流程"
+    fi
+    white_msg "    檢查工具：依 AI_TOOLS 順序使用（codex/gemini/claude）"
+    white_msg "    容錯機制：AI 失敗時不影響提交流程"
+    white_msg "    適用場景：提升 commit 訊息品質、團隊規範執行"
+    echo >&2
+    
     purple_msg "🔐 安全機制："
     white_msg "  • 變更檢查：執行前檢查是否有待提交的變更"
     white_msg "  • 中斷處理：Ctrl+C 安全中斷並清理資源"
     white_msg "  • 超時控制：AI 工具調用有超時機制（45-90 秒）"
+    white_msg "  • 品質檢查：提交前可選擇使用 AI 檢查 commit 訊息品質"
     white_msg "  • 確認機制：提交前顯示 commit 訊息供確認"
     white_msg "  • 權限控制：不需要 root 權限，僅操作當前倉庫"
     echo >&2

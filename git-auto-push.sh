@@ -2998,7 +2998,7 @@ show_git_info() {
     # 7. 工作區狀態
     info_msg "📋 工作區狀態:"
     local status_output
-    status_output=$(git status --short 2>/dev/null)
+    status_output=$(get_git_status)
     if [ -n "$status_output" ]; then
         warning_msg "   有未提交的變更:"
         echo "$status_output" | while IFS= read -r line; do

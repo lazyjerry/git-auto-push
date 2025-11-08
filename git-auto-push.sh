@@ -723,11 +723,29 @@ add_all_files() {
     if [[ -n "$git_status_output" ]]; then
         while IFS= read -r file; do
             # git status --porcelain 格式：前兩個字元是狀態，後面是檔案路徑
+            # 取得狀態碼（前兩個字元）
+            local status="${file:0:2}"
             # 移除前兩個字元和空格，取得檔案路徑
             local file_path="${file:3}"
-            if [[ -n "$file_path" ]]; then
-                all_files+=("$file_path")
-            fi
+            
+            # 處理不同的 Git 狀態
+            case "$status" in
+                "R "*)
+                    # Rename 操作：已經正確暫存，跳過不處理
+                    debug_msg "檢測到 rename 操作（已暫存）：$file_path"
+                    ;;
+                "D "*)
+                    # Delete 操作：檔案已被刪除，跳過不處理
+                    debug_msg "檢測到刪除操作（已暫存）：$file_path"
+                    ;;
+                *)
+                    # 其他狀態：需要添加的檔案（新增、修改、未追蹤等）
+                    if [[ -n "$file_path" ]]; then
+                        all_files+=("$file_path")
+                        debug_msg "添加檔案到處理清單：$file_path（狀態：$status）"
+                    fi
+                    ;;
+            esac
         done <<< "$git_status_output"
     fi
     

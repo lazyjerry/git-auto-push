@@ -1,0 +1,201 @@
+sequenceDiagram
+    autonumber
+
+    %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e8f4f8','primaryTextColor':'#333','primaryBorderColor':'#7C9CB8','lineColor':'#5B9BD5','secondaryColor':'#fff9e6','tertiaryColor':'#f5f5f5','background':'#ffffff','mainBkg':'#ffffff','noteBkgColor':'#fff9db','noteTextColor':'#333','noteBorderColor':'#d4aa00','actorBorder':'#7C9CB8','actorBkg':'#e8f4f8','actorTextColor':'#333','actorLineColor':'#7C9CB8','signalColor':'#333','signalTextColor':'#333','labelBoxBkgColor':'#e8f4f8','labelBoxBorderColor':'#7C9CB8','labelTextColor':'#333','loopTextColor':'#333','activationBorderColor':'#7C9CB8','activationBkgColor':'#d4e9f7','sequenceNumberColor':'white'}}}%%
+
+    %% 定義參與者
+    actor 開發者
+    participant 腳本 as git-auto-push.sh
+    participant Git
+    participant AI工具 as AI 工具<br/>(codex/gemini/claude)
+    participant 過濾系統 as 檔案過濾系統
+    participant 品質檢查 as Commit 品質檢查
+    participant 遠端倉庫 as Git 遠端倉庫
+
+    %% 初始化與環境檢查
+    rect rgb(240,255,240)
+        note over 開發者,遠端倉庫: 【初始化與環境檢查階段】
+        開發者->>腳本: 執行腳本 (./git-auto-push.sh 或 --auto)
+        腳本->>Git: 檢查是否為 Git 倉庫
+        Git-->>腳本: 回傳倉庫狀態
+        
+        alt Git 倉庫不存在
+            腳本-->>開發者: 錯誤：非 Git 倉庫
+        else Git 倉庫存在
+            腳本->>Git: 檢查倉庫變更狀態
+            Git-->>腳本: 回傳變更清單
+            
+            alt 無變更檔案
+                腳本-->>開發者: 提示：沒有檔案變更，程式退出
+            end
+        end
+    end
+
+    %% 選單模式 vs 自動模式
+    rect rgb(230,242,255)
+        note over 開發者,AI工具: 【操作模式選擇階段】
+        
+        alt 互動模式（預設）
+            腳本->>開發者: 顯示七種操作模式選單
+            開發者->>腳本: 選擇操作模式 (1-7)
+            
+            alt 模式 1: 完整流程
+                note over 腳本: add → commit → push
+            else 模式 2: 本機提交
+                note over 腳本: add → commit (不推送)
+            else 模式 3: 僅新增檔案
+                note over 腳本: 僅 add 檔案
+            else 模式 4: 全自動流程
+                note over 腳本: add → AI commit → push
+            else 模式 5: 僅提交
+                note over 腳本: commit 已暫存檔案
+            else 模式 6: 倉庫資訊
+                note over 腳本: 顯示 Git 倉庫詳情
+            else 模式 7: 變更 commit 訊息
+                note over 腳本: 修改最後一次 commit
+            end
+            
+        else 全自動模式 (--auto)
+            note over 腳本: 直接執行模式 4 流程
+        end
+    end
+
+    %% 檔案過濾與添加階段（適用於模式 1-4）
+    rect rgb(255,245,230)
+        note over 腳本,遠端倉庫: 【檔案過濾與添加階段】（模式 1-4）
+        
+        alt 需要檔案添加的模式 (1-4)
+            腳本->>過濾系統: 讀取過濾規則 (git-auto-push-ignore.txt)
+            過濾系統-->>腳本: 回傳過濾規則清單
+            
+            腳本->>Git: 取得所有變更檔案
+            Git-->>腳本: 回傳變更檔案清單
+            
+            腳本->>過濾系統: 應用過濾規則
+            過濾系統-->>腳本: 回傳過濾後檔案清單
+            
+            腳本->>開發者: 顯示將要添加的檔案清單
+            開發者->>腳本: 確認添加檔案
+            
+            腳本->>Git: git add 選定檔案
+            Git-->>腳本: 添加完成
+        end
+    end
+
+    %% Commit 訊息處理階段（適用於模式 1-2, 4-5, 7）
+    rect rgb(255,240,240)
+        note over 腳本,品質檢查: 【Commit 訊息處理階段】（模式 1-2, 4-5, 7）
+        
+        alt 模式 1, 2: 互動式 commit
+            腳本->>開發者: 提供 commit 訊息選項
+            
+            alt 選擇 AI 生成
+                腳本->>Git: 取得變更差異 (git diff)
+                Git-->>腳本: 回傳 diff 內容
+                
+                腳本->>AI工具: 發送 diff 與提示詞 (嘗試 codex)
+                
+                alt codex 成功
+                    AI工具-->>腳本: 回傳 AI 生成訊息
+                else codex 失敗
+                    腳本->>AI工具: 嘗試 gemini
+                    alt gemini 成功
+                        AI工具-->>腳本: 回傳 AI 生成訊息
+                    else gemini 失敗
+                        腳本->>AI工具: 嘗試 claude
+                        alt claude 成功
+                            AI工具-->>腳本: 回傳 AI 生成訊息
+                        else 所有工具失敗
+                            腳本->>開發者: 提示手動輸入
+                            開發者->>腳本: 手動輸入 commit 訊息
+                        end
+                    end
+                end
+                
+            else 選擇手動輸入
+                開發者->>腳本: 輸入 commit 訊息
+            end
+            
+            %% 品質檢查階段
+            腳本->>品質檢查: 執行 commit 訊息品質檢查
+            品質檢查->>AI工具: 分析 commit 訊息品質
+            AI工具-->>品質檢查: 回傳品質分析結果
+            品質檢查-->>腳本: 品質檢查完成
+            
+            alt 品質檢查不通過
+                腳本->>開發者: 顯示品質建議，詢問是否繼續
+                開發者->>腳本: 選擇繼續或重新輸入
+            end
+            
+        else 模式 4: 全自動 AI commit
+            note over 腳本,AI工具: 直接使用 AI 生成，跳過確認
+            
+        else 模式 5: 僅提交已暫存
+            腳本->>Git: 檢查暫存區狀態
+            Git-->>腳本: 回傳暫存檔案
+            
+            alt 暫存區為空
+                腳本-->>開發者: 錯誤：暫存區沒有檔案
+            else 有暫存檔案
+                腳本->>開發者: 輸入 commit 訊息
+                開發者->>腳本: 提供 commit 訊息
+            end
+            
+        else 模式 7: 變更 commit 訊息
+            腳本->>Git: 檢查最後一次 commit
+            Git-->>腳本: 回傳當前 commit 訊息
+            腳本->>開發者: 顯示當前訊息，要求輸入新訊息
+            開發者->>腳本: 輸入新的 commit 訊息
+        end
+    end
+
+    %% 執行 Git 操作階段
+    rect rgb(240,255,240)
+        note over 腳本,遠端倉庫: 【Git 操作執行階段】
+        
+        alt 需要 commit 的模式 (1-2, 4-5, 7)
+            alt 模式 7: amend commit
+                腳本->>Git: git commit --amend -m "新訊息"
+            else 其他模式: 新 commit
+                腳本->>Git: git commit -m "commit 訊息"
+            end
+            Git-->>腳本: Commit 執行結果
+            
+            alt Commit 失敗
+                腳本-->>開發者: 顯示錯誤訊息與修復建議
+            end
+        end
+
+        alt 需要推送的模式 (1, 4)
+            腳本->>Git: git push origin 當前分支
+            Git->>遠端倉庫: 推送變更
+            遠端倉庫-->>Git: 推送結果
+            Git-->>腳本: 回傳推送狀態
+            
+            alt 推送失敗
+                腳本-->>開發者: 顯示錯誤與修復建議 (如 git pull)
+            else 推送成功
+                腳本-->>開發者: 顯示成功訊息與 commit ID
+            end
+        end
+
+        alt 模式 6: 顯示倉庫資訊
+            腳本->>Git: 取得分支資訊
+            腳本->>Git: 取得遠端配置
+            腳本->>Git: 取得提交歷史
+            腳本->>Git: 取得同步狀態
+            Git-->>腳本: 回傳所有倉庫資訊
+            腳本-->>開發者: 格式化顯示倉庫詳細資訊
+        end
+    end
+
+    %% 完成與清理階段
+    rect rgb(245,245,245)
+        note over 開發者,腳本: 【完成與清理階段】
+        腳本->>腳本: 清理暫存資源
+        腳本-->>開發者: 顯示操作完成訊息與後續建議
+        
+        alt 發生錯誤
+            腳本-->>開發者: 提供詳細錯誤資訊與修復指引
+        end
+    end

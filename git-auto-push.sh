@@ -128,7 +128,40 @@ readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標�
 # 適用場景：
 #   - 團隊要求 commit 關聯任務編號時啟用
 #   - 個人專案或不需要任務編號時停用
-AUTO_INCLUDE_TICKET=false
+AUTO_INCLUDE_TICKET=true
+
+# Commit 訊息品質檢查設定
+# 說明：在 commit 前使用 AI 檢查訊息是否具有明確的目的和功能性。
+#       確保 commit 訊息清楚描述變更內容，避免無意義或模糊的訊息。
+# 效果：
+#   - true：自動使用 AI 檢查 commit 訊息品質，若意義不明則警告
+#   - false：提示是否要檢查，預設不檢查（按 Enter 跳過）
+# 檢查標準：
+#   - 訊息是否描述了具體的變更內容
+#   - 是否有明確的目的（新增功能、修復問題、改善效能等）
+#   - 避免過於簡短或模糊的描述（如「update」、「fix」、「changes」）
+# 範例：
+#   ✅ 良好：「新增使用者登入功能」、「修復檔案上傳時的記憶體洩漏」
+#   ❌ 不良：「update」、「修改」、「調整程式碼」、「fix bug」
+# 適用場景：
+#   - 團隊要求高品質 commit 訊息時啟用
+#   - 個人專案或快速提交時可停用
+AUTO_CHECK_COMMIT_QUALITY=true
+
+# 調試模式設定
+# 說明：控制是否顯示調試訊息（debug_msg）和 AI 輸入輸出詳情（show_ai_debug_info）。
+#       調試訊息包含 AI 工具執行細節、錯誤追蹤、輸入輸出內容等技術資訊。
+# 效果：
+#   - true：顯示所有調試訊息，用於問題排查和開發測試
+#   - false：隱藏調試訊息，保持輸出簡潔（預設，建議一般使用者）
+# 使用場景：
+#   - 開發或測試時啟用，可查看完整的執行流程
+#   - 一般使用時停用，避免過多技術細節干擾
+#   - 遇到 AI 工具執行問題時，可臨時啟用以診斷錯誤
+# 注意：
+#   - 調試訊息可能包含敏感資訊（如 API 回應、diff 內容）
+#   - 啟用後會大幅增加輸出內容，建議僅在需要時開啟
+IS_DEBUG=false
 
 # ==============================================
 # 訊息輸出函數區域
@@ -257,22 +290,48 @@ cyan_msg() {
     printf "\033[1;36m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：debug_msg
-# 功能說明：輸出灰色調試訊息至 stderr，用於開發階段除錯。
+# 函式：yellow_msg
+# 功能說明：輸出黃色訊息至 stderr，用於重要提示或注意事項。
 # 輸入參數：
-#   $1 <message> 調試訊息文字，支援 UTF-8 編碼
+#   $1 <message> 訊息文字，支援 UTF-8 編碼
 # 輸出結果：
-#   STDERR 輸出灰色 ANSI 彩色文字，格式：\033[0;90m<message>\033[0m\n
+#   STDERR 輸出黃色 ANSI 彩色文字，格式：\033[1;33m<message>\033[0m\n
 # 例外/失敗：
 #   無例外，總是返回 0
 # 流程：
-#   1. 使用 printf 輸出 ANSI 灰色碼（\033[0;90m）
+#   1. 使用 printf 輸出 ANSI 粗體黃色碼（\033[1;33m）
 #   2. 輸出訊息內容
 #   3. 重置顏色（\033[0m）並換行
 #   4. 重導向至 stderr（>&2）
 # 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於開發階段的變數值檢查、流程追蹤
+# 參考：用於重要操作提示、需要注意的選項
+yellow_msg() {
+    printf "\033[1;33m%s\033[0m\n" "$1" >&2
+}
+
+# 函式：debug_msg
+# 功能說明：輸出灰色調試訊息至 stderr，用於開發階段除錯。
+#          受 IS_DEBUG 變數控制，當 IS_DEBUG=false 時不輸出。
+# 輸入參數：
+#   $1 <message> 調試訊息文字，支援 UTF-8 編碼
+# 輸出結果：
+#   STDERR 輸出灰色 ANSI 彩色文字，格式：\033[0;90m<message>\033[0m\n
+#   當 IS_DEBUG=false 時，不輸出任何內容
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 檢查 IS_DEBUG 變數，若為 false 則直接返回
+#   2. 使用 printf 輸出 ANSI 灰色碼（\033[0;90m）
+#   3. 輸出訊息內容
+#   4. 重置顏色（\033[0m）並換行
+#   5. 重導向至 stderr（>&2）
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於開發階段的變數值檢查、流程追蹤；IS_DEBUG 變數（檔案開頭）
 debug_msg() {
+    # 檢查調試模式是否啟用
+    if [[ "$IS_DEBUG" != "true" ]]; then
+        return 0
+    fi
     printf "\033[0;90m%s\033[0m\n" "$1" >&2
 }
 
@@ -421,6 +480,53 @@ add_all_files() {
     fi
 }
 
+# 函式：show_ai_debug_info
+# 功能說明：統一格式顯示 AI 工具的調試資訊，包含工具名稱、輸入與輸出內容。
+#          受 IS_DEBUG 變數控制，當 IS_DEBUG=false 時不輸出。
+# 輸入參數：
+#   $1 <tool_name> AI 工具名稱，如 codex、gemini、claude
+#   $2 <prompt> 提示詞內容（指令部分）
+#   $3 <content> 實際資料內容（可選，如 diff、commits）
+#   $4 <output> 輸出內容（可選），AI 工具的回應結果
+# 輸出結果：
+#   STDERR 輸出彩色格式化的調試資訊，包含分隔線與標題
+#   當 IS_DEBUG=false 時，不輸出任何內容
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 檢查 IS_DEBUG 變數，若為 false 則直接返回
+#   2. 輸出分隔線與工具名稱標題（使用 debug_msg）
+#   3. 顯示 prompt 內容（截取前 200 字元）
+#   4. 顯示 content 內容（如有，截取前 10 行）
+#   5. 若提供 output 參數，顯示輸出內容
+#   6. 輸出結束分隔線
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於開發階段追蹤 AI 工具的輸入輸出；IS_DEBUG 變數（檔案開頭）
+show_ai_debug_info() {
+    # 檢查調試模式是否啟用
+    if [[ "$IS_DEBUG" != "true" ]]; then
+        return 0
+    fi
+    
+    local tool_name="$1"
+    local prompt="$2"
+    local content="$3"
+    local output="$4"
+    
+    debug_msg "📥 AI 輸入（prompt）："
+    echo "$prompt" | sed 's/^/  /' >&2
+    
+    if [ -n "$content" ]; then
+        debug_msg "📥 AI 輸入（content，前 10 行）："
+        echo "$content" | head -n 10 | sed 's/^/  /' >&2
+    fi
+    
+    if [ -n "$output" ]; then
+        debug_msg "💬 $tool_name 輸出："
+        echo "$output" | sed 's/^/  /' >&2
+    fi
+}
+
 # 清理 AI 生成的訊息
 clean_ai_message() {
     local message="$1"
@@ -428,7 +534,27 @@ clean_ai_message() {
     # 顯示原始訊息
     debug_msg "🔍 AI 原始輸出: '$message'"
     
-    # 最簡化處理：只移除前後空白，保留完整內容
+    # 步驟 1: 移除常見的 CLI 工具技術訊息
+    # gemini: "Loaded cached credentials."
+    # claude: 類似的認證訊息
+    message=$(echo "$message" | sed 's/^Loaded cached credentials\.//g')
+    message=$(echo "$message" | sed 's/^Loading credentials\.\.\.//g')
+    message=$(echo "$message" | sed 's/^Authentication successful\.//g')
+    
+    # 步驟 2: 對於 codex exec 的輸出，提取有效內容
+    # codex exec 的輸出格式：可能包含 "codex", "tokens used" 等元數據
+    # 嘗試提取實際回應內容
+    if [[ "$message" =~ codex.*tokens\ used ]]; then
+        # 提取 "codex" 和 "tokens used" 之間的內容
+        local extracted
+        extracted=$(echo "$message" | sed -n '/^codex$/,/^tokens used/p' | sed '1d;$d' | grep -E ".+" | xargs)
+        
+        if [ -n "$extracted" ]; then
+            message="$extracted"
+        fi
+    fi
+    
+    # 步驟 3: 移除前後空白
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果
@@ -700,23 +826,72 @@ run_codex_command() {
                     return 0
                 fi
             fi
+            
+            # 沒有有效內容，顯示調試信息
             warning_msg "codex 沒有返回有效內容"
+            echo >&2
+            debug_msg "🔍 調試信息（codex 無有效輸出）:"
+            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "退出碼: $exit_code"
+            if [ -n "$output" ]; then
+                debug_msg "原始輸出內容:"
+                echo "$output" | sed 's/^/  /' >&2
+            else
+                debug_msg "輸出內容: (無)"
+            fi
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            printf "\n" >&2
             ;;
         124)
             error_msg "❌ codex 執行超時（${timeout}秒）"
+            
+            # 顯示調試信息
+            echo >&2
+            debug_msg "🔍 調試信息（codex 超時錯誤）:"
+            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "超時設定: $timeout 秒"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            if [ -n "$output" ]; then
+                debug_msg "部分輸出內容:"
+                echo "$output" | head -n 5 | sed 's/^/  /' >&2
+            else
+                debug_msg "輸出內容: (無)"
+            fi
             warning_msg "💡 建議：檢查網路連接或稍後重試"
+            printf "\n" >&2
             ;;
         *)
             # 檢查特定錯誤類型
+            echo >&2
+            debug_msg "🔍 調試信息（codex 執行失敗）:"
+            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "退出碼: $exit_code"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
                 error_msg "❌ codex 認證錯誤"
                 warning_msg "💡 請執行：codex auth login"
+                if [ -n "$output" ]; then
+                    debug_msg "錯誤輸出:"
+                    echo "$output" | sed 's/^/  /' >&2
+                fi
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
                 error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
+                if [ -n "$output" ]; then
+                    debug_msg "錯誤輸出:"
+                    echo "$output" | sed 's/^/  /' >&2
+                fi
             else
                 warning_msg "codex 執行失敗（退出碼: $exit_code）"
+                if [ -n "$output" ]; then
+                    debug_msg "完整輸出內容:"
+                    echo "$output" | sed 's/^/  /' >&2
+                else
+                    debug_msg "輸出內容: (無)"
+                fi
             fi
+            printf "\n" >&2
             ;;
     esac
     
@@ -1015,12 +1190,7 @@ append_ticket_number_to_message() {
 
 # 獲取用戶輸入的 commit message
 get_commit_message() {
-    echo >&2
-    echo "==================================================" >&2
-    highlight_success_msg "💬 請輸入 commit 訊息"
-    echo "==================================================" >&2
-    cyan_msg "輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
-    
+   
     # 顯示任務編號自動帶入狀態
     if [[ -n "$TICKET_NUMBER" ]]; then
         echo >&2
@@ -1030,6 +1200,12 @@ get_commit_message() {
             white_msg "🎫 任務編號: $TICKET_NUMBER (提交時詢問是否加入)"
         fi
     fi
+   
+    echo >&2
+    echo "==================================================" >&2
+    highlight_success_msg "💬 請輸入 commit 訊息"
+    echo "==================================================" >&2
+    cyan_msg "輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
     
     echo >&2
     printf "➤ " >&2  # 提供明確的輸入提示符號
@@ -1053,6 +1229,15 @@ get_commit_message() {
         echo >&2
         cyan_msg "🤖 AI 生成的 commit message:"
         highlight_success_msg "🔖 $auto_message"
+        echo >&2
+        cyan_msg "💡 下一步動作："
+        if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+            white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
+        else
+            white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
+        fi
+        white_msg "  • 輸入 n - 拒絕並手動輸入"
+        echo >&2
         printf "是否使用此訊息？[Y/n]: " >&2
         read -r confirm
         confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
@@ -1082,7 +1267,16 @@ get_commit_message() {
                 echo >&2
                 cyan_msg "🔄 AI 重新生成的 commit message:"
                 highlight_success_msg "🔖 $auto_message"
-                printf "是否使用此訊息？(y/n，直接按 Enter 表示同意): " >&2
+                echo >&2
+                cyan_msg "💡 下一步動作："
+                if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+                    white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
+                else
+                    white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
+                fi
+                white_msg "  • 輸入 n - 拒絕並繼續手動輸入"
+                echo >&2
+                printf "是否使用此訊息？[Y/n]: " >&2
                 read -r confirm
                 confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
                 
@@ -1106,19 +1300,311 @@ get_commit_message() {
     done
 }
 
+# 函式：run_simple_ai_command
+# 功能說明：執行簡單的 AI 命令（不需要 git diff），用於品質檢查等場景。
+# 輸入參數：
+#   $1 <tool_name> AI 工具名稱（codex/gemini/claude）
+#   $2 <prompt> 提示詞內容
+# 輸出結果：
+#   STDOUT 輸出 AI 回應內容（已清理）
+#   返回 0 表示成功，1 表示失敗
+# 流程：
+#   1. 檢查工具是否可用
+#   2. 建立臨時檔案儲存提示詞
+#   3. 執行 AI 工具並捕捉輸出
+#   4. 清理輸出內容
+#   5. 處理錯誤情況
+# 副作用：建立並清理臨時檔案
+# 參考：clean_ai_message()
+run_simple_ai_command() {
+    local tool_name="$1"
+    local prompt="$2"
+    local timeout=45
+    
+    # 檢查工具是否可用
+    if ! command -v "$tool_name" &>/dev/null; then
+        debug_msg "$tool_name 工具未安裝"
+        return 1
+    fi
+    
+    local output=""
+    local exit_code=0
+    
+    # 建立臨時檔案（確保 UTF-8 編碼）
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    
+    # 設定 UTF-8 locale 並寫入檔案
+    # 使用 cat 而非 echo/printf 來避免 shell 對特殊字元的解析
+    LC_ALL=en_US.UTF-8 cat > "$temp_prompt" <<EOF
+$prompt
+EOF
+    
+    # 根據不同工具使用不同的調用方式
+    case "$tool_name" in
+        "codex")
+            # codex 使用 exec 子命令
+            # 設定 UTF-8 環境變數確保正確讀取
+            if command -v timeout >/dev/null 2>&1; then
+                output=$(LC_ALL=en_US.UTF-8 timeout ${timeout}s codex exec < "$temp_prompt" 2>&1)
+                exit_code=$?
+            else
+                output=$(LC_ALL=en_US.UTF-8 codex exec < "$temp_prompt" 2>&1)
+                exit_code=$?
+            fi
+            ;;
+        "gemini"|"claude")
+            # gemini 和 claude 使用 stdin
+            if command -v timeout >/dev/null 2>&1; then
+                output=$(LC_ALL=en_US.UTF-8 timeout ${timeout}s "$tool_name" < "$temp_prompt" 2>&1)
+                exit_code=$?
+            else
+                output=$(LC_ALL=en_US.UTF-8 "$tool_name" < "$temp_prompt" 2>&1)
+                exit_code=$?
+            fi
+            ;;
+        *)
+            debug_msg "不支援的 AI 工具: $tool_name"
+            rm -f "$temp_prompt"
+            return 1
+            ;;
+    esac
+    
+    # 清理臨時檔案
+    rm -f "$temp_prompt"
+    
+    # 檢查執行結果
+    if [ $exit_code -eq 124 ]; then
+        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
+        
+        # 顯示詳細調試信息
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
+        debug_msg "執行的指令: $tool_name < [prompt_file]"
+        debug_msg "超時設定: $timeout 秒"
+        
+        # 使用統一函數顯示 AI 輸入輸出
+        if [ -n "$output" ]; then
+            show_ai_debug_info "$tool_name" "$prompt" "" "$(echo "$output" | head -n 5)"
+        else
+            show_ai_debug_info "$tool_name" "$prompt"
+            debug_msg "輸出內容: (無)"
+        fi
+        echo >&2
+        return 1
+    elif [ $exit_code -ne 0 ]; then
+        # 確保 exit_code 是有效數字
+        local display_code="${exit_code:-未知}"
+        error_msg "❌ $tool_name 執行失敗（退出碼: ${display_code}）"
+        
+        # 檢查特定錯誤訊息
+        if [[ "$output" == *"stdout is not a terminal"* ]]; then
+            # codex 特定錯誤：需要終端
+            if [[ "$tool_name" == "codex" ]]; then
+                warning_msg "💡 codex 需要互動式終端環境"
+                warning_msg "💡 已自動使用 'codex exec' 模式，如仍有問題請檢查終端設定"
+            fi
+        elif [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+            warning_msg "💡 請執行：$tool_name auth login"
+        elif [[ "$output" == *"rate limit"* ]] || [[ "$output" == *"quota"* ]]; then
+            warning_msg "💡 API 配額已用盡，請稍後再試或檢查訂閱狀態"
+        fi
+        
+        # 顯示詳細調試信息
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
+        debug_msg "執行的指令: $tool_name < [prompt_file]"
+        debug_msg "退出碼: ${display_code}"
+        
+        # 使用統一函數顯示 AI 輸入輸出
+        if [ -n "$output" ]; then
+            show_ai_debug_info "$tool_name" "$prompt" "" "$output"
+        else
+            show_ai_debug_info "$tool_name" "$prompt"
+            debug_msg "輸出內容: (無)"
+        fi
+        echo >&2
+        return 1
+    fi
+    
+    if [ -z "$output" ]; then
+        error_msg "❌ $tool_name 沒有返回內容"
+        
+        # 顯示詳細調試信息
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
+        debug_msg "執行的指令: $tool_name < [prompt_file]"
+        debug_msg "退出碼: $exit_code"
+        
+        # 使用統一函數顯示 AI 輸入
+        show_ai_debug_info "$tool_name" "$prompt"
+        echo >&2
+        return 1
+    fi
+    
+    # 清理輸出
+    output=$(clean_ai_message "$output")
+    
+    if [ -z "$output" ]; then
+        debug_msg "$tool_name 輸出清理後為空"
+        return 1
+    fi
+    
+    # 輸出結果
+    echo "$output"
+    return 0
+}
+
+# 函式：check_commit_message_quality
+# 功能說明：使用 AI 檢查 commit 訊息是否具有明確的目的和功能性。
+# 輸入參數：
+#   $1 <message> commit 訊息內容
+# 輸出結果：
+#   0 - 訊息品質良好或使用者選擇繼續
+#   1 - 訊息品質不佳且使用者選擇取消
+# 流程：
+#   1. 根據 AUTO_CHECK_COMMIT_QUALITY 決定是否檢查
+#   2. 使用 AI 工具分析訊息品質
+#   3. 若品質不佳，顯示警告並讓使用者決定是否繼續
+# 副作用：輸出至 stderr
+# 參考：AI_TOOLS 陣列、run_simple_ai_command()
+check_commit_message_quality() {
+    local message="$1"
+    local should_check=false
+    
+    # 步驟 1: 根據設定決定是否檢查
+    if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+        should_check=true
+    else
+        # 詢問使用者是否要檢查（預設 no）
+        echo >&2
+        printf "是否檢查 commit 訊息品質？[y/N]: " >&2
+        read -r check_confirm
+        check_confirm=$(echo "$check_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        if [[ "$check_confirm" =~ ^(y|yes|是)$ ]]; then
+            should_check=true
+        else
+            info_msg "ℹ️  跳過品質檢查"
+            return 0  # 使用者選擇不檢查，直接通過
+        fi
+    fi
+    
+    # 如果不檢查，直接返回
+    if [[ "$should_check" != "true" ]]; then
+        return 0
+    fi
+    
+    # 步驟 2: 使用 AI 檢查訊息品質
+    echo >&2
+    info_msg "🔍 正在檢查 commit 訊息品質..."
+    
+    # 為了避免 codex 的 UTF-8 編碼問題，在 prompt 中描述訊息而非直接嵌入
+    # 這樣可以避免表情符號等特殊字元導致的編碼錯誤
+    local message_length=${#message}
+    local message_preview
+    if [ $message_length -gt 50 ]; then
+        message_preview="${message:0:50}..."
+    else
+        message_preview="$message"
+    fi
+    
+    local check_prompt="請分析以下 commit 訊息是否具有明確的目的和功能性。
+
+判斷標準：
+1. 是否描述了具體的變更內容（新增、修改、刪除了什麼）
+2. 是否有明確的目的（為什麼要做這個變更）  
+3. 避免過於簡短或模糊的描述（如 update、fix、changes、調整）
+
+Commit 訊息內容：
+$message
+
+請只回答以下其中一項：
+- 良好：訊息清楚描述了變更內容和目的
+- 不良：訊息過於模糊或缺乏明確目的，並簡短說明原因（一行）"
+    
+    local ai_response=""
+    local tool_used=""
+    
+    # 嘗試使用 AI 工具檢查
+    for tool in "${AI_TOOLS[@]}"; do
+        if ai_response=$(run_simple_ai_command "$tool" "$check_prompt"); then
+            tool_used="$tool"
+            success_msg "✓ 使用 $tool 完成品質檢查"
+            break
+        fi
+    done
+    
+    # 步驟 3: 如果 AI 檢查失敗，直接通過（不影響提交流程）
+    if [[ -z "$ai_response" ]]; then
+        warning_msg "⚠️  AI 品質檢查失敗（所有工具都無法使用），將繼續提交流程"
+        return 0
+    fi
+    
+    # 步驟 4: 分析 AI 回應
+    ai_response=$(echo "$ai_response" | xargs)
+    
+    # 使用更寬鬆的匹配：只要包含「良好」或「Good」即視為通過
+    if [[ "$ai_response" =~ 良好 ]] || [[ "$ai_response" =~ [Gg]ood ]] || [[ "$ai_response" =~ GOOD ]]; then
+        success_msg "✅ Commit 訊息品質良好"
+        return 0
+    # 只要包含「不良」、「Bad」或相關負面關鍵字即視為品質不佳
+    elif [[ "$ai_response" =~ 不良 ]] || [[ "$ai_response" =~ [Bb]ad ]] || [[ "$ai_response" =~ BAD ]] || [[ "$ai_response" =~ 模糊 ]] || [[ "$ai_response" =~ 不明確 ]] || [[ "$ai_response" =~ 過於簡短 ]]; then
+        # 顯示警告
+        echo >&2
+        warning_msg "⚠️  Commit 訊息品質警告"
+        echo "==================================================" >&2
+        error_msg "AI 分析結果："
+        echo "$ai_response" >&2
+        echo "==================================================" >&2
+        echo >&2
+        
+        # 提供明確的選項說明
+        cyan_msg "💡 下一步選擇："
+        white_msg "  • 輸入 y - 仍然使用此訊息繼續提交"
+        white_msg "  • 按 Enter 或輸入 n - 取消並重新輸入更好的訊息"
+        echo >&2
+        
+        # 詢問是否繼續
+        printf "是否仍要繼續提交？[y/N]: " >&2
+        read -r continue_confirm
+        continue_confirm=$(echo "$continue_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+        
+        if [[ "$continue_confirm" =~ ^(y|yes|是)$ ]]; then
+            info_msg "使用者選擇繼續提交"
+            return 0
+        else
+            # 返回 1 表示品質檢查不通過，主流程會重新要求輸入
+            return 1
+        fi
+    else
+        # AI 回應無法判斷，顯示內容並預設通過
+        debug_msg "AI 回應內容: $ai_response"
+        warning_msg "⚠️  無法判斷訊息品質，將繼續提交流程"
+        return 0
+    fi
+}
+
 # 確認是否要提交變更
 confirm_commit() {
     local message="$1"
     
+    # 步驟 1: 檢查 commit 訊息品質（在顯示確認訊息之前）
+    if ! check_commit_message_quality "$message"; then
+        return 1  # 使用者取消提交
+    fi
+    
     # 清空輸入緩衝區，避免前一個 read 的 Enter 鍵影響此次輸入
     read -r -t 0.1 dummy 2>/dev/null || true
     
+    # 步驟 2: 顯示確認訊息
     echo >&2
     echo "==================================================" >&2
     highlight_success_msg "💬 確認提交資訊:"
     echo "Commit Message: $message" >&2
     echo "==================================================" >&2
     
+    # 步驟 3: 詢問使用者確認
     # 持續詢問直到獲得有效回應
     while true; do
         printf "是否確認提交？[Y/n]: " >&2
@@ -1176,6 +1662,111 @@ push_to_remote() {
         return 0
     else
         error_msg "推送失敗"
+        return 1
+    fi
+}
+
+# 函式：amend_last_commit
+# 功能說明：修改最後一次 commit 的訊息，支援任務編號自動帶入。
+# 輸入參數：無
+# 輸出結果：
+#   成功修改回傳 0，失敗回傳 1
+# 例外/失敗：
+#   1. 檢測到尚未 commit 的變更時，警告並退出
+#   2. 沒有任何 commit 歷史時，錯誤並退出
+#   3. git commit --amend 執行失敗
+# 流程：
+#   1. 檢查是否有尚未 commit 的變更（git status --porcelain）
+#   2. 取得最後一次 commit 訊息作為參考
+#   3. 提示使用者輸入新的 commit 訊息
+#   4. 根據 AUTO_INCLUDE_TICKET 設定處理任務編號前綴
+#   5. 使用 git commit --amend 更新 commit 訊息
+# 副作用：修改最後一次 commit 的訊息
+# 參考：append_ticket_number_to_message()、confirm_commit()
+amend_last_commit() {
+    # 步驟 1: 檢查是否有尚未 commit 的變更
+    local uncommitted_changes
+    uncommitted_changes=$(git status --porcelain 2>/dev/null)
+    
+    if [[ -n "$uncommitted_changes" ]]; then
+        warning_msg "⚠️  偵測到尚未提交的變更！"
+        echo >&2
+        error_msg "請先提交或暫存 (stash) 目前的變更，再修改最後一次 commit 訊息。"
+        echo >&2
+        info_msg "未提交的變更："
+        echo "$uncommitted_changes" >&2
+        return 1
+    fi
+    
+    # 步驟 2: 取得最後一次 commit 訊息
+    local last_commit_message
+    last_commit_message=$(git log -1 --pretty=%B 2>/dev/null)
+    
+    if [[ -z "$last_commit_message" ]]; then
+        error_msg "無法取得最後一次 commit 訊息，可能沒有任何 commit 歷史。"
+        return 1
+    fi
+    
+    # 顯示目前的 commit 訊息供參考
+    echo >&2
+    echo "==================================================" >&2
+    info_msg "📝 目前的 commit 訊息："
+    echo "「$last_commit_message」" >&2
+    echo "==================================================" >&2
+    echo >&2
+    
+    # 步驟 3: 提示使用者輸入新的 commit 訊息
+    cyan_msg "💬 請輸入新的 commit 訊息"
+    echo "==================================================" >&2
+    
+    # 顯示任務編號資訊（如果有）
+    if [[ -n "$TICKET_NUMBER" ]]; then
+        if [[ "$AUTO_INCLUDE_TICKET" == "true" ]]; then
+            white_msg "🎫 任務編號: $TICKET_NUMBER (將自動加入前綴)"
+        else
+            white_msg "🎫 任務編號: $TICKET_NUMBER (稍後詢問是否加入)"
+        fi
+        echo >&2
+    fi
+    
+    printf "➤ " >&2
+    read -r new_message
+    
+    # 移除前後空白
+    new_message=$(echo "$new_message" | xargs)
+    
+    # 檢查輸入是否為空
+    if [[ -z "$new_message" ]]; then
+        warning_msg "未輸入新的 commit 訊息，操作已取消。"
+        return 1
+    fi
+    
+    # 步驟 4: 處理任務編號前綴
+    local final_message
+    final_message=$(append_ticket_number_to_message "$new_message")
+    
+    # 步驟 5: 確認是否修改
+    echo >&2
+    echo "==================================================" >&2
+    highlight_success_msg "🔄 將要修改為："
+    echo "「$final_message」" >&2
+    echo "==================================================" >&2
+    
+    if ! confirm_commit "$final_message"; then
+        warning_msg "已取消修改 commit 訊息。"
+        return 1
+    fi
+    
+    # 步驟 6: 執行 git commit --amend
+    info_msg "正在修改最後一次 commit 訊息..."
+    if git commit --amend -m "$final_message" 2>/dev/null; then
+        success_msg "✅ Commit 訊息修改成功！"
+        echo >&2
+        info_msg "修改後的訊息："
+        echo "「$final_message」" >&2
+        return 0
+    else
+        error_msg "❌ 修改 commit 訊息失敗"
         return 1
     fi
 }
@@ -1249,6 +1840,7 @@ show_operation_menu() {
     purple_msg "4. 🤖 全自動模式 (add → AI commit → push)"
     cyan_msg "5. 💾 僅提交 (commit)"
     white_msg "6. 📊 顯示 Git 倉庫資訊"
+    yellow_msg "7. 🔄 變更最後一次 commit 訊息"
     echo "==================================================" >&2
     cyan_msg "🌿 目前分支: $current_branch$branch_info"
     
@@ -1263,7 +1855,7 @@ show_operation_menu() {
         white_msg "⚙️  沒有偵測到任務編號（ticket number）"
     fi
     
-    printf "請輸入選項 [1-6] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
+    printf "請輸入選項 [1-7] (直接按 Enter 使用預設選項 %d): " "$DEFAULT_OPTION" >&2
 }
 
 # 獲取用戶選擇的操作
@@ -1310,8 +1902,13 @@ get_operation_choice() {
                 echo "$choice"
                 return 0
                 ;;
+            7)
+                info_msg "✅ 已選擇：變更最後一次 commit 訊息"
+                echo "$choice"
+                return 0
+                ;;
             *)
-                warning_msg "無效選項：$choice，請輸入 1、2、3、4、5 或 6"
+                warning_msg "無效選項：$choice，請輸入 1-7"
                 echo >&2
                 ;;
         esac
@@ -1343,6 +1940,7 @@ show_help() {
         4) default_mode_name="全自動模式 (add → AI commit → push)" ;;
         5) default_mode_name="僅提交 (commit)" ;;
         6) default_mode_name="顯示倉庫資訊" ;;
+        7) default_mode_name="變更最後一次 commit 訊息" ;;
         *) default_mode_name="未知" ;;
     esac
     
@@ -1368,7 +1966,7 @@ show_help() {
     cyan_msg "                git-auto-push --auto"
     echo >&2
     
-    purple_msg "📋 六種操作模式："
+    purple_msg "📋 七種操作模式："
     echo >&2
     
     highlight_success_msg "  1️⃣  完整流程 (add → commit → push)"
@@ -1412,6 +2010,16 @@ show_help() {
     white_msg "      • 顯示本地與遠端的同步狀態"
     white_msg "      • 顯示工作區狀態（已修改/未追蹤檔案）"
     white_msg "      • 適用場景：檢查倉庫狀態、診斷同步問題"
+    echo >&2
+    
+    yellow_msg "  7️⃣  變更最後一次 commit 訊息"
+    white_msg "      • 修改最近一次的 commit 訊息內容"
+    white_msg "      • 自動檢查是否有未提交的變更（有則警告並中止）"
+    white_msg "      • 顯示目前的 commit 訊息供參考"
+    white_msg "      • 支援任務編號自動帶入功能"
+    white_msg "      • 使用 git commit --amend 執行修改"
+    white_msg "      • 適用場景：修正 commit 訊息錯誤、補充說明"
+    white_msg "      • ⚠️  注意：請勿修改已推送至遠端的 commit"
     echo >&2
     
     purple_msg "🔧 相依工具："
@@ -1471,10 +2079,28 @@ show_help() {
     white_msg "    適用場景：團隊規範、專案管理工具整合"
     echo >&2
     
+    cyan_msg "  Commit 訊息品質檢查："
+    white_msg "    當前設定：AUTO_CHECK_COMMIT_QUALITY=${AUTO_CHECK_COMMIT_QUALITY}"
+    white_msg "    位置：腳本頂部 AUTO_CHECK_COMMIT_QUALITY 變數（約 133 行）"
+    white_msg "    功能說明："
+    if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+        white_msg "      ✓ 自動檢查模式：提交前自動使用 AI 檢查訊息品質"
+        white_msg "      ✓ 檢查標準：描述具體變更、明確目的、避免模糊描述"
+        white_msg "      ✓ 範例警告：'fix bug'（過於簡略）、'update'（缺乏目的）"
+    else
+        white_msg "      ✓ 詢問模式：提交前詢問是否使用 AI 檢查（預設 N）"
+        white_msg "      ✓ 使用者可選擇檢查或跳過，不影響快速提交流程"
+    fi
+    white_msg "    檢查工具：依 AI_TOOLS 順序使用（codex/gemini/claude）"
+    white_msg "    容錯機制：AI 失敗時不影響提交流程"
+    white_msg "    適用場景：提升 commit 訊息品質、團隊規範執行"
+    echo >&2
+    
     purple_msg "🔐 安全機制："
     white_msg "  • 變更檢查：執行前檢查是否有待提交的變更"
     white_msg "  • 中斷處理：Ctrl+C 安全中斷並清理資源"
     white_msg "  • 超時控制：AI 工具調用有超時機制（45-90 秒）"
+    white_msg "  • 品質檢查：提交前可選擇使用 AI 檢查 commit 訊息品質"
     white_msg "  • 確認機制：提交前顯示 commit 訊息供確認"
     white_msg "  • 權限控制：不需要 root 權限，僅操作當前倉庫"
     echo >&2
@@ -1599,6 +2225,45 @@ main() {
     if [ -z "$status" ]; then
         info_msg "沒有需要提交的變更。"
         
+        # 如果不是自動模式，顯示選單讓使用者選擇操作
+        if [ "$auto_mode" != true ]; then
+            echo >&2
+            info_msg "您可以選擇："
+            white_msg "  • 推送本地提交到遠端 (按 p)"
+            white_msg "  • 修改最後一次 commit 訊息 (按 7)"
+            white_msg "  • 查看倉庫資訊 (按 6)"
+            white_msg "  • 或按其他鍵取消"
+            echo >&2
+            printf "請選擇操作 [p/7/6/取消]: " >&2
+            read -r choice
+            choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)
+            
+            case "$choice" in
+                p|push)
+                    if push_to_remote; then
+                        success_msg "🎉 推送完成！"
+                    else
+                        warning_msg "❌ 推送失敗"
+                        exit 1
+                    fi
+                    exit 0
+                    ;;
+                7|amend)
+                    amend_last_commit
+                    exit 0
+                    ;;
+                6|info)
+                    show_git_info
+                    exit 0
+                    ;;
+                *)
+                    info_msg "已取消操作。"
+                    exit 0
+                    ;;
+            esac
+        fi
+        
+        # 自動模式：直接詢問是否推送
         printf "是否嘗試將本地提交推送到遠端倉庫？[Y/n]: " >&2
         read -r push_confirm
         push_confirm=$(echo "$push_confirm" | tr '[:upper:]' '[:lower:]' | xargs)
@@ -1666,6 +2331,10 @@ main() {
             # 顯示 Git 倉庫資訊
             show_git_info
             ;;
+        7)
+            # 變更最後一次 commit 訊息
+            amend_last_commit
+            ;;
     esac
     
     # 清理全局信號處理
@@ -1694,17 +2363,25 @@ main() {
 execute_full_workflow() {
     info_msg "🚀 執行完整 Git 工作流程..."
     
-    # 步驟 1: 獲取用戶輸入的 commit message（支援互動輸入或 AI 生成）
+    # 步驟 1-2: 獲取 commit message 並確認（支援重新輸入）
     local message
-    if ! message=$(get_commit_message); then
-        exit 1
-    fi
-    
-    # 步驟 2: 確認是否要提交（顯示 commit 訊息供使用者確認）
-    if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。"
-        exit 0
-    fi
+    while true; do
+        # 步驟 1: 獲取用戶輸入的 commit message（支援互動輸入或 AI 生成）
+        if ! message=$(get_commit_message); then
+            exit 1
+        fi
+        
+        # 步驟 2: 確認是否要提交（包含品質檢查）
+        if confirm_commit "$message"; then
+            break  # 確認成功，跳出循環繼續提交
+        fi
+        
+        # 品質檢查失敗或使用者取消，提示重新輸入
+        echo >&2
+        warning_msg "⚠️  已取消本次提交"
+        info_msg "💡 請重新輸入 commit 訊息"
+        echo >&2
+    done
     
     # 步驟 3: 提交變更到本地倉庫（執行 git commit）
     if ! commit_changes "$message"; then
@@ -1748,17 +2425,25 @@ execute_full_workflow() {
 execute_local_commit() {
     info_msg "📝 執行本地 Git 提交..."
     
-    # 步驟 1: 獲取用戶輸入的 commit message（支援互動輸入或 AI 生成）
+    # 步驟 1-2: 獲取 commit message 並確認（支援重新輸入）
     local message
-    if ! message=$(get_commit_message); then
-        exit 1
-    fi
-    
-    # 步驟 2: 確認是否要提交（顯示 commit 訊息供使用者確認）
-    if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。"
-        exit 0
-    fi
+    while true; do
+        # 步驟 1: 獲取用戶輸入的 commit message（支援互動輸入或 AI 生成）
+        if ! message=$(get_commit_message); then
+            exit 1
+        fi
+        
+        # 步驟 2: 確認是否要提交（包含品質檢查）
+        if confirm_commit "$message"; then
+            break  # 確認成功，跳出循環繼續提交
+        fi
+        
+        # 品質檢查失敗或使用者取消，提示重新輸入
+        echo >&2
+        warning_msg "⚠️  已取消本次提交"
+        info_msg "💡 請重新輸入 commit 訊息"
+        echo >&2
+    done
     
     # 步驟 3: 提交變更到本地倉庫（執行 git commit，不執行 push）
     if ! commit_changes "$message"; then
@@ -1822,17 +2507,25 @@ execute_commit_only() {
     info_msg "已暫存的變更:"
     git diff --cached --name-only >&2
     
-    # 步驟 2: 獲取用戶輸入的 commit message
+    # 步驟 2-3: 獲取 commit message 並確認（支援重新輸入）
     local message
-    if ! message=$(get_commit_message); then
-        exit 1
-    fi
-    
-    # 步驟 3: 確認是否要提交
-    if ! confirm_commit "$message"; then
-        warning_msg "已取消提交。"
-        exit 0
-    fi
+    while true; do
+        # 步驟 2: 獲取用戶輸入的 commit message
+        if ! message=$(get_commit_message); then
+            exit 1
+        fi
+        
+        # 步驟 3: 確認是否要提交（包含品質檢查）
+        if confirm_commit "$message"; then
+            break  # 確認成功，跳出循環繼續提交
+        fi
+        
+        # 品質檢查失敗或使用者取消，提示重新輸入
+        echo >&2
+        warning_msg "⚠️  已取消本次提交"
+        info_msg "💡 請重新輸入 commit 訊息"
+        echo >&2
+    done
     
     # 步驟 4: 提交變更到本地倉庫
     if ! commit_changes "$message"; then

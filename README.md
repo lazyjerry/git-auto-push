@@ -2,7 +2,7 @@
 
 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能和錯誤處理機制。
 
-版本：v2.0.0
+版本：v2.2.1
 
 ## 專案簡介
 
@@ -10,14 +10,16 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 
 #### git-auto-push
 
-- [ ] commit 檢測 issue key 帶在前面，檢測到的話帶入前綴。
-- [ ] 檢測 commit 是否有功能性，沒有的話提出警告。
+- [x] commit 檢測 issue key 帶在前面，檢測到的話帶入前綴。
+- [x] 檢測 commit 是否有功能性，沒有的話提出警告。（✅ v2.2.0 已實作 AI 品質檢查）
 - [ ] add 時自動忽略已經設定的檔案，檔案清單可由變數設定或由外部列表提供
 
 ### 主要功能亮點
 
 - 傳統 Git 工作流程自動化（新增、提交、推送）
 - Git 倉庫資訊查看（分支狀態、遠端配置、同步狀態、提交歷史）
+- Commit 訊息修改功能（安全修改最後一次 commit 訊息，支援任務編號）
+- Commit 訊息品質檢查 🆕（AI 驅動的提交品質檢測，可配置自動檢查或詢問模式）
 - GitHub Flow PR 流程自動化（分支建立到 PR 建立）
 - PR 生命週期管理（建立、撤銷、審查、合併）
 - 分支管理系統（安全刪除、主分支保護、多重確認）
@@ -59,6 +61,7 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 │   ├── github-flow.md           # GitHub Flow 流程說明
 │   ├── pr-cancel-feature.md     # PR 撤銷功能說明
 │   ├── git-info-feature.md      # Git 倉庫資訊顯示功能說明
+│   ├── FEATURE-AMEND.md         # 變更 commit 訊息功能說明 🆕
 │   └── git-usage.md             # Git 使用說明
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
@@ -145,12 +148,18 @@ git-auto-push --auto
 
 #### git-auto-push.sh 操作模式
 
-1. 流程：add → 互動輸入 commit → push（日常開發提交）
+1. 完整流程：add → 互動輸入 commit → push（日常開發提交）
 2. 本機提交：add → 互動輸入 commit（離線開發或測試提交）
 3. 僅新增檔案：add（暫存檔案變更）
 4. 全自動模式：add → AI 產生 commit → push（CI/CD 或快速提交）
 5. 僅提交：commit（提交已暫存的檔案）
 6. 顯示倉庫資訊：顯示 Git 倉庫詳細資訊（查看倉庫狀態與配置）
+7. 變更最後一次 commit 訊息：修改最近一次提交的訊息內容（修正錯誤或補充說明）
+
+**智慧品質檢查** 🆕：
+- 模式 1-5 支援可配置的 AI commit 訊息品質檢查
+- 檢測訊息是否清楚描述變更內容和目的
+- 可設定自動檢查（預設）或詢問模式
 
 ### git-auto-pr.sh - GitHub Flow PR 自動化
 
@@ -233,6 +242,40 @@ git-auto-pr
 # - 分支來源分析
 # - 同步狀態（領先/落後）
 # - 工作區狀態
+```
+
+#### 修改最後一次 commit 訊息
+
+```bash
+# 修正 commit 訊息錯誤或補充說明
+./git-auto-push.sh
+# 選擇選項 7
+# 功能特色：
+# - 自動檢查是否有未提交的變更（有則警告並中止）
+# - 顯示目前的 commit 訊息供參考
+# - 支援任務編號自動帶入
+# - 二次確認機制
+# - 安全執行 git commit --amend
+# ⚠️ 注意：僅適用於尚未推送的本地 commit
+```
+
+#### Commit 訊息品質檢查 🆕
+
+```bash
+# 自動檢查模式（預設）
+# 每次 commit 前自動使用 AI 檢查訊息品質
+./git-auto-push.sh
+# 選擇選項 1-5 任一操作
+# 功能特色：
+# - AI 分析訊息是否明確描述變更內容和目的
+# - 檢查不良時提供警告和改進建議
+# - AI 失敗時自動跳過，不影響提交流程
+# - 可配置為詢問模式（false），每次詢問是否檢查
+# - 設定位置：腳本頂部 AUTO_CHECK_COMMIT_QUALITY 變數（約 149 行）
+
+# 檢查標準：
+# ✅ 良好：「新增用戶登入功能，支援 OAuth 2.0 驗證」
+# ❌ 不良：「fix bug」、「update」、「修改程式碼」
 ```
 
 ### git-auto-pr.sh 使用情境 ✨
@@ -370,9 +413,13 @@ git checkout main && git pull
 - 輸出清理：過濾 AI 工具的元數據和技術雜訊
 - 提示優化：精簡 70%+ 提示長度，提升處理速度和準確性
 
-**內容產生**
+**內容產生與品質檢查**
 
 - commit 訊息：分析 git diff 自動產生符合 Conventional Commits 規範的訊息
+- 品質檢查 🆕：AI 檢查 commit 訊息是否明確描述變更內容和目的
+  - 可配置自動檢查或詢問模式
+  - 檢查不良時提供警告和改進建議
+  - 容錯設計，AI 失敗不影響提交流程
 - 分支名稱：基於 issue key、擁有者、分支類型自動生成標準格式（如 `username/type/issue-key`）
 - PR 內容：基於分支變更歷史產生 PR 標題和描述
 - 即時驗證：自動偵測分支名稱有效性並處理特殊字元
@@ -646,7 +693,28 @@ readonly AI_TOOLS=(
 2. 在對應函數中添加 case 分支處理
 3. 實現對應的 `run_*_command()` 函數
 
-#### 4. 分支配置自定義
+#### 4. Commit 品質檢查配置
+
+```bash
+# git-auto-push.sh Commit 品質檢查配置（約 149 行）
+AUTO_CHECK_COMMIT_QUALITY=true
+
+# 自動檢查模式（預設）- 每次 commit 前自動檢查
+AUTO_CHECK_COMMIT_QUALITY=true
+
+# 詢問模式 - 提交前詢問是否檢查（預設為否）
+AUTO_CHECK_COMMIT_QUALITY=false
+```
+
+**配置說明**：
+
+- **自動檢查模式（true）**：適合團隊規範嚴格、需要確保 commit 品質的專案
+- **詢問模式（false）**：適合快速提交場景、只在重要提交時檢查
+- **容錯設計**：AI 工具失敗時自動跳過檢查，不影響提交流程
+- **智慧分析**：檢查訊息是否明確描述變更內容和目的
+- **友善提示**：品質不良時提供警告和改進建議
+
+#### 5. 分支配置自定義
 
 ```bash
 # git-auto-pr.sh 主分支配置修改（第 200 行）
@@ -664,7 +732,7 @@ readonly DEFAULT_USERNAME="jerry"
 # 修改為您的名字或團隊慣例
 readonly DEFAULT_USERNAME="tom"
 
-# PR 合併後分支刪除策略配置（第 217 行）🆕
+# PR 合併後分支刪除策略配置（第 217 行）
 readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 
 # 自動刪除分支（適合短期功能分支）
@@ -678,13 +746,13 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 
 - **偵測順序**：腳本會按陣列順序偵測第一個存在的分支
 - **預設使用者**：分支建立時的預設擁有者名稱，可在執行時覆蓋
-- **分支刪除策略** 🆕：控制 PR 合併後是否自動刪除功能分支
+- **分支刪除策略**：控制 PR 合併後是否自動刪除功能分支
   - `false`（預設）：合併後保留分支，適合需要追蹤歷史的專案
   - `true`：合併後自動刪除分支，適合短期功能分支，保持倉庫整潔
 - **錯誤處理**：找不到任何分支時會顯示詳細錯誤訊息和解決建議
 - **動態提示**：錯誤訊息會根據配置陣列動態生成修復指令
 
-#### 5. 錯誤處理擴展
+#### 6. 錯誤處理擴展
 
 - 在現有錯誤偵測函數中添加新的錯誤模式
 - 更新錯誤訊息和修復建議
@@ -742,11 +810,121 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
-### 最新版本亮點 (v2.0.0)
+### v2.2.1 - 使用者體驗優化 (2025-11-08)
 
-- 1655 行 git-auto-push.sh - 傳統 Git 工作流程自動化，註解與流程說明
+**🔧 改進**
+
+- **AI 訊息確認提示優化**：改善「是否使用此訊息？」的使用者引導
+  - 新增「💡 下一步動作：」明確說明
+  - 根據 `AUTO_CHECK_COMMIT_QUALITY` 配置動態顯示下一步流程
+  - 清楚標示按 Enter 或 y 的行為（使用訊息並檢查品質 vs 稍後詢問）
+  - 統一提示格式，提升操作透明度
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：2701 行（+17 行使用者體驗改進）
+
+**🎯 改進效果**
+
+- ✅ 使用者更清楚接受訊息後的下一步流程
+- ✅ 減少操作意外和疑惑
+- ✅ 根據配置提供精確的操作預期
+
+---
+
+### v2.2.0 - Commit 訊息品質檢查功能 (2025-11-08)
+
+**🆕 新功能**
+
+- **AI 驅動的品質檢查** 🆕：新增 commit 訊息品質檢查功能
+  - 智慧分析：使用 AI 檢查訊息是否明確描述變更內容和目的
+  - 彈性配置：支援自動檢查（預設）和詢問模式
+  - 容錯設計：AI 工具失敗時自動跳過，不影響提交流程
+  - 友善提示：品質不良時提供警告和改進建議
+- **配置變數** 🆕：新增 `AUTO_CHECK_COMMIT_QUALITY` 變數控制檢查行為
+  - `true`（預設）：每次 commit 前自動檢查
+  - `false`：提交前詢問是否檢查（預設為否）
+
+**🔧 改進**
+
+- 品質標準定義：區分良好和不良的 commit 訊息範例
+- 操作流程優化：自然整合至現有提交流程
+- 說明文件完善：新增詳細的功能說明和使用指導
+
+**📁 新增文檔**
+
+- `docs/FEATURE-COMMIT-QUALITY.md` - Commit 品質檢查功能詳細說明
+- `docs/COMMIT-QUALITY-SUMMARY.md` - 品質檢查功能摘要
+- `docs/COMMIT-QUALITY-QUICKREF.md` - 快速參考指南
+- `docs/AI-QUALITY-CHECK-IMPROVEMENT.md` - AI 品質檢查改進說明
+
+**📊 行數統計**
+
+- `git-auto-push.sh`：維持 2184 行（功能整合優化）
+
+**🎯 使用場景**
+
+- ✅ 確保 commit 訊息清晰描述變更內容
+- ✅ 培養團隊良好的提交習慣
+- ✅ 維護高品質的專案提交歷史
+- ✅ 避免模糊或無意義的 commit 訊息
+
+**⚙️ 配置方式**
+
+```bash
+# 修改 git-auto-push.sh 約 149 行
+# 自動檢查模式（預設）
+AUTO_CHECK_COMMIT_QUALITY=true
+
+# 詢問模式
+AUTO_CHECK_COMMIT_QUALITY=false
+```
+
+---
+
+### v2.1.0 - Commit 訊息修改功能 (2025-11-02)
+
+**🆕 新功能**
+
+- **變更最後一次 commit 訊息** 🆕：新增選項 7，安全修改最近一次提交的訊息
+  - 智慧安全檢查：自動偵測未提交的變更並警告
+  - 參考訊息顯示：修改前顯示目前的 commit 訊息
+  - 任務編號整合：支援自動帶入或詢問加入任務編號前綴
+  - 二次確認機制：顯示完整新訊息並要求確認
+  - 清楚反饋：成功後顯示修改結果
+- **快速選項** 🆕：無變更時提供 p/7/6 快速選項（推送/修改/查看）
+- **黃色訊息函數** 🆕：新增 `yellow_msg()` 用於重要提示
+
+**🔧 改進**
+
+- 操作模式擴展：從 6 選項擴展為 7 選項
+- 選單更新：輸入提示範圍更新為 `[1-7]`
+- 說明文件完善：新增「7️⃣ 變更最後一次 commit 訊息」完整說明
+- 無變更流程優化：提供更多操作選項而非僅推送
+
+**📁 新增文檔**
+
+- `docs/FEATURE-AMEND.md` - 變更 commit 訊息功能詳細說明
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：2184 行（+129 行新功能）
+
+**⚠️ 使用注意**
+
+- ✅ 適用於尚未推送的本地 commit
+- ⚠️ 避免修改已推送至遠端的 commit
+- 💡 團隊協作時建議使用新 commit 而非 amend
+
+---
+
+### 最新版本亮點 (v2.2.1)
+
+- 2701 行 git-auto-push.sh - 傳統 Git 工作流程自動化，註解與流程說明
 - 2896 行 git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
-- 11 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
+- 12 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（7 種 push + 5 種 PR）
+- Commit 品質檢查 🆕 - AI 驅動的訊息品質檢測，可配置自動檢查或詢問模式
+- Commit 訊息修改功能 - 安全修改最後一次 commit 訊息
 - Git 倉庫資訊查看 - 一鍵瀏覽倉庫狀態
 - 分支管理 - 安全刪除機制，主分支保護，多重確認
 - 文件標準 - 所有主要流程函數都有註解
@@ -939,6 +1117,8 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
 - [docs/pr-cancel-feature.md](docs/pr-cancel-feature.md) - PR 撤銷功能詳細說明
 - [docs/git-info-feature.md](docs/git-info-feature.md) - Git 倉庫資訊功能說明
+- [docs/FEATURE-AMEND.md](docs/FEATURE-AMEND.md) - 變更 commit 訊息功能說明
+- [docs/FEATURE-COMMIT-QUALITY.md](docs/FEATURE-COMMIT-QUALITY.md) - Commit 品質檢查功能說明 🆕
 
 ## 截圖展示
 

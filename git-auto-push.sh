@@ -458,6 +458,45 @@ add_all_files() {
     fi
 }
 
+# 函式：show_ai_debug_info
+# 功能說明：統一格式顯示 AI 工具的調試資訊，包含工具名稱、輸入與輸出內容。
+# 輸入參數：
+#   $1 <tool_name> AI 工具名稱，如 codex、gemini、claude
+#   $2 <prompt> 提示詞內容（指令部分）
+#   $3 <content> 實際資料內容（可選，如 diff、commits）
+#   $4 <output> 輸出內容（可選），AI 工具的回應結果
+# 輸出結果：
+#   STDERR 輸出彩色格式化的調試資訊，包含分隔線與標題
+# 例外/失敗：
+#   無例外，總是返回 0
+# 流程：
+#   1. 輸出分隔線與工具名稱標題（使用 debug_msg）
+#   2. 顯示 prompt 內容（截取前 200 字元）
+#   3. 顯示 content 內容（如有，截取前 10 行）
+#   4. 若提供 output 參數，顯示輸出內容
+#   5. 輸出結束分隔線
+# 副作用：輸出至 stderr，不影響 stdout
+# 參考：用於開發階段追蹤 AI 工具的輸入輸出
+show_ai_debug_info() {
+    local tool_name="$1"
+    local prompt="$2"
+    local content="$3"
+    local output="$4"
+    
+    debug_msg "📥 AI 輸入（prompt）："
+    echo "$prompt" | sed 's/^/  /' >&2
+    
+    if [ -n "$content" ]; then
+        debug_msg "📥 AI 輸入（content，前 10 行）："
+        echo "$content" | head -n 10 | sed 's/^/  /' >&2
+    fi
+    
+    if [ -n "$output" ]; then
+        debug_msg "💬 $tool_name 輸出："
+        echo "$output" | sed 's/^/  /' >&2
+    fi
+}
+
 # 清理 AI 生成的訊息
 clean_ai_message() {
     local message="$1"
@@ -465,7 +504,14 @@ clean_ai_message() {
     # 顯示原始訊息
     debug_msg "🔍 AI 原始輸出: '$message'"
     
-    # 最簡化處理：只移除前後空白，保留完整內容
+    # 步驟 1: 移除常見的 CLI 工具技術訊息
+    # gemini: "Loaded cached credentials."
+    # claude: 類似的認證訊息
+    message=$(echo "$message" | sed 's/^Loaded cached credentials\.//g')
+    message=$(echo "$message" | sed 's/^Loading credentials\.\.\.//g')
+    message=$(echo "$message" | sed 's/^Authentication successful\.//g')
+    
+    # 步驟 2: 移除前後空白
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果
@@ -737,23 +783,72 @@ run_codex_command() {
                     return 0
                 fi
             fi
+            
+            # 沒有有效內容，顯示調試信息
             warning_msg "codex 沒有返回有效內容"
+            echo >&2
+            debug_msg "🔍 調試信息（codex 無有效輸出）:"
+            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "退出碼: $exit_code"
+            if [ -n "$output" ]; then
+                debug_msg "原始輸出內容:"
+                echo "$output" | sed 's/^/  /' >&2
+            else
+                debug_msg "輸出內容: (無)"
+            fi
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            printf "\n" >&2
             ;;
         124)
             error_msg "❌ codex 執行超時（${timeout}秒）"
+            
+            # 顯示調試信息
+            echo >&2
+            debug_msg "🔍 調試信息（codex 超時錯誤）:"
+            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "超時設定: $timeout 秒"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            if [ -n "$output" ]; then
+                debug_msg "部分輸出內容:"
+                echo "$output" | head -n 5 | sed 's/^/  /' >&2
+            else
+                debug_msg "輸出內容: (無)"
+            fi
             warning_msg "💡 建議：檢查網路連接或稍後重試"
+            printf "\n" >&2
             ;;
         *)
             # 檢查特定錯誤類型
+            echo >&2
+            debug_msg "🔍 調試信息（codex 執行失敗）:"
+            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "退出碼: $exit_code"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            
             if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
                 error_msg "❌ codex 認證錯誤"
                 warning_msg "💡 請執行：codex auth login"
+                if [ -n "$output" ]; then
+                    debug_msg "錯誤輸出:"
+                    echo "$output" | sed 's/^/  /' >&2
+                fi
             elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
                 error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
+                if [ -n "$output" ]; then
+                    debug_msg "錯誤輸出:"
+                    echo "$output" | sed 's/^/  /' >&2
+                fi
             else
                 warning_msg "codex 執行失敗（退出碼: $exit_code）"
+                if [ -n "$output" ]; then
+                    debug_msg "完整輸出內容:"
+                    echo "$output" | sed 's/^/  /' >&2
+                else
+                    debug_msg "輸出內容: (無)"
+                fi
             fi
+            printf "\n" >&2
             ;;
     esac
     
@@ -1052,12 +1147,7 @@ append_ticket_number_to_message() {
 
 # 獲取用戶輸入的 commit message
 get_commit_message() {
-    echo >&2
-    echo "==================================================" >&2
-    highlight_success_msg "💬 請輸入 commit 訊息"
-    echo "==================================================" >&2
-    cyan_msg "輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
-    
+   
     # 顯示任務編號自動帶入狀態
     if [[ -n "$TICKET_NUMBER" ]]; then
         echo >&2
@@ -1067,6 +1157,12 @@ get_commit_message() {
             white_msg "🎫 任務編號: $TICKET_NUMBER (提交時詢問是否加入)"
         fi
     fi
+   
+    echo >&2
+    echo "==================================================" >&2
+    highlight_success_msg "💬 請輸入 commit 訊息"
+    echo "==================================================" >&2
+    cyan_msg "輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
     
     echo >&2
     printf "➤ " >&2  # 提供明確的輸入提示符號
@@ -1212,15 +1308,57 @@ run_simple_ai_command() {
     
     # 檢查執行結果
     if [ $exit_code -eq 124 ]; then
-        debug_msg "$tool_name 執行超時（${timeout}秒）"
+        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
+        
+        # 顯示詳細調試信息
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
+        debug_msg "執行的指令: $tool_name < [prompt_file]"
+        debug_msg "超時設定: $timeout 秒"
+        
+        # 使用統一函數顯示 AI 輸入輸出
+        if [ -n "$output" ]; then
+            show_ai_debug_info "$tool_name" "$prompt" "" "$(echo "$output" | head -n 5)"
+        else
+            show_ai_debug_info "$tool_name" "$prompt"
+            debug_msg "輸出內容: (無)"
+        fi
+        echo >&2
         return 1
     elif [ $exit_code -ne 0 ]; then
-        debug_msg "$tool_name 執行失敗（退出碼: $exit_code）"
+        # 確保 exit_code 是有效數字
+        local display_code="${exit_code:-未知}"
+        error_msg "❌ $tool_name 執行失敗（退出碼: ${display_code}）"
+        
+        # 顯示詳細調試信息
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
+        debug_msg "執行的指令: $tool_name < [prompt_file]"
+        debug_msg "退出碼: ${display_code}"
+        
+        # 使用統一函數顯示 AI 輸入輸出
+        if [ -n "$output" ]; then
+            show_ai_debug_info "$tool_name" "$prompt" "" "$output"
+        else
+            show_ai_debug_info "$tool_name" "$prompt"
+            debug_msg "輸出內容: (無)"
+        fi
+        echo >&2
         return 1
     fi
     
     if [ -z "$output" ]; then
-        debug_msg "$tool_name 沒有返回內容"
+        error_msg "❌ $tool_name 沒有返回內容"
+        
+        # 顯示詳細調試信息
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
+        debug_msg "執行的指令: $tool_name < [prompt_file]"
+        debug_msg "退出碼: $exit_code"
+        
+        # 使用統一函數顯示 AI 輸入
+        show_ai_debug_info "$tool_name" "$prompt"
+        echo >&2
         return 1
     fi
     
@@ -1314,10 +1452,12 @@ Commit 訊息：「$message」
     # 步驟 4: 分析 AI 回應
     ai_response=$(echo "$ai_response" | xargs)
     
-    if [[ "$ai_response" =~ ^良好 ]] || [[ "$ai_response" =~ ^Good ]] || [[ "$ai_response" =~ ^GOOD ]]; then
+    # 使用更寬鬆的匹配：只要包含「良好」或「Good」即視為通過
+    if [[ "$ai_response" =~ 良好 ]] || [[ "$ai_response" =~ [Gg]ood ]] || [[ "$ai_response" =~ GOOD ]]; then
         success_msg "✅ Commit 訊息品質良好"
         return 0
-    elif [[ "$ai_response" =~ ^不良 ]] || [[ "$ai_response" =~ ^Bad ]] || [[ "$ai_response" =~ ^BAD ]] || [[ "$ai_response" =~ 模糊 ]] || [[ "$ai_response" =~ 不明確 ]]; then
+    # 只要包含「不良」、「Bad」或相關負面關鍵字即視為品質不佳
+    elif [[ "$ai_response" =~ 不良 ]] || [[ "$ai_response" =~ [Bb]ad ]] || [[ "$ai_response" =~ BAD ]] || [[ "$ai_response" =~ 模糊 ]] || [[ "$ai_response" =~ 不明確 ]] || [[ "$ai_response" =~ 過於簡短 ]]; then
         # 顯示警告
         echo >&2
         warning_msg "⚠️  Commit 訊息品質警告"

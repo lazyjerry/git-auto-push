@@ -12,13 +12,14 @@
 #   顯示說明：    ./git-auto-push.sh -h 或 --help
 #   全域使用：    git-auto-push（需先將腳本連結至 PATH）
 #
-# 六種操作模式：
-#   1. 完整流程 - add → commit → push（預設操作）
-#   2. 本地提交 - add → commit（不推送至遠端）
-#   3. 僅添加變更 - git add -A（僅暫存檔案）
-#   4. 全自動流程 - add → AI commit → push（無互動）
+# 七種操作模式：
+#   1. 完整流程 - add → commit → push（預設操作，支援檔案過濾）
+#   2. 本地提交 - add → commit（不推送至遠端，支援檔案過濾）
+#   3. 僅添加變更 - 選擇性 add（僅暫存檔案，支援檔案過濾）
+#   4. 全自動流程 - add → AI commit → push（無互動，支援檔案過濾）
 #   5. 僅提交 - commit（僅針對已暫存的檔案）
 #   6. 顯示倉庫資訊 - 顯示分支、遠端、狀態等詳細資訊
+#   7. 變更 commit 訊息 - 修改最後一次的 commit 訊息（amend）
 #
 # 相依工具：
 #   bash>=4.0       必需，腳本執行環境
@@ -36,7 +37,8 @@
 #   - CLI 參數：--auto/-a（全自動模式）、-h/--help（顯示說明）
 #   - 環境變數：無特定環境變數需求，使用 Git 預設配置
 #   - STDIN：互動式輸入（選單選項、commit 訊息、確認提示等）
-#   - 設定檔：無外部設定檔，使用 Git 配置（~/.gitconfig、.git/config）
+#   - 設定檔：Git 配置（~/.gitconfig、.git/config）
+#   - 過濾檔案：git-auto-push-ignore.txt（可選，控制 git add 時忽略的檔案）
 #
 # 輸出結果：
 #   - STDOUT：無資料輸出（所有訊息均輸出至 STDERR）
@@ -54,12 +56,13 @@
 #   3. 互動模式：顯示操作選單並接收使用者選擇
 #   4. 全自動模式：直接執行 add → AI commit → push
 #   5. 根據選擇執行對應工作流程：
-#      - 模式 1：add -A → 輸入/AI 生成 commit → commit → push
-#      - 模式 2：add -A → 輸入/AI 生成 commit → commit（不 push）
-#      - 模式 3：add -A（僅暫存）
-#      - 模式 4：add -A → AI 生成 commit → commit → push（無互動）
+#      - 模式 1：選擇性 add → 輸入/AI 生成 commit → commit → push
+#      - 模式 2：選擇性 add → 輸入/AI 生成 commit → commit（不 push）
+#      - 模式 3：選擇性 add（僅暫存，自動過濾符合規則的檔案）
+#      - 模式 4：選擇性 add → AI 生成 commit → commit → push（無互動）
 #      - 模式 5：輸入 commit 訊息 → commit（針對已暫存檔案）
 #      - 模式 6：顯示分支、遠端、狀態等倉庫資訊
+#      - 模式 7：變更最後一次 commit 訊息（amend）
 #   6. 輸出操作結果與後續建議
 #   7. 清理暫存資源並退出
 #
@@ -72,6 +75,9 @@
 #   - 腳本會檢測 Git 倉庫狀態，無變更時會提示並退出
 #   - 時區假設：使用系統本地時區
 #   - 支援離線模式：模式 2、3、5 不需要網路連線
+#   - 檔案過濾功能：透過 git-auto-push-ignore.txt 控制要忽略的檔案
+#   - 過濾規則支援 glob pattern（* 和 **），格式同 .gitignore
+#   - 相對路徑以執行命令的當前目錄為基準
 #
 # 參考：
 #   - Git 使用說明：docs/git-usage.md
@@ -2280,28 +2286,28 @@ show_help() {
     echo >&2
     
     highlight_success_msg "  1️⃣  完整流程 (add → commit → push)"
-    white_msg "      • 自動添加所有變更到暫存區"
+    white_msg "      • 選擇性添加變更到暫存區（支援檔案過濾）"
     white_msg "      • 支援手動輸入或 AI 生成 commit 訊息"
     white_msg "      • 提交到本地倉庫後推送至遠端"
     white_msg "      • 適用場景：日常開發的標準流程"
     echo >&2
     
     info_msg "  2️⃣  本地提交 (add → commit)"
-    white_msg "      • 自動添加所有變更到暫存區"
+    white_msg "      • 選擇性添加變更到暫存區（支援檔案過濾）"
     white_msg "      • 支援手動輸入或 AI 生成 commit 訊息"
     white_msg "      • 僅提交到本地倉庫，不推送"
     white_msg "      • 適用場景：離線開發、需多次本地提交後再推送"
     echo >&2
     
     cyan_msg "  3️⃣  僅添加變更 (add)"
-    white_msg "      • 執行 git add -A 將所有變更暫存"
+    white_msg "      • 選擇性將變更暫存（自動過濾符合規則的檔案）"
     white_msg "      • 不執行 commit 或 push"
     white_msg "      • 適用場景：暫存變更但尚未準備好提交"
     echo >&2
     
     purple_msg "  4️⃣  全自動流程 (add → AI commit → push)"
     white_msg "      • 完全無需手動輸入，AI 自動生成 commit 訊息"
-    white_msg "      • 自動完成 add → commit → push 全流程"
+    white_msg "      • 自動完成選擇性 add → commit → push 全流程（支援檔案過濾）"
     white_msg "      • 適用場景：CI/CD 整合、快速提交小型變更"
     white_msg "      • 使用方式：./git-auto-push.sh --auto"
     echo >&2

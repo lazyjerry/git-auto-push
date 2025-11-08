@@ -161,7 +161,7 @@ AUTO_CHECK_COMMIT_QUALITY=true
 # 注意：
 #   - 調試訊息可能包含敏感資訊（如 API 回應、diff 內容）
 #   - 啟用後會大幅增加輸出內容，建議僅在需要時開啟
-IS_DEBUG=false
+IS_DEBUG=true
 
 # Git Add 檔案過濾設定
 # 說明：設定要在 git add 時忽略的檔案清單路徑。
@@ -483,21 +483,66 @@ get_git_status() {
 }
 
 # 函式：init_ignore_file
-# 功能說明：初始化 Git Add 過濾檔案，如果不存在則建立包含說明的預設檔案。
+# 功能說明：初始化 Git Add  Ignore 檔案，如果不存在則建立包含說明的預設檔案。
+#          支援相對路徑和絕對路徑，自動檢測並處理。
 # 輸入參數：無
 # 輸出結果：
 #   若檔案不存在，建立包含使用說明的預設檔案
 # 例外/失敗：
-#   無例外，總是返回 0
+#   1=檔案建立權限錯誤，顯示警告並終止程式
 # 流程：
-#   1. 檢查 IGNORE_FILE_PATH 指定的檔案是否存在
-#   2. 若不存在，建立檔案並寫入使用說明與範例
-#   3. 顯示建立成功訊息
-# 副作用：可能建立新檔案
+#   1. 判斷 IGNORE_FILE_PATH 是相對路徑還是絕對路徑
+#   2. 若為相對路徑，以執行命令的當前目錄為基準
+#   3. 檢查檔案是否存在
+#   4. 若不存在，嘗試建立檔案並寫入使用說明
+#   5. 若建立失敗（權限錯誤），顯示警告並終止
+#   6. 驗證檔案可讀性
+# 副作用：可能建立新檔案；權限錯誤時終止程式
 # 參考：IGNORE_FILE_PATH 變數
 init_ignore_file() {
-    if [[ ! -f "$IGNORE_FILE_PATH" ]]; then
-        cat > "$IGNORE_FILE_PATH" <<'EOF'
+    local file_path="$IGNORE_FILE_PATH"
+    
+    # 判斷是否為絕對路徑（以 / 開頭）
+    if [[ "$file_path" != /* ]]; then
+        # 相對路徑：以當前工作目錄為基準
+        local current_dir
+        current_dir=$(pwd)
+        
+        file_path="$current_dir/$file_path"
+        debug_msg "相對路徑轉換：$IGNORE_FILE_PATH → $file_path（基於當前目錄）"
+    else
+        debug_msg "使用絕對路徑：$file_path"
+    fi
+    
+    # 檢查檔案是否已存在
+    if [[ -f "$file_path" ]]; then
+        # 檔案存在，檢查是否可讀
+        if [[ ! -r "$file_path" ]]; then
+            error_msg " Ignore 檔案存在但無法讀取：$file_path"
+            warning_msg "請檢查檔案權限"
+            exit 1
+        fi
+        info_msg "使用 Ignore 檔案：$file_path"
+        return 0
+    fi
+    
+    # 檔案不存在，嘗試建立
+    info_msg " Ignore 檔案不存在，正在建立：$file_path"
+    
+    # 檢查目錄是否存在，不存在則建立
+    local dir_path
+    dir_path=$(dirname "$file_path")
+    if [[ ! -d "$dir_path" ]]; then
+        if ! mkdir -p "$dir_path" 2>/dev/null; then
+            error_msg "無法建立目錄：$dir_path"
+            warning_msg "請檢查目錄權限或手動建立目錄"
+            exit 1
+        fi
+    fi
+    
+    # 嘗試建立檔案
+    cat > "$file_path" 2>/dev/null <<'EOF'
+
 # Git Auto Push - 檔案過濾清單
 # 
 # 此檔案用於指定在執行 git add 時要忽略的檔案。
@@ -524,12 +569,36 @@ init_ignore_file() {
 # 在下方新增您的過濾 pattern：
 
 EOF
-        debug_msg "已建立預設過濾檔案：$IGNORE_FILE_PATH"
+    
+    # 檢查檔案建立是否成功
+    if [[ $? -ne 0 || ! -f "$file_path" ]]; then
+        error_msg "無法建立 Ignore 檔案：$file_path"
+        warning_msg "可能原因："
+        warning_msg "  1. 目錄權限不足"
+        warning_msg "  2. 磁碟空間不足"
+        warning_msg "  3. 檔案路徑包含無效字元"
+        echo >&2
+        info_msg "請檢查以下項目："
+        info_msg "  - 確認目錄 $dir_path 有寫入權限"
+        info_msg "  - 確認磁碟空間充足"
+        info_msg "  - 或手動建立檔案：touch '$file_path'"
+        exit 1
     fi
+    
+    # 驗證檔案已成功建立且可讀
+    if [[ ! -r "$file_path" ]]; then
+        error_msg "檔案已建立但無法讀取：$file_path"
+        warning_msg "請檢查檔案權限：chmod 644 '$file_path'"
+        exit 1
+    fi
+    
+    success_msg "✅ 已建立預設 Ignore 檔案：$file_path"
+    info_msg "您可以編輯此檔案來自訂要忽略的檔案 pattern"
 }
 
 # 函式：load_ignore_patterns
-# 功能說明：從過濾檔案載入要忽略的 pattern 清單。
+# 功能說明：從 Ignore 檔案載入要忽略的 pattern 清單。
+#          自動處理相對路徑和絕對路徑。
 # 輸入參數：無
 # 輸出結果：
 #   STDOUT 輸出有效的 pattern 清單（每行一個）
@@ -537,20 +606,36 @@ EOF
 # 例外/失敗：
 #   檔案不存在時輸出空字串
 # 流程：
-#   1. 檢查過濾檔案是否存在
-#   2. 讀取檔案內容
-#   3. 過濾掉 # 開頭的註解行
-#   4. 過濾掉空行
-#   5. 輸出有效的 pattern
+#   1. 判斷 IGNORE_FILE_PATH 是相對路徑還是絕對路徑
+#   2. 若為相對路徑，以執行命令的當前目錄為基準
+#   3. 檢查 Ignore 檔案是否存在
+#   4. 讀取檔案內容
+#   5. 過濾掉 # 開頭的註解行
+#   6. 過濾掉空行
+#   7. 輸出有效的 pattern
 # 副作用：無
 # 參考：IGNORE_FILE_PATH 變數
 load_ignore_patterns() {
-    if [[ ! -f "$IGNORE_FILE_PATH" ]]; then
+    local file_path="$IGNORE_FILE_PATH"
+    
+    # 判斷是否為絕對路徑（以 / 開頭）
+    if [[ "$file_path" != /* ]]; then
+        # 相對路徑：以當前工作目錄為基準
+        local current_dir
+        current_dir=$(pwd)
+        
+        file_path="$current_dir/$file_path"
+    fi
+
+
+
+    # 檢查 Ignore 檔案是否存在
+    if [[ ! -f "$file_path" ]]; then
         return 0
     fi
     
     # 讀取檔案，過濾註解和空行
-    grep -v '^\s*#' "$IGNORE_FILE_PATH" 2>/dev/null | grep -v '^\s*$' || true
+    grep -v '^\s*#' "$file_path" 2>/dev/null | grep -v '^\s*$' || true
 }
 
 # 函式：should_ignore_file
@@ -591,7 +676,7 @@ should_ignore_file() {
 # 返回：0 - 有檔案被添加，1 - 沒有檔案被添加或添加失敗
 # 使用：if add_all_files; then echo "檔案已暫存"; fi
 # 行為：
-#   - 初始化過濾檔案（若不存在）
+#   - 初始化 Ignore 檔案（若不存在）
 #   - 讀取過濾 pattern 清單
 #   - 列出所有變更的檔案
 #   - 逐一檢查是否符合過濾 pattern
@@ -605,7 +690,7 @@ should_ignore_file() {
 add_all_files() {
     info_msg "正在添加變更的檔案..."
     
-    # 初始化過濾檔案（若不存在則建立）
+    # 初始化 Ignore 檔案（若不存在則建立）
     init_ignore_file
     
     # 讀取過濾 pattern 清單
@@ -672,7 +757,13 @@ add_all_files() {
     if [[ ${#files_to_add[@]} -eq 0 ]]; then
         echo >&2
         warning_msg "所有變更的檔案都符合過濾規則，沒有檔案被添加"
-        info_msg "如需修改過濾規則，請編輯：$IGNORE_FILE_PATH"
+        
+        # 計算並顯示完整的 Ignore 檔案路徑
+        local filter_file_path="$IGNORE_FILE_PATH"
+        if [[ "$filter_file_path" != /* ]]; then
+            filter_file_path="$(pwd)/$filter_file_path"
+        fi
+        info_msg "如需修改過濾規則，請編輯：$filter_file_path"
         return 1
     fi
     

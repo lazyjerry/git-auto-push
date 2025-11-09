@@ -2,7 +2,7 @@
 
 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、檔案過濾系統、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
 
-版本：v2.5.0
+版本：v2.5.1
 
 ## 專案簡介
 
@@ -104,7 +104,56 @@ chmod +x git-auto-push.sh
 chmod +x git-auto-pr.sh
 ```
 
-### 3. 全域安裝（選擇性）
+### 3. 調整個人化設定（建議）
+
+在使用前，建議先依據個人或團隊需求調整以下重要設定變數：
+
+#### git-auto-push.sh 設定（約第 100-210 行）
+
+```bash
+# AI 工具優先順序（第 109 行）
+readonly AI_TOOLS=(
+    "codex"     # GitHub Copilot CLI
+    "gemini"    # Google Gemini CLI  
+    "claude"    # Anthropic Claude CLI
+)
+
+# Commit 品質自動檢查（第 155 行）
+AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
+# AUTO_CHECK_COMMIT_QUALITY=false       # 詢問模式
+
+# 檔案過濾設定檔路徑（第 209 行）
+readonly IGNORE_FILE_PATH="git-auto-push-ignore.txt"  # 相對路徑
+# readonly IGNORE_FILE_PATH="/path/to/ignore.txt"     # 絕對路徑
+```
+
+#### git-auto-pr.sh 設定（約第 180-230 行）
+
+```bash
+# AI 工具優先順序（第 187 行）
+readonly AI_TOOLS=("codex" "gemini" "claude")
+
+# 主分支偵測順序（第 202 行）
+readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
+# readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")     # 標準配置
+# readonly -a DEFAULT_MAIN_BRANCHES=("develop" "main")    # Git Flow 風格
+
+# 預設使用者名稱（第 212 行）
+readonly DEFAULT_USERNAME="jerry"
+# readonly DEFAULT_USERNAME="your-name"    # 修改為您的名字
+
+# PR 合併後分支刪除策略（第 223 行）
+readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（建議）
+# readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true # 自動刪除
+```
+
+**設定建議**：
+- **AI_TOOLS**：根據已安裝的 AI 工具調整順序或移除不需要的工具
+- **DEFAULT_USERNAME**：修改為您的 GitHub 使用者名稱或團隊慣用名稱
+- **DEFAULT_MAIN_BRANCHES**：依專案的分支策略調整偵測順序
+- **AUTO_CHECK_COMMIT_QUALITY**：團隊協作建議設為 `true`，個人開發可設為 `false`
+
+### 4. 全域安裝（選擇性）
 
 ```bash
 # 安裝 git-auto-push 到系統路徑
@@ -116,7 +165,7 @@ sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
 
 安裝完之後能夠直接呼叫 git-auto-push 或 git-auto-pr 啟動腳本。
 
-### 4. 相依工具安裝
+### 5. 相依工具安裝
 
 #### GitHub CLI（git-auto-pr.sh 必需）
 

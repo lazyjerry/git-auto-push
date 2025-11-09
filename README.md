@@ -2,17 +2,9 @@
 
 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、檔案過濾系統、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
 
-版本：v2.4.0
+版本：v2.5.0
 
 ## 專案簡介
-
-### TODO
-
-#### git-auto-push
-
-- [x] commit 檢測 issue key 帶在前面，檢測到的話帶入前綴。
-- [x] 檢測 commit 是否有功能性，沒有的話提出警告。（✅ v2.2.0 已實作 AI 品質檢查）
-- [x] add 時自動忽略已經設定的檔案，檔案清單可由變數設定或由外部列表提供。（✅ v2.4.0 已實作檔案過濾功能）
 
 ### 主要功能亮點
 
@@ -35,8 +27,8 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（3047 行，註解與流程說明）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2896 行，程式碼文件與流程註解）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（3065 行，註解與流程說明）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（3135 行，程式碼文件與流程註解）
 ├── 檔案過濾系統 🆕        # 選擇性 git add 機制
 │   ├── 過濾規則檔案      # git-auto-push-ignore.txt（可選）
 │   ├── Glob Pattern 支援 # 支援 * 和 **，格式同 .gitignore
@@ -75,17 +67,19 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ├── .github/             # GitHub 相關設定
 │   └── copilot-instructions.md    # AI 代理開發指導
 ├── docs/                # 文件目錄
-│   ├── github-flow.md                    # GitHub Flow 流程說明
-│   ├── pr-cancel-feature.md              # PR 撤銷功能說明
-│   ├── git-info-feature.md               # Git 倉庫資訊顯示功能說明
-│   ├── git-usage.md                      # Git 使用說明
-│   ├── FEATURE-AMEND.md                  # 變更 commit 訊息功能說明 🆕
-│   ├── FEATURE-COMMIT-QUALITY.md         # Commit 品質檢查功能說明 🆕
-│   ├── COMMIT-QUALITY-SUMMARY.md         # Commit 品質檢查摘要 🆕
-│   ├── COMMIT-QUALITY-QUICKREF.md        # Commit 品質快速參考 🆕
-│   ├── AI-QUALITY-CHECK-IMPROVEMENT.md   # AI 品質檢查改進說明 🆕
-│   └── reports/
-│       └── 選項7-變更commit訊息功能開發報告.md  # 選項 7 開發報告 🆕
+│   ├── git-auto-push.mermaid             # Git 自動化流程圖 🆕
+│   ├── git-auto-pr.mermaid               # PR 流程圖 🆕
+│   ├── git_auto_push_workflow.png        # Git 工作流程圖 🆕
+│   ├── git_pr_automation.png             # PR 自動化圖 🆕
+│   └── reports/                          # 詳細文件報告 🆕
+│       ├── FEATURE-AMEND.md              # 變更 commit 訊息功能說明
+│       ├── FEATURE-COMMIT-QUALITY.md     # Commit 品質檢查功能說明
+│       ├── COMMIT-QUALITY-SUMMARY.md     # Commit 品質檢查摘要
+│       ├── COMMIT-QUALITY-QUICKREF.md    # Commit 品質快速參考
+│       ├── AI-QUALITY-CHECK-IMPROVEMENT.md # AI 品質檢查改進說明
+│       ├── 檔案過濾功能開發報告.md        # 檔案過濾功能詳細報告 🆕
+│       ├── 添加過濾檔案.md               # 過濾檔案使用說明 🆕
+│       └── 選項7-變更commit訊息功能開發報告.md # 選項 7 開發報告
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
     ├── auto-mode.png
@@ -875,6 +869,56 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ## 📋 更新日誌
 
+### v2.5.0 - 程式碼重構與專案清理 (2025-11-09)
+
+**🔧 重構優化**
+
+- **程式碼重構** ✨：統一使用 `get_git_status()` 函數取代重複的 `git status --porcelain` 調用
+  - **重構位置**：3 處重複程式碼統一為單一函數調用
+    - `add_all_files()` 函數中的 Git 狀態取得
+    - `amend_last_commit()` 函數中的變更檢查
+    - 倉庫資訊顯示功能中的工作區狀態
+  - **維護性提升**：遵循 DRY（Don't Repeat Yourself）原則
+  - **統一錯誤處理**：所有 Git 狀態取得都使用相同的錯誤處理機制
+  - **易於修改**：未來需要調整 Git 狀態取得邏輯時，只需修改一個函數
+
+- **中文檔案名稱修復** 🐛：修復中文檔案名稱在 Git 中的顯示問題
+  - **根本原因**：Git 預設將非 ASCII 字元轉換為十六進制編碼
+  - **修復方案**：設定 `git config core.quotepath false` 正確處理中文
+  - **修復範圍**：影響所有包含中文字元的檔案名稱處理
+
+- **Git Rename 操作處理** 🛠️：改善腳本對 Git rename 操作的處理邏輯
+  - **問題修復**：腳本現在能正確識別並跳過已暫存的 rename 操作
+  - **狀態處理**：新增 case 語句區分不同的 Git 狀態碼（R、D、A、M 等）
+  - **調試輸出**：增強調試訊息，清楚顯示每個檔案的處理狀態
+
+**🧹 專案清理**
+
+- **檔案管理** 🗑️：移除 .DS_Store 檔案並建立完整的 .gitignore
+  - **清理範圍**：從 Git 追蹤中移除所有 .DS_Store 檔案
+  - **預防機制**：新增 .gitignore 檔案防止未來意外提交系統檔案
+  - **涵蓋內容**：macOS 系統檔案、編輯器暫存檔、日誌檔案、臨時檔案
+
+- **文件結構整理** 📁：重新整理文件結構，所有報告移至 `docs/reports/` 目錄
+  - **統一管理**：所有功能文件和開發報告集中管理
+  - **視覺化文件**：新增 Mermaid 流程圖和工作流程示意圖
+  - **中文檔案**：正確處理包含中文的文件檔名
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：3047 行 → 3065 行（+18 行重構優化）
+- `git-auto-pr.sh`：2896 行 → 3135 行（+239 行功能增強）
+
+**🎯 重構效益**
+
+- ✅ **維護性提升**：統一的程式碼介面，減少重複程式碼
+- ✅ **穩定性增強**：修復中文檔案名稱和 rename 操作處理問題
+- ✅ **專案整潔**：清理系統檔案，建立完整的忽略規則
+- ✅ **文件完善**：清楚的文件結構和流程圖表
+- ✅ **程式碼品質**：遵循最佳實踐，提高程式碼可讀性
+
+---
+
 ### v2.4.0 - 檔案過濾功能 (2025-11-09)
 
 **🆕 新功能**
@@ -909,7 +953,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 **📊 行數統計更新**
 
-- `git-auto-push.sh`：2731 行 → 3047 行（+316 行新功能）
+- `git-auto-push.sh`：2731 行 → 3065 行（+334 行新功能與優化）
 
 **🎯 使用場景**
 
@@ -1087,10 +1131,10 @@ IS_DEBUG=true   # 開發調試
 
 ---
 
-### 最新版本亮點 (v2.4.0)
+### 最新版本亮點 (v2.5.0)
 
-- 3047 行 git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
-- 2896 行 git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
+- 3065 行 git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明  
+- 3135 行 git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
 - 12 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（7 種 push + 5 種 PR）
 - **檔案過濾系統** 🆕 - 選擇性 git add，支援 glob pattern，自動過濾指定檔案
 - **任務編號自動帶入** - 從分支名稱自動偵測 issue key，支援自動/詢問模式

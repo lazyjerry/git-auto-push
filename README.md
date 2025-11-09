@@ -994,56 +994,6 @@ config/local.*.json      # 忽略本地配置檔
 
 ---
 
-### v2.2.0 - Commit 訊息品質檢查功能 (2025-11-08)
-
-**🆕 新功能**
-
-- **AI 驅動的品質檢查** 🆕：新增 commit 訊息品質檢查功能
-  - 智慧分析：使用 AI 檢查訊息是否明確描述變更內容和目的
-  - 彈性配置：支援自動檢查（預設）和詢問模式
-  - 容錯設計：AI 工具失敗時自動跳過，不影響提交流程
-  - 友善提示：品質不良時提供警告和改進建議
-- **配置變數** 🆕：新增 `AUTO_CHECK_COMMIT_QUALITY` 變數控制檢查行為
-  - `true`（預設）：每次 commit 前自動檢查
-  - `false`：提交前詢問是否檢查（預設為否）
-
-**🔧 改進**
-
-- 品質標準定義：區分良好和不良的 commit 訊息範例
-- 操作流程優化：自然整合至現有提交流程
-- 說明文件完善：新增詳細的功能說明和使用指導
-
-**📁 新增文檔**
-
-- `docs/FEATURE-COMMIT-QUALITY.md` - Commit 品質檢查功能詳細說明
-- `docs/COMMIT-QUALITY-SUMMARY.md` - 品質檢查功能摘要
-- `docs/COMMIT-QUALITY-QUICKREF.md` - 快速參考指南
-- `docs/AI-QUALITY-CHECK-IMPROVEMENT.md` - AI 品質檢查改進說明
-
-**📊 行數統計**
-
-- `git-auto-push.sh`：維持 2184 行（功能整合優化）
-
-**🎯 使用場景**
-
-- ✅ 確保 commit 訊息清晰描述變更內容
-- ✅ 培養團隊良好的提交習慣
-- ✅ 維護高品質的專案提交歷史
-- ✅ 避免模糊或無意義的 commit 訊息
-
-**⚙️ 配置方式**
-
-```bash
-# 修改 git-auto-push.sh 約 149 行
-# 自動檢查模式（預設）
-AUTO_CHECK_COMMIT_QUALITY=true
-
-# 詢問模式
-AUTO_CHECK_COMMIT_QUALITY=false
-```
-
----
-
 ### v2.1.0 - Commit 訊息修改功能 (2025-11-02)
 
 **🆕 新功能**
@@ -1066,7 +1016,7 @@ AUTO_CHECK_COMMIT_QUALITY=false
 
 **📁 新增文檔**
 
-- `docs/FEATURE-AMEND.md` - 變更 commit 訊息功能詳細說明
+- `docs/reports/FEATURE-AMEND.md` - 變更 commit 訊息功能詳細說明
 
 **📊 行數統計更新**
 
@@ -1077,6 +1027,56 @@ AUTO_CHECK_COMMIT_QUALITY=false
 - ✅ 適用於尚未推送的本地 commit
 - ⚠️ 避免修改已推送至遠端的 commit
 - 💡 團隊協作時建議使用新 commit 而非 amend
+
+---
+
+### v2.2.0 - Commit 訊息品質檢查功能 (2025-11-08)
+
+**🆕 新功能**
+
+- **AI 驅動的品質檢查** 🆕：新增 commit 訊息品質檢查功能
+  - 智慧分析：使用 AI 檢查訊息是否明確描述變更內容和目的
+  - 彈性配置：支援自動檢查（預設）和詢問模式
+  - 容錯設計：AI 工具失敗時自動跳過，不影響提交流程
+  - 友善提示：品質不良時提供警告和改進建議
+- **配置變數** 🆕：新增 `AUTO_CHECK_COMMIT_QUALITY` 變數控制檢查行為
+  - `true`（預設）：每次 commit 前自動檢查
+  - `false`：提交前詢問是否檢查（預設為否）
+
+**🔧 改進**
+
+- 品質標準定義：區分良好和不良的 commit 訊息範例
+- 操作流程優化：自然整合至現有提交流程
+- 說明文件完善：新增詳細的功能說明和使用指導
+
+**📁 新增文檔**
+
+- `docs/reports/FEATURE-COMMIT-QUALITY.md` - Commit 品質檢查功能詳細說明
+- `docs/reports/COMMIT-QUALITY-SUMMARY.md` - 品質檢查功能摘要
+- `docs/reports/COMMIT-QUALITY-QUICKREF.md` - 快速參考指南
+- `docs/reports/AI-QUALITY-CHECK-IMPROVEMENT.md` - AI 品質檢查改進說明
+
+**📊 行數統計**
+
+- `git-auto-push.sh`：維持 2184 行（功能整合優化）
+
+**🎯 使用場景**
+
+- ✅ 確保 commit 訊息清晰描述變更內容
+- ✅ 培養團隊良好的提交習慣
+- ✅ 維護高品質的專案提交歷史
+- ✅ 避免模糊或無意義的 commit 訊息
+
+**⚙️ 配置方式**
+
+```bash
+# 修改 git-auto-push.sh 約 149 行
+# 自動檢查模式（預設）
+AUTO_CHECK_COMMIT_QUALITY=true
+
+# 詢問模式
+AUTO_CHECK_COMMIT_QUALITY=false
+```
 
 ---
 
@@ -1128,24 +1128,6 @@ IS_DEBUG=true   # 開發調試
 
 ---
 
-### 最新版本亮點 (v2.5.0)
-
-- 3065 行 git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明  
-- 3135 行 git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
-- 12 種操作模式 - 涵蓋 Git 和 PR 生命週期管理（7 種 push + 5 種 PR）
-- **檔案過濾系統** 🆕 - 選擇性 git add，支援 glob pattern，自動過濾指定檔案
-- **任務編號自動帶入** - 從分支名稱自動偵測 issue key，支援自動/詢問模式
-- **調試模式** - AI 工具執行詳情追蹤，協助開發與問題診斷
-- **Commit 品質檢查** - AI 驅動的訊息品質檢測，可配置自動檢查或詢問模式
-- **Commit 訊息修改功能** - 安全修改最後一次 commit 訊息（選項 7）
-- Git 倉庫資訊查看 - 一鍵瀏覽倉庫狀態
-- 分支管理 - 安全刪除機制，主分支保護，多重確認
-- 文件標準 - 所有主要流程函數都有註解
-- 流程清晰化 - 每個工作流程都有詳細的步驟說明與參考資訊
-- 可配置分支刪除策略 - 合併後可選擇保留或刪除分支
-
----
-
 ### v2.0.0 - 程式碼品質與分支管理提升 (2025-10-24)
 
 **新功能**
@@ -1183,18 +1165,6 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 # 自動刪除分支
 readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 ```
-
----
-
-### v1.6.0 - 流程註解完善與文件更新 (2025-10-24)
-
-- **1655 行** git-auto-push.sh - 傳統 Git 工作流程自動化，完整註解與流程說明
-- **2872 行** git-auto-pr.sh - GitHub Flow PR 自動化，程式碼文件與流程註解
-- **11 種操作模式** - 涵蓋 Git 和 PR 生命週期管理（6 種 push + 5 種 PR）
-- **Git 倉庫資訊查看** 🆕 - 一鍵瀏覽倉庫狀態
-- **分支管理** - 安全刪除機制，主分支保護，多重確認
-- **文件標準** ✨ - 所有主要流程函數都有完整的註解
-- **流程清晰化** 🆕 - 每個工作流程都有詳細的步驟說明與參考資訊
 
 ---
 
@@ -1348,4 +1318,4 @@ GitHub 網頁 PR 建立結果：![PR Web](screenshots/pr-screenshot-web.png)
 ## 授權條款
 
 本專案採用 MIT 授權條款。詳細資訊請參閱 [LICENSE](LICENSE) 檔案。
-````
+

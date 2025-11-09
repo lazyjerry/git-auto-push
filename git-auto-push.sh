@@ -167,7 +167,7 @@ AUTO_CHECK_COMMIT_QUALITY=true
 # 注意：
 #   - 調試訊息可能包含敏感資訊（如 API 回應、diff 內容）
 #   - 啟用後會大幅增加輸出內容，建議僅在需要時開啟
-IS_DEBUG=true
+IS_DEBUG=false
 
 # 檔案過濾功能開關
 # 說明：控制是否啟用 git add 檔案過濾功能。
@@ -182,7 +182,7 @@ IS_DEBUG=true
 # 注意：
 #   - 停用時 IGNORE_FILE_PATH 設定無效
 #   - .gitignore 檔案不受此設定影響，始終有效
-ENABLE_FILE_FILTERING=true
+ENABLE_FILE_FILTERING=false
 
 # Git Add 檔案過濾設定
 # 說明：設定要在 git add 時忽略的檔案清單路徑。

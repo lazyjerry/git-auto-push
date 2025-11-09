@@ -169,9 +169,24 @@ AUTO_CHECK_COMMIT_QUALITY=true
 #   - 啟用後會大幅增加輸出內容，建議僅在需要時開啟
 IS_DEBUG=true
 
+# 檔案過濾功能開關
+# 說明：控制是否啟用 git add 檔案過濾功能。
+#       這是除了 .gitignore 之外的額外過濾機制，讓某些檔案保持在 unstaged 狀態。
+# 效果：
+#   - true：啟用檔案過濾，會讀取過濾檔案並跳過符合規則的檔案
+#   - false：停用檔案過濾，執行標準的 git add . 操作
+# 使用場景：
+#   - 需要選擇性提交檔案時啟用
+#   - 希望簡化操作、提交所有變更時停用
+#   - 團隊協作時可統一決定是否使用此功能
+# 注意：
+#   - 停用時 IGNORE_FILE_PATH 設定無效
+#   - .gitignore 檔案不受此設定影響，始終有效
+ENABLE_FILE_FILTERING=true
+
 # Git Add 檔案過濾設定
 # 說明：設定要在 git add 時忽略的檔案清單路徑。
-#       這是除了 .gitignore 之外的額外過濾機制，讓某些檔案保持在 unstaged 狀態。
+#       僅在 ENABLE_FILE_FILTERING=true 時有效。
 # 效果：
 #   - 指定的檔案包含 pattern 清單（一行一個），符合 pattern 的檔案不會被 add
 #   - 支援 glob pattern：* 和 **（與 .gitignore 格式相同）
@@ -671,24 +686,29 @@ should_ignore_file() {
 add_all_files() {
     info_msg "正在添加變更的檔案..."
     
-    # 初始化 Ignore 檔案（若不存在則建立）
-    init_ignore_file
-    
-    # 讀取過濾 pattern 清單
+    # 檢查是否啟用檔案過濾功能
     local ignore_patterns=()
-    local pattern_output
-    pattern_output=$(load_ignore_patterns)
-    if [[ -n "$pattern_output" ]]; then
-        while IFS= read -r pattern; do
-            if [[ -n "$pattern" ]]; then
-                ignore_patterns+=("$pattern")
-            fi
-        done <<< "$pattern_output"
-    fi
-    
-    # 若有過濾 pattern，顯示提示
-    if [[ ${#ignore_patterns[@]} -gt 0 ]]; then
-        debug_msg "已載入 ${#ignore_patterns[@]} 個過濾 pattern"
+    if [[ "$ENABLE_FILE_FILTERING" == "true" ]]; then
+        # 初始化 Ignore 檔案（若不存在則建立）
+        init_ignore_file
+        
+        # 讀取過濾 pattern 清單
+        local pattern_output
+        pattern_output=$(load_ignore_patterns)
+        if [[ -n "$pattern_output" ]]; then
+            while IFS= read -r pattern; do
+                if [[ -n "$pattern" ]]; then
+                    ignore_patterns+=("$pattern")
+                fi
+            done <<< "$pattern_output"
+        fi
+        
+        # 若有過濾 pattern，顯示提示
+        if [[ ${#ignore_patterns[@]} -gt 0 ]]; then
+            debug_msg "已載入 ${#ignore_patterns[@]} 個過濾 pattern"
+        fi
+    else
+        debug_msg "檔案過濾功能已停用，將添加所有變更的檔案"
     fi
     
     # 列出所有變更的檔案（包含未追蹤的檔案）
@@ -730,7 +750,19 @@ add_all_files() {
         return 1
     fi
     
-    # 分類檔案：要添加的和要忽略的
+    # 如果檔案過濾功能停用，直接使用 git add . 
+    if [[ "$ENABLE_FILE_FILTERING" != "true" ]]; then
+        debug_msg "檔案過濾功能已停用，執行 git add ."
+        if git add .; then
+            success_msg "✅ 成功添加所有變更檔案"
+            return 0
+        else
+            error_msg "❌ 添加檔案時發生錯誤"
+            return 1
+        fi
+    fi
+    
+    # 檔案過濾功能啟用時的分類處理
     local files_to_add=()
     local files_ignored=()
     

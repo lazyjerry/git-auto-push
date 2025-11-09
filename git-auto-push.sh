@@ -548,32 +548,7 @@ init_ignore_file() {
     
     # 嘗試建立檔案
     cat > "$file_path" 2>/dev/null <<'EOF'
-
-# Git Auto Push - 檔案過濾清單
-# 
-# 此檔案用於指定在執行 git add 時要忽略的檔案。
-# 這是除了 .gitignore 之外的額外過濾機制，讓某些檔案保持在 unstaged 狀態。
-#
-# 格式說明：
-# - 一行一個 pattern（支援 glob pattern）
-# - # 開頭的行為註解
-# - 空行會被忽略
-# - 支援 * 和 ** 萬用字元
-#
-# Pattern 範例：
-# *.log                    # 忽略所有 .log 檔案
-# test-*.sh                # 忽略 test- 開頭的 shell 腳本
-# docs/draft/              # 忽略 draft 目錄
-# **/temp/*                # 忽略所有 temp 目錄下的檔案
-# config/local.*.json      # 忽略本地配置檔
-#
-# 使用場景：
-# - 臨時檔案：不想加入 .gitignore，但也不想每次都 add
-# - 實驗性修改：保持在 unstaged 方便隨時丟棄
-# - 敏感配置：開發環境的設定檔
-#
-# 在下方新增您的過濾 pattern：
-
+git-auto-push-ignore.txt
 EOF
     
     # 檢查檔案建立是否成功

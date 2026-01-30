@@ -1229,7 +1229,18 @@ generate_auto_commit_message_silent() {
         generated_message=$(clean_ai_message "$generated_message")
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
+            # 使用 AI 自動選擇前綴（全自動模式）
+            local ai_prefix=""
+            if ai_prefix=$(generate_commit_prefix_by_ai); then
+                if [ -n "$ai_prefix" ]; then
+                    generated_message="$ai_prefix: $generated_message"
+                    info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message (含前綴):"
+                else
+                    info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
+                fi
+            else
+                info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
+            fi
             highlight_success_msg "🔖 $generated_message"
             local final_message
             final_message=$(append_ticket_number_to_message "$generated_message")

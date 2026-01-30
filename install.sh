@@ -209,17 +209,20 @@ show_usage() {
 
 # ========== 主程式 ==========
 main() {
-    local install_mode="local"
+    local install_mode=""
+    local skip_prompt=false
     
     # 解析參數
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --global|-g)
                 install_mode="global"
+                skip_prompt=true
                 shift
                 ;;
             --local|-l)
                 install_mode="local"
+                skip_prompt=true
                 shift
                 ;;
             --help|-h)
@@ -229,9 +232,11 @@ main() {
                 echo "  ./install.sh [選項]"
                 echo ""
                 echo "選項："
-                echo "  --local, -l    安裝到當前目錄（預設）"
+                echo "  --local, -l    安裝到當前目錄"
                 echo "  --global, -g   安裝到 /usr/local/bin（需要 sudo）"
                 echo "  --help, -h     顯示此說明"
+                echo ""
+                echo "若不帶參數執行，將會互動式詢問安裝位置。"
                 exit 0
                 ;;
             *)
@@ -246,6 +251,36 @@ main() {
     
     # 檢測下載工具
     check_download_tool
+    
+    # 互動式選擇安裝模式
+    if [[ "$skip_prompt" == "false" ]]; then
+        echo ""
+        echo "請選擇安裝方式："
+        echo ""
+        echo -e "  ${CYAN}1)${NC} 本地安裝 - 安裝到當前目錄 (${LOCAL_INSTALL_DIR})"
+        echo -e "  ${CYAN}2)${NC} 全域安裝 - 安裝到系統路徑 (${GLOBAL_INSTALL_DIR}) [需要 sudo]"
+        echo ""
+        
+        while true; do
+            read -p "請輸入選項 [1/2] (預設: 1): " choice
+            choice="${choice:-1}"
+            
+            case "$choice" in
+                1|local|l)
+                    install_mode="local"
+                    break
+                    ;;
+                2|global|g)
+                    install_mode="global"
+                    break
+                    ;;
+                *)
+                    warning "無效選項，請輸入 1 或 2"
+                    ;;
+            esac
+        done
+        echo ""
+    fi
     
     if [[ "$install_mode" == "global" ]]; then
         info "安裝模式：全域安裝 (${GLOBAL_INSTALL_DIR})"

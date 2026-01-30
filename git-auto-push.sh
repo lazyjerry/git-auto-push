@@ -9,6 +9,7 @@
 # 使用方式：
 #   互動模式：    ./git-auto-push.sh
 #   全自動模式：  ./git-auto-push.sh --auto 或 -a
+#   直接執行：    ./git-auto-push.sh <選項編號 1-7>
 #   顯示說明：    ./git-auto-push.sh -h 或 --help
 #   全域使用：    git-auto-push（需先將腳本連結至 PATH）
 #
@@ -2187,12 +2188,12 @@ show_help() {
     
     purple_msg "🚀 使用方式："
     cyan_msg "  互動模式：    ./git-auto-push.sh"
-    cyan_msg "  全自動模式：  ./git-auto-push.sh --auto"
-    cyan_msg "                ./git-auto-push.sh -a"
-    cyan_msg "  顯示說明：    ./git-auto-push.sh -h"
-    cyan_msg "                ./git-auto-push.sh --help"
+    cyan_msg "  全自動模式：  ./git-auto-push.sh --auto 或 -a"
+    cyan_msg "  直接執行：    ./git-auto-push.sh <1-7>"
+    cyan_msg "                例如：./git-auto-push.sh 1  # 直接執行完整流程"
+    cyan_msg "                例如：./git-auto-push.sh 4  # 直接執行全自動模式"
+    cyan_msg "  顯示說明：    ./git-auto-push.sh -h 或 --help"
     cyan_msg "  全域使用：    git-auto-push"
-    cyan_msg "                git-auto-push --auto"
     echo >&2
     
     purple_msg "📋 七種操作模式："
@@ -2428,12 +2429,20 @@ main() {
 
     warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
-    # 檢查命令行參數 - auto mode
+    # 檢查命令行參數 - auto mode 和 數字選項
     local auto_mode=false
-    if [ "$1" = "--auto" ] || [ "$1" = "-a" ]; then
-        auto_mode=true
-        info_msg "🤖 命令行啟用全自動模式"
-    fi
+    local direct_option=""
+    
+    case "$1" in
+        --auto|-a)
+            auto_mode=true
+            info_msg "🤖 命令行啟用全自動模式"
+            ;;
+        1|2|3|4|5|6|7)
+            direct_option="$1"
+            info_msg "🎯 命令行直接執行選項 $1"
+            ;;
+    esac
     
     # 顯示工具標題
     info_msg "Git 自動添加推送到遠端倉庫工具"
@@ -2528,10 +2537,16 @@ main() {
         return
     fi
     
-    # 否則獲取用戶選擇的操作模式
+    # 步驟 3.6: 如果有直接選項，跳過選單直接執行
     local operation_choice
-    if ! operation_choice=$(get_operation_choice); then
-        exit 1
+    if [ -n "$direct_option" ]; then
+        operation_choice="$direct_option"
+        info_msg "✅ 直接執行選項 $operation_choice"
+    else
+        # 否則獲取用戶選擇的操作模式
+        if ! operation_choice=$(get_operation_choice); then
+            exit 1
+        fi
     fi
     
     # 根據選擇執行對應的操作

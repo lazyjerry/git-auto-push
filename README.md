@@ -1,15 +1,16 @@
 # Git 工作流程自動化工具集
 
-Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、檔案過濾系統、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
+Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、Conventional Commits 前綴支援、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
 
-版本：v2.5.1
+版本：v2.6.0
 
 ## 專案簡介
 
 ### 主要功能亮點
 
 - 傳統 Git 工作流程自動化（新增、提交、推送）
-- **檔案過濾功能** 🆕（選擇性 git add，支援 glob pattern 過濾規則）
+- **Conventional Commits 前綴支援** 🆕（手動選擇或 AI 自動判斷 feat/fix/docs 等前綴）
+- **命令列直接執行** 🆕（支援 `./git-auto-push.sh 1-7` 跳過選單直接執行）
 - Git 倉庫資訊查看（分支狀態、遠端配置、同步狀態、提交歷史）
 - Commit 訊息修改功能（安全修改最後一次 commit 訊息，支援任務編號）
 - Commit 訊息品質檢查 🆕（AI 驅動的提交品質檢測，可配置自動檢查或詢問模式）
@@ -27,14 +28,12 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（3065 行，註解與流程說明）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（3135 行，程式碼文件與流程註解）
-├── 檔案過濾系統 🆕        # 選擇性 git add 機制
-│   ├── 過濾規則檔案      # git-auto-push-ignore.txt（可選）
-│   ├── Glob Pattern 支援 # 支援 * 和 **，格式同 .gitignore
-│   ├── 路徑處理          # 相對/絕對路徑自動識別
-│   ├── 權限檢查          # 檔案建立與讀取權限驗證
-│   └── 動態回饋          # 顯示過濾與添加的檔案清單
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（2975 行，註解與流程說明）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（3139 行，程式碼文件與流程註解）
+├── Conventional Commits 🆕 # Commit 訊息前綴支援
+│   ├── 手動選擇前綴      # feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert
+│   ├── AI 自動判斷        # 根據 git diff 自動選擇最適合的前綴
+│   └── 跳過選項          # 可選擇不使用前綴
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 錯誤偵測          # 認證過期、網路錯誤自動識別
 │   ├── 錯誤提示          # 提供具體解決方案
@@ -77,8 +76,6 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 │       ├── COMMIT-QUALITY-SUMMARY.md     # Commit 品質檢查摘要
 │       ├── COMMIT-QUALITY-QUICKREF.md    # Commit 品質快速參考
 │       ├── AI-QUALITY-CHECK-IMPROVEMENT.md # AI 品質檢查改進說明
-│       ├── 檔案過濾功能開發報告.md        # 檔案過濾功能詳細報告 🆕
-│       ├── 添加過濾檔案.md               # 過濾檔案使用說明 🆕
 │       └── 選項7-變更commit訊息功能開發報告.md # 選項 7 開發報告
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
@@ -121,10 +118,6 @@ readonly AI_TOOLS=(
 # Commit 品質自動檢查（第 155 行）
 AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 # AUTO_CHECK_COMMIT_QUALITY=false       # 詢問模式
-
-# 檔案過濾設定檔路徑（第 209 行）
-readonly IGNORE_FILE_PATH="git-auto-push-ignore.txt"  # 相對路徑
-# readonly IGNORE_FILE_PATH="/path/to/ignore.txt"     # 絕對路徑
 ```
 
 #### git-auto-pr.sh 設定（約第 180-230 行）
@@ -207,20 +200,36 @@ gh extension install github/gh-copilot
 ./git-auto-push.sh --auto
 ./git-auto-push.sh -a
 
+# 直接執行指定選項（跳過選單）🆕
+./git-auto-push.sh 1    # 完整流程 (add → commit → push)
+./git-auto-push.sh 2    # 本地提交 (add → commit)
+./git-auto-push.sh 3    # 僅添加檔案 (add)
+./git-auto-push.sh 4    # 全自動模式 (add → AI commit → push)
+./git-auto-push.sh 5    # 僅提交 (commit)
+./git-auto-push.sh 6    # 顯示倉庫資訊
+./git-auto-push.sh 7    # 變更 commit 訊息
+
 # 全域安裝後使用
 git-auto-push
 git-auto-push --auto
+git-auto-push 1
 ```
 
 #### git-auto-push.sh 操作模式
 
-1. 完整流程：add → 互動輸入 commit → push（日常開發提交）
-2. 本機提交：add → 互動輸入 commit（離線開發或測試提交）
+1. 完整流程：add → 選擇前綴 → 互動輸入 commit → push（日常開發提交）
+2. 本機提交：add → 選擇前綴 → 互動輸入 commit（離線開發或測試提交）
 3. 僅新增檔案：add（暫存檔案變更）
-4. 全自動模式：add → AI 產生 commit → push（CI/CD 或快速提交）
+4. 全自動模式：add → AI 選擇前綴 → AI 產生 commit → push（CI/CD 或快速提交）
 5. 僅提交：commit（提交已暫存的檔案）
 6. 顯示倉庫資訊：顯示 Git 倉庫詳細資訊（查看倉庫狀態與配置）
 7. 變更最後一次 commit 訊息：修改最近一次提交的訊息內容（修正錯誤或補充說明）
+
+**Conventional Commits 前綴支援** 🆕：
+- 手動輸入時：先選擇前綴（feat/fix/docs 等 11 種），再輸入訊息內容
+- AI 自動生成時：AI 分析 diff 自動選擇最適合的前綴
+- 支援前綴：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
+- 可選擇跳過前綴，保持原有訊息格式
 
 **智慧品質檢查** 🆕：
 - 模式 1-5 支援可配置的 AI commit 訊息品質檢查
@@ -262,76 +271,51 @@ git-auto-pr
 
 ### git-auto-push.sh 使用情境
 
-#### 日常開發流程
+#### 日常開發流程（含前綴選擇）🆕
 
 ```bash
 # 修改程式碼後，執行流程
 ./git-auto-push.sh
-# 選擇選項 1，輸入 commit message，自動推送
+# 或直接執行選項 1
+./git-auto-push.sh 1
+
+# 流程：
+# 1. 選擇前綴（feat/fix/docs 等 11 種，或跳過）
+# 2. 輸入 commit 訊息
+# 3. 自動組合：[任務編號] 前綴: 訊息
+# 範例輸出：[issue-123] feat: 新增使用者登入功能
 ```
 
 #### 快速自動提交
 
 ```bash
-# AI 自動生成 commit message 並推送
+# AI 自動生成 commit message（含前綴）並推送
 ./git-auto-push.sh --auto
+# 範例輸出：[issue-123] feat: 新增使用者設定頁面
 ```
 
 #### 離線開發
 
 ```bash
 # 只提交到本地，不推送
-./git-auto-push.sh
-# 選擇選項 2
+./git-auto-push.sh 2
 ```
 
 #### 分階段操作
 
 ```bash
 # 先新增檔案
-./git-auto-push.sh  # 選擇選項 3
+./git-auto-push.sh 3
 
 # 稍後提交
-./git-auto-push.sh  # 選擇選項 5
-```
-
-#### 檔案過濾功能 🆕
-
-```bash
-# 使用檔案過濾進行選擇性 add
-./git-auto-push.sh
-# 選擇選項 1-4 任一操作
-
-# 功能特色：
-# - 自動建立 git-auto-push-ignore.txt 過濾檔案（首次使用）
-# - 支援 glob pattern：* 和 **（格式同 .gitignore）
-# - 相對路徑以執行目錄為基準
-# - 顯示被忽略的檔案清單
-# - 顯示實際過濾檔案的完整路徑
-
-# 過濾檔案範例（git-auto-push-ignore.txt）：
-# *.log                    # 忽略所有 log 檔
-# test-*.sh                # 忽略測試腳本
-# docs/draft/              # 忽略草稿目錄
-# **/temp/*                # 忽略所有 temp 目錄下的檔案
-# config/local.*.json      # 忽略本地配置檔
-
-# 使用情境：
-# ✅ 臨時檔案：不想加入 .gitignore，但也不想每次都 add
-# ✅ 實驗性修改：保持在 unstaged 方便隨時丟棄
-# ✅ 敏感配置：開發環境的設定檔
-
-# 配置位置：
-# 腳本頂部 IGNORE_FILE_PATH 變數（約 185 行）
-# 預設：git-auto-push-ignore.txt（相對路徑）
+./git-auto-push.sh 5
 ```
 
 #### 查看 Git 倉庫資訊
 
 ```bash
 # 快速查看倉庫狀態、分支、遠端配置等資訊
-./git-auto-push.sh
-# 選擇選項 6
+./git-auto-push.sh 6
 # 顯示內容包括：
 # - 當前分支和追蹤狀態
 # - 遠端倉庫 URL
@@ -345,8 +329,7 @@ git-auto-pr
 
 ```bash
 # 修正 commit 訊息錯誤或補充說明
-./git-auto-push.sh
-# 選擇選項 7
+./git-auto-push.sh 7
 # 功能特色：
 # - 自動檢查是否有未提交的變更（有則警告並中止）
 # - 顯示目前的 commit 訊息供參考
@@ -354,6 +337,29 @@ git-auto-pr
 # - 二次確認機制
 # - 安全執行 git commit --amend
 # ⚠️ 注意：僅適用於尚未推送的本地 commit
+```
+
+#### Conventional Commits 前綴範例 🆕
+
+```bash
+# 可用前綴列表：
+# feat:     新功能
+# fix:      錯誤修復
+# docs:     文件變更
+# style:    程式碼格式（不影響運行）
+# refactor: 重構（不改變功能）
+# perf:     效能改進
+# test:     測試相關
+# build:    建置系統
+# ci:       CI 配置
+# chore:    雜項維護
+# revert:   回退提交
+
+# 範例輸出：
+# [issue-123] feat: 新增使用者登入功能
+# [BUG-456] fix: 修復資料載入時的記憶體洩漏
+# docs: 更新 API 文件說明
+# refactor: 優化資料處理邏輯
 ```
 
 #### Commit 訊息品質檢查 🆕

@@ -1,124 +1,15 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
 
-# 腳本用途：
-#   提供完整的 GitHub Flow 工作流程自動化，從分支建立到 PR 合併。
-#   支援 AI 輔助生成分支名稱、PR 內容，並整合企業級安全機制。
-#   適用於團隊協作開發環境，涵蓋分支管理、PR 審查、合併與撤銷等完整流程。
-#
-# 使用方式：
-#   互動模式：    ./git-auto-pr.sh
-#   顯示說明：    ./git-auto-pr.sh -h 或 --help
-#   相容模式：    ./git-auto-pr.sh --auto（已廢用，會提示使用互動模式）
-#   全域使用：    git-auto-pr（需先將腳本連結至 PATH）
-#
-# 五種操作模式：
-#   1. 建立功能分支 - 基於主分支建立新分支，支援 AI 生成分支名稱
-#   2. 建立 Pull Request - 建立 PR 並使用 AI 生成標題與內容
-#   3. 撤銷 PR（智慧模式）- 關閉開放中的 PR 或 revert 已合併的 PR
-#   4. 審查並合併 PR - 互動式審查流程，支援 squash merge
-#   5. 刪除分支（安全模式）- 刪除本地與遠端分支，含主分支保護
-#
-# 相依工具：
-#   bash>=4.0       必需，腳本執行環境
-#   git>=2.0        必需，版本控制操作
-#   gh>=2.0         必需，GitHub CLI，用於 PR 相關操作
-#   codex/gemini/claude  可選，AI CLI 工具，用於智慧生成功能
-#
-# 權限與安全：
-#   - 不需要 root 權限
-#   - 會讀取當前 Git 倉庫配置與狀態
-#   - 會執行 git/gh 指令進行分支與 PR 操作
-#   - 會透過網路存取 GitHub API（經由 gh CLI）
-#   - 主分支受保護，無法直接刪除或切換至主分支建立 PR
-#
-# 輸入來源：
-#   - CLI 參數：-h/--help（顯示說明）、--auto（相容模式）
-#   - 環境變數：無特定環境變數需求，使用 Git/GitHub 預設配置
-#   - STDIN：互動式輸入（選單選項、分支名稱、PR 資訊等）
-#   - 設定檔：使用 gh CLI 的認證配置（~/.config/gh/）
-#
-# 輸出結果：
-#   - STDOUT：無資料輸出（所有訊息均輸出至 STDERR）
-#   - STDERR：所有狀態訊息、錯誤訊息、互動提示、彩色輸出
-#   - 格式：UTF-8 編碼，ANSI 彩色碼
-#
-# 退出碼表：
-#   0   成功完成操作
-#   1   一般錯誤（參數錯誤、操作失敗、使用者取消等）
-#   2   相依工具不足（git 或 gh 未安裝）
-#   130 使用者中斷（Ctrl+C）
-#
-# 主要流程：
-#   1. 初始化與環境檢查（驗證 git/gh 可用性、檢測 Git 倉庫）
-#   2. 顯示操作選單並接收使用者選擇
-#   3. 根據選擇執行對應工作流程：
-#      - 建立分支：檢測主分支 → AI 生成分支名 → 建立並切換分支
-#      - 建立 PR：收集 commits → AI 生成 PR 內容 → 使用 gh 建立 PR
-#      - 撤銷 PR：檢查 PR 狀態 → 關閉或 revert → 確認操作
-#      - 審查合併：檢視 PR 與 CI 狀態 → 審查 → squash merge
-#      - 刪除分支：確認分支狀態 → 多重確認 → 刪除本地與遠端分支
-#   4. 輸出操作結果與後續建議
-#   5. 清理暫存資源並退出
-#
-# 注意事項：
-#   - AI 工具調用有 45 秒超時機制，失敗時會自動切換至下一個工具
-#   - PR 合併預設使用 squash 策略，會將所有 commits 壓縮為一個
-#   - 分支名稱格式：username/type/issue-key-description（小寫、連字號分隔）
-#   - 主分支自動檢測順序：uat → main → master（可於配置區調整）
-#   - 撤銷已合併 PR 的 revert 操作預設選項為「否」，需明確確認
-#   - 網路操作（gh CLI）無內建重試機制，失敗時需手動重新執行
-#   - 時區假設：使用系統本地時區
-#   - 不支援離線模式，所有 PR 操作均需網路連線
-#
-# 參考：
-#   - GitHub Flow 說明：docs/github-flow.md
-#   - PR 撤銷功能：docs/pr-cancel-feature.md
-#   - Git 倉庫資訊：docs/git-info-feature.md
-#   - GitHub CLI 文檔：https://cli.github.com/manual/
-#   - Conventional Commits：https://www.conventionalcommits.org/
-#
-# 作者：Lazy Jerry
-# 版本：v2.0.0
-# 最後更新：2025-10-24
-# 授權：MIT License
-# 倉庫：https://github.com/lazyjerry/git-auto-push
-#
+# Git 自動化 PR 工具 - 提供完整的 GitHub Flow 工作流程自動化
+# 使用方式：./git-auto-pr.sh 或 ./git-auto-pr.sh --help
+# 作者：Lazy Jerry | 版本：v2.0.0 | 授權：MIT License
 
 # ==============================================
-# AI 提示詞配置區域
-# ==============================================
-#
-# 說明：此區域集中管理所有 AI 工具的提示詞模板函數。
-#       修改這些函數可調整 AI 生成內容的品質、格式與風格。
-#       支援的 AI 工具：codex、gemini、claude（依 AI_TOOLS 陣列順序調用）
-#
-# 注意事項：
-# 1. 提示詞應簡潔明確，避免過長導致 AI 工具超時（預設 45 秒）
-# 2. 輸出格式需統一便於後處理（如使用 ||| 分隔多欄位）
-# 3. 修改後請測試各種場景（空輸入、長輸入、特殊字元）確保相容性
-# 4. 提示詞使用英文可提升跨 AI 工具的相容性
+# AI 提示詞配置區域 - 管理所有 AI 工具的提示詞模板函數
 # ==============================================
 
-# 函式：generate_ai_branch_prompt
-# 功能說明：生成 AI 分支名稱提示詞，用於請求 AI 工具產生符合規範的 Git 分支名稱。
-# 輸入參數：
-#   $1 <username> 使用者名稱，用於分支名稱前綴，應為小寫英文
-#   $2 <branch_type> 分支類型，如 feature、bugfix、hotfix 等
-#   $3 <issue_key> 議題編號，如 issue-001、jira-456 等
-#   $4 <description_hint> 功能描述提示（可選），用於生成分支描述部分
-# 輸出結果：
-#   STDOUT 輸出英文提示詞字串，不含換行符號
-#   格式範例："Generate branch name for: add login. Username: jerry, Type: feature..."
-# 例外/失敗：
-#   無例外，總是返回提示詞字串（即使參數為空）
-# 流程：
-#   1. 檢查 description_hint 是否為空
-#   2. 若為空，使用通用提示詞模板
-#   3. 若不為空，使用包含描述的詳細模板
-#   4. 使用 printf '%s' 輸出避免額外換行
-# 副作用：無副作用，純函數
-# 參考：generate_ai_branch_name() 函數會調用此提示詞
+# 生成 AI 分支名稱提示詞
 generate_ai_branch_prompt() {
     local username="$1"
     local branch_type="$2"
@@ -133,23 +24,7 @@ generate_ai_branch_prompt() {
     fi
 }
 
-# 函式：generate_ai_pr_prompt
-# 功能說明：生成 AI PR 內容提示詞，用於請求 AI 工具根據 commit 訊息生成 PR 標題與內容。
-# 輸入參數：
-#   $1 <issue_key> 議題編號，如 issue-001、jira-456，用於 PR 內容參考
-#   $2 <branch_name> 分支名稱，用於 PR 內容參考
-#   注意：實際的 commits 與 file_changes 會透過臨時檔案（content 參數）傳遞給 AI 工具
-# 輸出結果：
-#   STDOUT 輸出多行提示詞文字（透過 cat <<EOF），包含格式指示與範例
-#   提示詞指示 AI 輸出格式：標題。詳細內容（標題需以句號結尾）
-# 例外/失敗：
-#   無例外，總是返回提示詞字串
-# 流程：
-#   1. 接收 issue_key 與 branch_name 參數
-#   2. 使用 cat <<EOF 輸出多行提示詞模板
-#   3. 提示詞包含格式要求、語言要求（繁體中文）、輸出範例
-# 副作用：無副作用，純函數
-# 參考：generate_pr_content_with_ai() 函數會調用此提示詞
+# 生成 AI PR 內容提示詞（實際數據透過臨時檔案傳遞）
 generate_ai_pr_prompt() {
     local issue_key="$1"
     local branch_name="$2"
@@ -176,14 +51,7 @@ Issue Key: $issue_key
 EOF
 }
 
-# AI 工具優先順序配置
-# 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個。
-#       腳本會依陣列順序逐一調用，直到成功或全部失敗。
-# 修改方式：調整陣列元素順序或新增其他 AI CLI 工具名稱（需系統已安裝）
-# 已知問題：codex 在某些環境可能產生亂碼或編碼問題
-# 範例：
-#   readonly AI_TOOLS=("gemini")                    # 僅使用 gemini
-#   readonly AI_TOOLS=("codex" "gemini" "claude")   # 依序嘗試三個工具
+# AI 工具優先順序配置（依陣列順序調用，失敗時自動嘗試下一個）
 readonly AI_TOOLS=(
     "gemini"
     "codex"
@@ -194,275 +62,76 @@ readonly AI_TOOLS=(
 # 分支配置區域
 # ==============================================
 
-# 主分支候選清單配置
-# 說明：定義主分支的候選名稱，腳本會依陣列順序檢測第一個存在的遠端分支。
-#       此設定影響「建立功能分支」與「建立 PR」功能的基底分支選擇。
-# 格式：Bash 只讀陣列，元素為分支名稱字串（無 origin/ 前綴）
-# 檢測邏輯：透過 git show-ref --verify refs/remotes/origin/<branch> 驗證存在性
-# 修改範例：
-#   readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")           # 標準配置
-#   readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")     # 包含預發布分支
-#   readonly -a DEFAULT_MAIN_BRANCHES=("develop" "main")          # Git Flow 風格
+# 主分支候選清單（依陣列順序檢測第一個存在的遠端分支）
 readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
 
-# 預設使用者名稱配置
-# 說明：用於生成分支名稱的使用者前綴（格式：username/type/issue-description）。
-#       建議設定為團隊成員的 Git 使用者名稱或縮寫。
-# 格式：小寫英文字母，無空白或特殊符號（可含數字、連字號）
-# 使用時機：「建立功能分支」功能會使用此值作為分支名稱前綴
-# 修改範例：
-#   readonly DEFAULT_USERNAME="john"
-#   readonly DEFAULT_USERNAME="team-a"
+# 預設使用者名稱（用於生成分支名稱前綴：username/type/issue-description）
 readonly DEFAULT_USERNAME="jerry"
 
-# PR 合併後分支刪除策略配置
-# 說明：控制 PR 合併後是否自動刪除功能分支。
-#       設定為 true 時，合併 PR 會自動刪除遠端分支；
-#       設定為 false 時，合併 PR 會保留分支供後續參考或重複使用。
-# 安全考量：預設為 false（保守策略），避免誤刪重要分支
-# 使用時機：「審查與合併 PR」功能會參考此設定決定是否使用 --delete-branch 選項
-# 修改範例：
-#   readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true   # 自動刪除（適合短期功能分支）
-#   readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（適合需要追蹤的分支）
+# PR 合併後分支刪除策略（true=自動刪除，false=保留分支）
 readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
 
 # ==============================================
-# 訊息輸出函數區域
+# 訊息輸出函數區域 - ANSI 彩色格式化輸出至 stderr
 # ==============================================
 
-# 函式：error_msg
-# 功能說明：輸出紅色錯誤訊息至 stderr，不終止程式執行。
-# 輸入參數：
-#   $1 <message> 錯誤訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出紅色 ANSI 彩色文字，格式：\033[0;31m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 紅色碼（\033[0;31m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：handle_error() 函數會調用此函數
+# 輸出紅色錯誤訊息至 stderr
 error_msg() {
     printf "\033[0;31m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：handle_error
-# 功能說明：輸出錯誤訊息並立即終止腳本執行，退出碼為 1。
-# 輸入參數：
-#   $1 <message> 錯誤訊息文字，會加上「錯誤: 」前綴
-# 輸出結果：
-#   STDERR 輸出紅色錯誤訊息，格式：「錯誤: <message>」
-# 例外/失敗：
-#   無返回，直接以 exit 1 終止程式
-# 流程：
-#   1. 呼叫 error_msg 輸出錯誤訊息
-#   2. 執行 exit 1 終止腳本
-# 副作用：
-#   - 輸出至 stderr
-#   - 終止程式執行，退出碼 1
-#   - 觸發 trap EXIT 清理函數（若已設定）
-# 參考：所有需要終止執行的錯誤情境都應使用此函數
+# 輸出錯誤訊息並終止執行（退出碼 1）
 handle_error() {
     error_msg "錯誤: $1"
     exit 1
 }
 
-# 函式：success_msg
-# 功能說明：輸出綠色成功訊息至 stderr。
-# 輸入參數：
-#   $1 <message> 成功訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出綠色 ANSI 彩色文字，格式：\033[0;32m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 綠色碼（\033[0;32m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：操作成功完成時使用此函數顯示結果
+# 輸出綠色成功訊息至 stderr
 success_msg() {
     printf "\033[0;32m%s\033[0m\n" "$1" >&2
 }
 
-# ============================================
-# 警告訊息函數
-# 功能：顯示黃色警告訊息
-# 函式：warning_msg
-# 功能說明：輸出黃色警告訊息至 stderr。
-# 輸入參數：
-#   $1 <message> 警告訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出粗體黃色 ANSI 彩色文字，格式：\033[1;33m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 粗體黃色碼（\033[1;33m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於非致命錯誤或需要使用者注意的情境
+# 輸出黃色警告訊息至 stderr
 warning_msg() {
     printf "\033[1;33m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：info_msg
-# 功能說明：輸出藍色資訊訊息至 stderr。
-# 輸入參數：
-#   $1 <message> 資訊訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出藍色 ANSI 彩色文字，格式：\033[0;34m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 藍色碼（\033[0;34m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於一般資訊提示、操作狀態顯示
+# 輸出藍色資訊訊息至 stderr
 info_msg() {
     printf "\033[0;34m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：debug_msg
-# 功能說明：輸出灰色調試訊息至 stderr，用於開發階段除錯。
-# 輸入參數：
-#   $1 <message> 調試訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出灰色 ANSI 彩色文字，格式：\033[0;90m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 灰色碼（\033[0;90m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於開發階段的變數值檢查、流程追蹤
+# 輸出灰色調試訊息至 stderr
 debug_msg() {
     printf "\033[0;90m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：magenta_msg
-# 功能說明：輸出粗體洋紅色訊息至 stderr，用於特殊高亮或重要提示。
-# 輸入參數：
-#   $1 <message> 訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出粗體洋紅色 ANSI 彩色文字，格式：\033[1;35m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 粗體洋紅色碼（\033[1;35m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於特殊狀態提示、關鍵資訊高亮
+# 輸出粗體洋紅色訊息至 stderr
 magenta_msg() {
     printf "\033[1;35m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：purple_msg
-# 功能說明：輸出紫色訊息至 stderr，用於分支資訊等中性資訊。
-# 輸入參數：
-#   $1 <message> 訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出紫色 ANSI 彩色文字，格式：\033[0;35m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 紫色碼（\033[0;35m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於顯示分支名稱、標籤等中性資訊
+# 輸出紫色訊息至 stderr
 purple_msg() {
     printf "\033[0;35m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：cyan_msg
-# 功能說明：輸出青色訊息至 stderr，用於連結、命令提示等輔助資訊。
-# 輸入參數：
-#   $1 <message> 訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出青色 ANSI 彩色文字，格式：\033[0;36m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 青色碼（\033[0;36m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於顯示 URL 連結、命令提示、次要資訊
+# 輸出青色訊息至 stderr
 cyan_msg() {
     printf "\033[0;36m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：white_msg
-# 功能說明：輸出白色訊息至 stderr，用於一般內容文字顯示。
-# 輸入參數：
-#   $1 <message> 訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出亮白色 ANSI 彩色文字，格式：\033[1;37m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 亮白色碼（\033[1;37m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於顯示說明文字、選單選項、一般內容
+# 輸出白色訊息至 stderr
 white_msg() {
     printf "\033[1;37m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：highlight_success_msg
-# 功能說明：輸出亮綠色高亮成功訊息至 stderr，用於強調重要的成功結果。
-# 輸入參數：
-#   $1 <message> 訊息文字，支援 UTF-8 編碼
-# 輸出結果：
-#   STDERR 輸出亮綠色 ANSI 彩色文字，格式：\033[1;32m<message>\033[0m\n
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 使用 printf 輸出 ANSI 亮綠色碼（\033[1;32m）
-#   2. 輸出訊息內容
-#   3. 重置顏色（\033[0m）並換行
-#   4. 重導向至 stderr（>&2）
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於顯示重要的成功訊息、關鍵操作完成提示
+# 輸出亮綠色高亮成功訊息至 stderr
 highlight_success_msg() {
     printf "\033[1;32m%s\033[0m\n" "$1" >&2
 }
 
-# 函式：show_ai_debug_info
-# 功能說明：統一格式顯示 AI 工具的調試資訊，包含工具名稱、輸入與輸出內容。
-# 輸入參數：
-#   $1 <tool_name> AI 工具名稱，如 codex、gemini、claude
-#   $2 <prompt> 提示詞內容（指令部分）
-#   $3 <content> 實際資料內容（如 diff、commits）
-#   $4 <output> 輸出內容（可選），AI 工具的回應結果
-# 輸出結果：
-#   STDERR 輸出彩色格式化的調試資訊，包含分隔線與標題
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 輸出分隔線與工具名稱標題（使用 debug_msg）
-#   2. 顯示 prompt 內容（截取前 200 字元）
-#   3. 顯示 content 內容（截取前 500 字元）
-#   4. 若提供 output 參數，顯示輸出內容（截取前 300 字元）
-#   5. 輸出結束分隔線
-# 副作用：輸出至 stderr，不影響 stdout
-# 參考：用於開發階段追蹤 AI 工具的輸入輸出
+# 顯示 AI 工具的調試資訊（工具名稱、輸入、輸出）
 show_ai_debug_info() {
     local tool_name="$1"
     local prompt="$2"
@@ -480,17 +149,7 @@ show_ai_debug_info() {
     fi
 }
 
-# ============================================
-# 隨機感謝訊息函數
-# 功能：從預定的訊息列表中隨機選擇一個感謝訊息並顯示
-# 參數：無
-# 返回：0 (總是成功)
-# 使用：show_random_thanks  # 在操作完成後顯示感謝
-# 行為：
-#   - 內建 10 種不同的中文感謝訊息
-#   - 使用 $RANDOM 產生隨機數
-#   - 以紫色 + 愛心表情符號顯示
-# ============================================
+# 隨機顯示一則感謝訊息
 show_random_thanks() {
     local messages=(
         "讓我們感謝 Jerry，讓 GitHub Flow 更簡單！"
@@ -515,15 +174,7 @@ show_random_thanks() {
     magenta_msg "💝 $selected_message"
 }
 
-# ============================================
-# 命令執行函數
-# 功能：執行系統命令並檢查執行結果，失敗時顯示錯誤並終止
-# 參數：$1 - 要執行的命令字串
-#      $2 - 可選的自訂錯誤訊息
-# 返回：命令成功時返回 0，失敗時終止程式
-# 使用：run_command "git status" "無法獲取 Git 狀態"
-# 注意：使用 eval 執行命令，需注意命令注入風險
-# ============================================
+# 執行系統命令並檢查結果（失敗時終止執行）
 run_command() {
     local cmd="$1"
     local error_msg="$2"
@@ -540,14 +191,7 @@ run_command() {
     fi
 }
 
-# ============================================
-# Git 倉庫檢查函數
-# 功能：檢查當前目錄是否為有效的 Git 倉庫
-# 參數：無
-# 返回：0 - 是 Git 倉庫，1 - 不是 Git 倉庫
-# 使用：if check_git_repository; then echo "是 Git 倉庫"; fi
-# 實作：使用 git rev-parse --git-dir 命令檢測
-# ============================================
+# 檢查當前目錄是否為 Git 倉庫（返回 0=是，1=否）
 check_git_repository() {
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         return 1
@@ -555,18 +199,7 @@ check_git_repository() {
     return 0
 }
 
-# ============================================
-# GitHub CLI 工具檢查函數
-# 功能：檢查 GitHub CLI (gh) 是否安裝並已驗證登入
-# 參數：無
-# 返回：0 - 已安裝且已登入，1 - 未安裝，2 - 已安裝但未登入
-# 使用：
-#   case $(check_gh_cli) in
-#     0) echo "正常" ;;
-#     1) echo "未安裝 gh" ;;
-#     2) echo "未登入 gh" ;;
-#   esac
-# ============================================
+# 檢查 GitHub CLI 是否安裝並已登入（0=正常，1=未安裝，2=未登入）
 check_gh_cli() {
     if ! command -v gh >/dev/null 2>&1; then
         return 1
@@ -580,17 +213,7 @@ check_gh_cli() {
     return 0
 }
 
-# ============================================
-# 當前分支獲取函數
-# 功能：獲取 Git 倉庫的當前活躍分支名稱
-# 參數：無
-# 返回：當前分支名稱（字串）
-# 使用：current=$(get_current_branch)
-# 行為：
-#   - 使用 git branch --show-current 獲取分支名
-#   - 自動清理回車符和首尾空白
-#   - 失敗時返回空字串
-# ============================================
+# 獲取當前 Git 分支名稱
 get_current_branch() {
     local branch
     branch=$(git branch --show-current 2>/dev/null)
@@ -598,18 +221,7 @@ get_current_branch() {
     echo "$branch" | tr -d '\r\n' | xargs
 }
 
-# ============================================
-# 主分支智慧檢測函數
-# 功能：從配置陣列 DEFAULT_MAIN_BRANCHES 中自動檢測第一個存在的主分支
-# 參數：無
-# 返回：主分支名稱（字串），找不到時返回空字串
-# 使用：main_branch=$(get_main_branch)
-# 檢測後備：
-#   1. 優先檢查遠端分支 (origin/main, origin/master)
-#   2. 備選檢查本地分支 (main, master)
-#   3. 按 DEFAULT_MAIN_BRANCHES 陣列順序檢測
-# 配置：可修改 DEFAULT_MAIN_BRANCHES 陣列新增更多候選
-# ============================================
+# 自動檢測主分支（依 DEFAULT_MAIN_BRANCHES 順序檢測第一個存在的遠端分支）
 get_main_branch() {
     local branch_candidate
     local found_branch=""
@@ -646,7 +258,7 @@ get_main_branch() {
     echo "$found_branch" | tr -d '\r\n' | xargs
 }
 
-# 檢查是否在主分支
+# 檢查當前是否在主分支上（0=是，1=否）
 check_main_branch() {
     local current_branch
     local main_branch
@@ -659,7 +271,7 @@ check_main_branch() {
     return 1
 }
 
-# 顯示 loading 動畫
+# 顯示 loading 旋轉動畫
 show_loading() {
     local message="$1"
     local timeout="${2:-30}"
@@ -693,33 +305,7 @@ show_loading() {
     trap - INT TERM
 }
 
-# 函式：run_command_with_loading
-# 功能說明：執行命令並顯示 loading 動畫，支援超時控制與中斷處理。
-# 輸入參數：
-#   $1 <command> 要執行的 shell 命令字串（可含管道、重導向）
-#   $2 <loading_message> loading 動畫顯示的訊息文字
-#   $3 <timeout> 超時秒數，整數，命令執行超過此時間會被終止
-# 輸出結果：
-#   STDOUT 輸出命令的執行結果（透過臨時檔案回傳）
-#   STDERR 顯示 loading 動畫（格式：旋轉符號 訊息 (已用秒數/超時秒數)）
-# 例外/失敗：
-#   1=命令超時；命令本身的退出碼（非零表示失敗）
-# 流程：
-#   1. 建立臨時檔案用於儲存命令輸出與退出碼
-#   2. 定義局部 cleanup_and_exit 函數處理中斷清理
-#   3. 設置 trap INT TERM 捕捉中斷信號
-#   4. 在背景執行命令，輸出重導向至臨時檔案
-#   5. 在背景執行 show_loading 顯示動畫
-#   6. 主循環檢查命令是否完成或超時
-#   7. 命令完成後停止動畫，讀取輸出與退出碼
-#   8. 清理臨時檔案與 trap 設定
-#   9. 返回命令的退出碼
-# 副作用：
-#   - 建立並自動清理臨時檔案（mktemp 建立於 /tmp）
-#   - 設置與還原 trap INT TERM
-#   - 背景進程（命令與動畫）會在結束時被清理
-#   - 輸出至 stdout 與 stderr
-# 參考：show_loading() 函數、cleanup_and_exit() 局部函數
+# 執行命令並顯示 loading 動畫（支援超時控制）
 run_command_with_loading() {
     local command="$1"
     local loading_message="$2"
@@ -727,19 +313,7 @@ run_command_with_loading() {
     local temp_file
     temp_file=$(mktemp)
     
-    # 局部函式：cleanup_and_exit
-    # 功能說明：清理 loading 動畫、終止命令進程、刪除臨時檔案並退出。
-    # 輸入參數：無
-    # 輸出結果：無
-    # 例外/失敗：以退出碼 130 終止腳本（SIGINT 標準退出碼）
-    # 流程：
-    #   1. 停止 loading 動畫背景進程（kill $loading_pid）
-    #   2. 終止命令背景進程（TERM 後等待 0.5 秒再 KILL）
-    #   3. 刪除臨時檔案（輸出與退出碼檔案）
-    #   4. 顯示游標、清理終端、輸出中斷訊息
-    #   5. 以 exit 130 終止腳本
-    # 副作用：終止腳本執行、清理所有相關資源
-    # 參考：由 trap INT TERM 調用
+    # 清理與中斷處理函數
     cleanup_and_exit() {
         # 停止 loading 動畫
         if [ -n "$loading_pid" ]; then
@@ -864,37 +438,20 @@ run_codex_command() {
     fi
     
     # 創建臨時檔案傳遞提示詞和內容
-    # 確保使用 UTF-8 編碼以避免編碼轉換問題
     local temp_prompt
     temp_prompt=$(mktemp)
+    printf '%s\n\n%s' "$prompt" "$content" > "$temp_prompt"
     
-    # 使用 printf 確保 UTF-8 編碼
-    # 使用 C.UTF-8 或 en_US.UTF-8 避免 locale 相關問題
-    {
-        export LC_ALL=C.UTF-8 LANG=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-        printf '%s\n\n%s' "$prompt" "$content"
-    } > "$temp_prompt" || {
-        rm -f "$temp_prompt"
-        warning_msg "寫入臨時檔案失敗"
-        return 1
-    }
-    
-    # 驗證臨時檔案是否為有效的 UTF-8
-    if ! file "$temp_prompt" | grep -q "UTF-8\|ASCII"; then
-        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")"
-    fi
+    # 創建臨時檔案接收乾淨的輸出
+    local temp_output
+    temp_output=$(mktemp)
     
     # 🔍 調試輸出：印出即將傳遞給 codex 的內容
     debug_msg "🔍 調試: run_codex_command() - 即將傳遞給 codex 的內容"
     debug_msg "─────────────────────────────────────────"
-    debug_msg "📄 文件內容（編碼: UTF-8）:"
-    debug_msg "─────────────────────────────────────────"
-    file -b "$temp_prompt" | sed 's/^/  /' >&2
-    debug_msg ""
     debug_msg "📊 內容統計:"
     debug_msg "   - 總行數: $(wc -l < "$temp_prompt") 行"
     debug_msg "   - 總位元組: $(wc -c < "$temp_prompt") 位元組"
-    debug_msg "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)"
     debug_msg ""
     debug_msg "📝 前 20 行內容:"
     debug_msg "─────────────────────────────────────────"
@@ -902,75 +459,41 @@ run_codex_command() {
     debug_msg "─────────────────────────────────────────"
     echo >&2
     
-    # 執行 codex 命令，設定 UTF-8 環境變數
-    local output exit_code
-    export LC_ALL=C.UTF-8 LANG=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+    # 執行 codex 命令（使用 --output-last-message 獲取乾淨輸出）
+    local raw_output exit_code
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        raw_output=$(run_command_with_loading "timeout $timeout codex exec --output-last-message '$temp_output' < '$temp_prompt' 2>/dev/null" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        raw_output=$(run_command_with_loading "codex exec --output-last-message '$temp_output' < '$temp_prompt' 2>/dev/null" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     fi
     
-    # 確保 exit_code 是乾淨的數字（清理所有可能的隱藏字符）
-    exit_code=$(echo "$exit_code" | tr -d '\r\n\t ' | tr -cd '0-9')
-    if ! [[ "$exit_code" =~ ^[0-9]+$ ]] || [ -z "$exit_code" ]; then
-        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1"
-        exit_code=1
+    # 讀取乾淨的輸出
+    local output=""
+    if [ -f "$temp_output" ]; then
+        output=$(cat "$temp_output" | xargs)
     fi
     
-    # 🔍 調試：顯示退出碼
+    # 🔍 調試：顯示退出碼和輸出
     debug_msg "🔍 調試: codex 退出碼 exit_code='$exit_code'"
+    debug_msg "🔍 調試: 乾淨輸出 output='$output'"
     
     # 清理臨時檔案
-    rm -f "$temp_prompt"
+    rm -f "$temp_prompt" "$temp_output"
     
     # 處理執行結果
     case $exit_code in
         0)
-            # 成功執行，處理輸出
-            if [ -n "$output" ]; then
-                local filtered_output
-                
-                # 清理 output 中的控制字符（保留換行）
-                output=$(echo "$output" | tr -d '\r')
-                
-                # 🔍 調試：顯示原始輸出
-                debug_msg "🔍 調試: codex 原始輸出（前 500 字符）"
-                echo "$output" | head -c 500 | sed 's/^/  /' >&2
-                echo >&2
-                
-                # 改進的過濾邏輯：使用 LC_ALL=C 避免 locale 相關錯誤
-                # 方法1：精確提取 "codex" 行之後、"tokens used" 行之前的內容
-                filtered_output=$(LC_ALL=C echo "$output" | \
-                    awk '/^codex$/{flag=1; next} /^tokens used/{flag=0} flag' | \
-                    grep -v '^[[:space:]]*$' | \
-                    grep -v -E '^(thinking|user|OpenAI Codex|workdir:|model:|provider:|approval:|sandbox:|reasoning|session id:|-----)' | \
-                    tr '\n' ' ' | \
-                    sed 's/[[:space:]]\+/ /g' | \
-                    xargs)
-                
-                # 方法2：如果方法1沒有結果，嘗試更簡單的過濾
-                if [ -z "$filtered_output" ]; then
-                    filtered_output=$(LC_ALL=C echo "$output" | \
-                        grep -v -E '^(OpenAI Codex|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|thinking|user|session id:|effort:|summaries:)' | \
-                        grep -E ".+" | \
-                        tail -n 5 | \
-                        tr '\n' ' ' | \
-                        xargs)
-                fi
-                
-                # 🔍 調試：顯示過濾後的輸出
-                debug_msg "🔍 調試: 過濾後的輸出 filtered_output='$filtered_output'"
-                
-                if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
-                    success_msg "codex 回應完成"
-                    echo "$filtered_output"
-                    return 0
-                fi
+            # 成功執行，檢查輸出
+            if [ -n "$output" ] && [ ${#output} -gt 3 ]; then
+                success_msg "codex 回應完成"
+                echo "$output"
+                return 0
             fi
             warning_msg "codex 沒有返回有效內容"
+            debug_msg "🔍 調試: codex 原始輸出（前 500 字符）"
+            echo "$raw_output" | head -c 500 | sed 's/^/  /' >&2
             ;;
         124)
             error_msg "❌ codex 執行超時（${timeout}秒）"
@@ -978,26 +501,17 @@ run_codex_command() {
             ;;
         *)
             # 檢查特定錯誤類型
-            if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+            if [[ "$raw_output" == *"401 Unauthorized"* ]] || [[ "$raw_output" == *"token_expired"* ]]; then
                 error_msg "❌ codex 認證錯誤"
                 warning_msg "💡 請執行：codex auth login"
-                show_ai_debug_info "codex" "$prompt" "$content" "$output"
-            elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+                show_ai_debug_info "codex" "$prompt" "$content" "$raw_output"
+            elif [[ "$raw_output" == *"stream error"* ]] || [[ "$raw_output" == *"connection"* ]] || [[ "$raw_output" == *"network"* ]]; then
                 error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
-                show_ai_debug_info "codex" "$prompt" "$content" "$output"
+                show_ai_debug_info "codex" "$prompt" "$content" "$raw_output"
             else
-                # 清理 exit_code 確保是純數字（最後一次保險）
-                local clean_code
-                clean_code=$(printf '%s' "$exit_code" | LC_ALL=C tr -cd '0-9')
-                [ -z "$clean_code" ] && clean_code="1"
-                
-                # 🔍 調試：顯示錯誤訊息前的 exit_code
-                debug_msg "🔍 調試: 準備顯示錯誤，clean_code='$clean_code' (原始: '$exit_code')"
-                warning_msg "codex 執行失敗"
-                
-                # 顯示 AI 的輸入和輸出訊息
-                show_ai_debug_info "codex" "$prompt" "$content" "$output"
+                warning_msg "codex 執行失敗（退出碼: $exit_code）"
+                show_ai_debug_info "codex" "$prompt" "$content" "$raw_output"
             fi
             ;;
     esac
@@ -1039,17 +553,22 @@ run_stdin_ai_command() {
     temp_content=$(mktemp)
     echo "$content" > "$temp_content"
     
+    # 創建臨時檔案存儲 prompt 內容（避免引號解析問題）
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s' "$prompt" > "$temp_prompt"
+    
     # 使用帶 loading 的命令執行
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
     # 清理臨時檔案
-    rm -f "$temp_content"
+    rm -f "$temp_content" "$temp_prompt"
     
     if [ $exit_code -eq 124 ]; then
         error_msg "❌ $tool_name 執行超時（${timeout}秒）"
@@ -1114,7 +633,25 @@ clean_ai_message() {
     # 顯示原始訊息
     debug_msg "🔍 AI 原始輸出: '$message'"
     
-    # 最簡化處理：只移除前後空白，保留完整內容
+    # 使用管道逐行過濾，移除技術雜訊行
+    message=$(echo "$message" | grep -v -E \
+        -e '^\(node:[0-9]+\)' \
+        -e 'DeprecationWarning' \
+        -e 'trace-deprecation' \
+        -e '\[ERROR\].*\[IDEClient\]' \
+        -e 'IDE companion extension' \
+        -e 'overriding the built-in skill' \
+        -e '^Hook registry' \
+        -e '^Loaded cached' \
+        -e '^Loading credentials' \
+        -e '^Authentication successful' \
+        -e '^Skill.*SKILL\.md' \
+        -e 'punycode' \
+        -e 'userland alternative' \
+        -e '/ide install' \
+        2>/dev/null || echo "$message")
+    
+    # 移除前後空白和多餘空格
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果
@@ -1248,20 +785,7 @@ $body"
     echo "$body"
 }
 
-# ============================================
-# 分支名稱清理與驗證函數
-# 功能：清理 AI 生成的分支名稱，確保符合 Git 分支命名規範
-# 參數：$1 - 待清理的分支名稱（通常來自 AI 輸出）
-# 返回：清理後的分支名稱，失敗時返回空字串並 exit code 1
-# 使用：clean_name=$(clean_branch_name "$ai_generated_name")
-# 清理規則：
-#   1. 移除 AI 輸出的描述性前綴（如「分支名稱：」）
-#   2. 確保以 feature/ 開頭的格式
-#   3. 移除 Git 不允許的特殊字符
-#   4. 處理多餘的連字號和點號
-#   5. 驗證最終結果的有效性
-# 容錯機制：如果 AI 輸出不包含有效分支名，返回失敗讓系統使用後備方案
-# ============================================
+# 清理 AI 生成的分支名稱，確保符合 Git 分支命名規範
 clean_branch_name() {
     local branch_name="$1"
     
@@ -1310,7 +834,7 @@ clean_branch_name() {
     fi
 }
 
-# 使用 AI 生成分支名稱
+# 使用 AI 生成符合規範的分支名稱
 generate_branch_name_with_ai() {
     local username="$1"
     local branch_type="$2"
@@ -1388,7 +912,7 @@ Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lo
     return 1
 }
 
-# 使用 AI 生成 PR 標題和內容
+# 使用 AI 根據 commit 訊息生成 PR 標題和內容
 generate_pr_content_with_ai() {
     local issue_key="$1"
     local branch_name="$2"
@@ -1533,7 +1057,7 @@ generate_pr_content_with_ai() {
 
 # 配置變數（無預設選項，必須選擇）
 
-# 顯示操作選單
+# 顯示 GitHub Flow 操作選單
 show_operation_menu() {
     local main_branch
     main_branch=$(get_main_branch)
@@ -1561,7 +1085,7 @@ show_operation_menu() {
     printf "請輸入選項 [1-5]: " >&2
 }
 
-# 獲取用戶選擇的操作
+# 獲取用戶選擇的操作（返回 1-5）
 get_operation_choice() {
     while true; do
         show_operation_menu
@@ -1612,57 +1136,9 @@ get_operation_choice() {
     done
 }
 
-# ============================================
-# 主函數 - GitHub Flow PR 自動化流程完整執行引擎
-# 功能：統一入口，處理命令行參數、環境檢查、信號處理和流程調度
-# 參數：$1 - 可選的命令行參數（--auto 或 -a，已廢棄但向下相容）
-# 返回：根據具體操作結果
-# 
-# 執行流程：
-#   1. 全域信號處理設置（Ctrl+C 中斷處理）
-#   2. 命令行參數處理和相容性檢查  
-#   3. 環境驗證（Git 倉庫、GitHub CLI、分支檢查）
-#   4. 互動式選單系統啟動
-#   5. 根據用戶選擇調度對應的執行函數
-# 
-# 安全機制：
-#   - 全域 trap 處理中斷信號
-#   - 多層環境檢查和錯誤提示
-#   - 統一的錯誤處理和清理機制
-# 
-# 支援操作：
-#   1. 建立功能分支 - execute_create_branch()
-#   2. 建立 Pull Request - execute_create_pr()  
-#   3. 撤銷當前 PR - execute_cancel_pr()
-#   4. 審查與合併 PR - execute_review_and_merge()
-#   5. 刪除分支 - execute_delete_branch()
-# ============================================
+# 主函數 - GitHub Flow PR 自動化執行引擎
 
-# 函式：show_help
-# 功能說明：顯示腳本使用說明與完整幫助資訊。
-# 輸入參數：無
-# 輸出結果：
-#   STDERR 輸出彩色格式化的幫助文檔，包含：
-#   - 腳本用途說明
-#   - 使用方式與命令範例
-#   - 五種操作模式詳細說明
-#   - 相依工具清單與版本需求
-#   - 配置說明與注意事項
-#   - 退出碼表
-#   - 參考文檔連結
-# 例外/失敗：
-#   無例外，總是返回 0
-# 流程：
-#   1. 輸出腳本標題與版本資訊
-#   2. 輸出用途說明
-#   3. 輸出使用方式與命令範例
-#   4. 輸出五種操作模式的詳細說明
-#   5. 輸出相依工具清單
-#   6. 輸出配置說明
-#   7. 輸出退出碼表
-#   8. 輸出參考文檔
-# 副作用：輸出至 stderr
-# 參考：由 main() 函數在接收到 -h 或 --help 參數時調用
+# 顯示腳本使用說明與完整幫助資訊
 show_help() {
     # 讀取當前配置值
     local ai_tools_list="${AI_TOOLS[*]}"
@@ -1898,33 +1374,11 @@ main() {
     show_random_thanks
 }
 
-# 函式：execute_create_branch
-# 功能說明：執行功能分支建立流程，基於主分支建立標準化命名的功能分支。
-# 輸入參數：無（透過互動式輸入獲取）
-# 輸出結果：
-#   STDERR 輸出各階段進度訊息、輸入提示與結果
-# 例外/失敗：
-#   1=使用者取消、主分支切換失敗、分支建立失敗
-# 流程：
-#   1. 檢測當前分支與主分支，若不在主分支則詢問是否切換
-#   2. 更新主分支至最新狀態（git pull --ff-only）
-#   3. 互動輸入 issue key 並驗證格式（支援多種格式：ISSUE-123、JIRA_456 等）
-#   4. 輸入擁有者名字（預設使用 DEFAULT_USERNAME）
-#   5. 選擇分支類型（issue、bug、feature、enhancement、blocker）
-#   6. 基於 AI 或手動輸入生成分支名稱（格式：username/type/issue-key-description）
-#   7. 驗證分支名稱格式並建立分支
-#   8. 切換到新建立的分支
-#   9. 顯示完成訊息與後續建議
-# 副作用：
-#   - 可能切換當前分支
-#   - 更新主分支（git pull）
-#   - 建立新的本地分支
-#   - 輸出至 stderr
-# 參考：get_main_branch()、check_main_branch()、validate_and_standardize_issue_key()、generate_ai_branch_name()
+# 執行功能分支建立流程（基於主分支建立標準化命名的功能分支）
 execute_create_branch() {
     info_msg "🌿 建立功能分支流程..."
     
-    # 步驟 1: 檢測當前分支與主分支狀態
+    # 檢測當前分支與主分支狀態
     local main_branch
     local current_branch
     main_branch=$(get_main_branch)
@@ -2135,38 +1589,11 @@ execute_create_branch() {
     echo >&2
 }
 
-# 提交並推送變更
-# 函式：execute_commit_and_push
-# 功能說明：此函式已移除。請使用 git-auto-push.sh 來提交並推送變更。
-# 注意事項：建立 PR 前必須先推送分支變更到遠端。
-
-# 函式：execute_create_pr
-# 功能說明：執行 Pull Request 建立流程，基於當前分支向主分支提交 PR。
-# 輸入參數：無（透過互動式輸入獲取）
-# 輸出結果：
-#   STDERR 輸出各階段進度訊息、輸入提示與結果
-#   在 GitHub 上建立新的 Pull Request
-# 例外/失敗：
-#   1=在主分支上無法建立 PR、分支未推送、PR 建立失敗
-# 流程：
-#   1. 檢測當前分支與主分支，驗證不在主分支上
-#   2. 檢查分支是否已推送到遠端（必須先推送才能建立 PR）
-#   3. 從分支名稱提取或手動輸入 issue key
-#   4. 收集分支的 commit 訊息與檔案變更
-#   5. 使用 AI 生成或手動輸入 PR 標題與內容
-#   6. 解析 AI 輸出（格式：標題。內容，以句號分隔）
-#   7. 確認 PR 資訊
-#   8. 使用 gh pr create 建立 PR
-#   9. 顯示 PR URL 與後續建議
-# 副作用：
-#   - 在 GitHub 上建立新的 Pull Request
-#   - 輸出至 stderr
-#   - 不修改本地 Git 狀態
-# 參考：get_current_branch()、get_main_branch()、generate_pr_content_with_ai()
+# 執行 Pull Request 建立流程（基於當前分支向主分支提交 PR）
 execute_create_pr() {
     info_msg "🔄 建立 Pull Request 流程..."
     
-    # 步驟 1: 檢測當前分支與主分支
+    # 檢測當前分支與主分支
     local current_branch
     current_branch=$(get_current_branch)
     
@@ -2961,25 +2388,7 @@ execute_review_and_merge() {
     success_msg "🎉 PR 審查流程完成！"
 }
 
-# ============================================
-# 智慧分支刪除功能
-# 功能：提供安全的分支刪除流程，包含多重確認機制和主分支保護
-# 參數：無
-# 返回：0 - 刪除成功，1 - 取消或失敗
-# 安全機制：
-#   - 主分支保護：絕對禁止刪除 DEFAULT_MAIN_BRANCHES 中的分支
-#   - 當前分支處理：如選擇刪除當前分支，會自動切換到主分支
-#   - 多重確認：分支選擇 → 刪除確認 → 強制確認（未合併） → 遠端確認
-#   - 合併檢查：自動偵測分支是否已合併，未合併需額外確認
-# 流程：
-#   1. 顯示可刪除分支列表（排除主分支）
-#   2. 用戶選擇要刪除的分支
-#   3. 檢查分支合併狀態
-#   4. 多層級確認機制
-#   5. 可選的遠端分支同時刪除
-# 使用：execute_delete_branch  # 在主選單中調用
-# ============================================
-
+# 智慧分支刪除功能（含主分支保護和多重確認機制）
 execute_delete_branch() {
     info_msg "🗑️ 刪除分支流程..."
     

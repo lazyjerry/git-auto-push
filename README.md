@@ -1,6 +1,6 @@
 # Git 工作流程自動化工具集
 
-Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、檔案過濾系統、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
+Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
 
 版本：v2.5.1
 
@@ -9,7 +9,6 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 主要功能亮點
 
 - 傳統 Git 工作流程自動化（新增、提交、推送）
-- **檔案過濾功能** 🆕（選擇性 git add，支援 glob pattern 過濾規則）
 - Git 倉庫資訊查看（分支狀態、遠端配置、同步狀態、提交歷史）
 - Commit 訊息修改功能（安全修改最後一次 commit 訊息，支援任務編號）
 - Commit 訊息品質檢查 🆕（AI 驅動的提交品質檢測，可配置自動檢查或詢問模式）
@@ -27,14 +26,8 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（3065 行，註解與流程說明）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（2743 行，註解與流程說明）
 ├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（3135 行，程式碼文件與流程註解）
-├── 檔案過濾系統 🆕        # 選擇性 git add 機制
-│   ├── 過濾規則檔案      # git-auto-push-ignore.txt（可選）
-│   ├── Glob Pattern 支援 # 支援 * 和 **，格式同 .gitignore
-│   ├── 路徑處理          # 相對/絕對路徑自動識別
-│   ├── 權限檢查          # 檔案建立與讀取權限驗證
-│   └── 動態回饋          # 顯示過濾與添加的檔案清單
 ├── AI 工具整合模組        # 支援 codex、gemini、claude
 │   ├── 錯誤偵測          # 認證過期、網路錯誤自動識別
 │   ├── 錯誤提示          # 提供具體解決方案
@@ -77,8 +70,6 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 │       ├── COMMIT-QUALITY-SUMMARY.md     # Commit 品質檢查摘要
 │       ├── COMMIT-QUALITY-QUICKREF.md    # Commit 品質快速參考
 │       ├── AI-QUALITY-CHECK-IMPROVEMENT.md # AI 品質檢查改進說明
-│       ├── 檔案過濾功能開發報告.md        # 檔案過濾功能詳細報告 🆕
-│       ├── 添加過濾檔案.md               # 過濾檔案使用說明 🆕
 │       └── 選項7-變更commit訊息功能開發報告.md # 選項 7 開發報告
 └── screenshots/         # 介面展示圖片
     ├── ai-commit-generation.png
@@ -121,10 +112,6 @@ readonly AI_TOOLS=(
 # Commit 品質自動檢查（第 155 行）
 AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 # AUTO_CHECK_COMMIT_QUALITY=false       # 詢問模式
-
-# 檔案過濾設定檔路徑（第 209 行）
-readonly IGNORE_FILE_PATH="git-auto-push-ignore.txt"  # 相對路徑
-# readonly IGNORE_FILE_PATH="/path/to/ignore.txt"     # 絕對路徑
 ```
 
 #### git-auto-pr.sh 設定（約第 180-230 行）
@@ -293,37 +280,6 @@ git-auto-pr
 
 # 稍後提交
 ./git-auto-push.sh  # 選擇選項 5
-```
-
-#### 檔案過濾功能 🆕
-
-```bash
-# 使用檔案過濾進行選擇性 add
-./git-auto-push.sh
-# 選擇選項 1-4 任一操作
-
-# 功能特色：
-# - 自動建立 git-auto-push-ignore.txt 過濾檔案（首次使用）
-# - 支援 glob pattern：* 和 **（格式同 .gitignore）
-# - 相對路徑以執行目錄為基準
-# - 顯示被忽略的檔案清單
-# - 顯示實際過濾檔案的完整路徑
-
-# 過濾檔案範例（git-auto-push-ignore.txt）：
-# *.log                    # 忽略所有 log 檔
-# test-*.sh                # 忽略測試腳本
-# docs/draft/              # 忽略草稿目錄
-# **/temp/*                # 忽略所有 temp 目錄下的檔案
-# config/local.*.json      # 忽略本地配置檔
-
-# 使用情境：
-# ✅ 臨時檔案：不想加入 .gitignore，但也不想每次都 add
-# ✅ 實驗性修改：保持在 unstaged 方便隨時丟棄
-# ✅ 敏感配置：開發環境的設定檔
-
-# 配置位置：
-# 腳本頂部 IGNORE_FILE_PATH 變數（約 185 行）
-# 預設：git-auto-push-ignore.txt（相對路徑）
 ```
 
 #### 查看 Git 倉庫資訊

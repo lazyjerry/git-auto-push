@@ -122,6 +122,33 @@ readonly AI_TOOLS=(
 # 輸出範例：新增用戶登入功能、修正檔案上傳錯誤、改善搜尋效能
 readonly AI_COMMIT_PROMPT="根據以下 git 變更生成一行中文 commit 標題，格式如：新增用戶登入功能、修正檔案上傳錯誤、改善搜尋效能。只輸出標題："
 
+# Conventional Commits 前綴類型清單
+# 說明：基於 Conventional Commits 規範的 commit 訊息前綴類型。
+#       用於手動選擇和 AI 自動判斷，提升 commit 訊息的一致性和可讀性。
+# 格式："前綴:說明|前綴:說明|..."
+# 參考：https://www.conventionalcommits.org/
+readonly -a COMMIT_PREFIXES=(
+    "feat:新功能"
+    "fix:錯誤修復"
+    "docs:文件變更"
+    "style:程式碼格式"
+    "refactor:重構"
+    "perf:效能改進"
+    "test:測試相關"
+    "build:建置系統"
+    "ci:CI 配置"
+    "chore:雜項維護"
+    "revert:回退提交"
+)
+
+# AI 前綴選擇提示詞
+# 說明：用於讓 AI 根據 git diff 自動選擇最適合的 Conventional Commits 前綴。
+# 要求：
+#   - 只輸出前綴關鍵字（如：feat、fix、docs 等）
+#   - 不包含冒號、說明文字或其他內容
+#   - 必須從預定義的前綴清單中選擇
+readonly AI_PREFIX_PROMPT="根據以下 git 變更，選擇最適合的 Conventional Commits 前綴類型。可用前綴：feat(新功能)、fix(錯誤修復)、docs(文件)、style(格式)、refactor(重構)、perf(效能)、test(測試)、build(建置)、ci(CI)、chore(維護)、revert(回退)。只輸出前綴關鍵字(例如:feat)，不要包含冒號或說明："
+
 # 任務編號自動帶入設定
 # 說明：控制是否在 commit 訊息前自動加入任務編號（從分支名稱偵測）。
 #       任務編號格式如：JIRA-123、PROJ-456、feat-001 等。
@@ -462,6 +489,155 @@ check_git_repository() {
 # ============================================
 get_git_status() {
     git status --porcelain 2>/dev/null
+}
+
+# 函式：select_commit_prefix
+# 功能說明：顯示 Conventional Commits 前綴選單，讓使用者選擇合適的前綴。
+# 輸入參數：無
+# 輸出結果：
+#   STDOUT 輸出選擇的前綴（如：feat、fix、docs）
+#   若使用者選擇跳過，輸出空字串
+# 例外/失敗：
+#   0=成功選擇或跳過，1=輸入無效需重新選擇
+# 流程：
+#   1. 顯示所有可用的前綴選項（帶編號）
+#   2. 提供「無前綴」選項
+#   3. 讀取使用者輸入的編號
+#   4. 驗證輸入並返回對應的前綴
+# 副作用：輸出至 stderr（選單和提示）
+# 參考：COMMIT_PREFIXES 常數
+select_commit_prefix() {
+    echo >&2
+    echo "==================================================" >&2
+    highlight_success_msg "📋 請選擇 Commit 訊息前綴 (Conventional Commits)"
+    echo "==================================================" >&2
+    
+    local index=1
+    for item in "${COMMIT_PREFIXES[@]}"; do
+        local prefix="${item%%:*}"
+        local desc="${item#*:}"
+        printf "  %2d. %-12s - %s\n" "$index" "$prefix:" "$desc" >&2
+        ((index++))
+    done
+    printf "  %2d. %-12s - %s\n" "$index" "(無前綴)" "跳過前綴選擇" >&2
+    
+    echo >&2
+    printf "請選擇前綴編號 [1-%d]: " "$index" >&2
+    read -r choice
+    choice=$(echo "$choice" | xargs)
+    
+    # 驗證輸入
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "$index" ]; then
+        warning_msg "❌ 無效的選擇，請輸入 1-$index 之間的數字"
+        return 1
+    fi
+    
+    # 選擇「無前綴」
+    if [ "$choice" -eq "$index" ]; then
+        info_msg "✅ 已跳過前綴選擇"
+        echo ""
+        return 0
+    fi
+    
+    # 返回選擇的前綴
+    local selected_item="${COMMIT_PREFIXES[$((choice-1))]}"
+    local selected_prefix="${selected_item%%:*}"
+    local selected_desc="${selected_item#*:}"
+    
+    success_msg "✅ 已選擇前綴: $selected_prefix ($selected_desc)"
+    echo "$selected_prefix"
+    return 0
+}
+
+# 函式：generate_commit_prefix_by_ai
+# 功能說明：使用 AI 工具根據 git diff 自動選擇最適合的 Conventional Commits 前綴。
+# 輸入參數：無（直接讀取當前的 git diff）
+# 輸出結果：
+#   STDOUT 輸出 AI 選擇的前綴（如：feat、fix、docs）
+#   若 AI 執行失敗，輸出空字串
+# 例外/失敗：
+#   0=成功，1=所有 AI 工具都失敗
+# 流程：
+#   1. 取得當前的 git diff
+#   2. 依序嘗試每個可用的 AI 工具
+#   3. 使用 AI_PREFIX_PROMPT 讓 AI 選擇前綴
+#   4. 驗證 AI 輸出是否為有效的前綴
+#   5. 返回選擇的前綴
+# 副作用：輸出至 stderr（狀態訊息）
+# 參考：AI_TOOLS、AI_PREFIX_PROMPT、COMMIT_PREFIXES 常數
+generate_commit_prefix_by_ai() {
+    info_msg "🤖 正在使用 AI 工具分析變更並選擇前綴..."
+    
+    local prompt="$AI_PREFIX_PROMPT"
+    local diff_content
+    diff_content=$(git diff --cached 2>/dev/null)
+    
+    if [ -z "$diff_content" ]; then
+        warning_msg "無法取得 git diff，將跳過前綴選擇"
+        echo ""
+        return 1
+    fi
+    
+    local generated_prefix
+    local ai_tool_used=""
+    
+    # 依序檢查每個 AI 工具
+    for tool_name in "${AI_TOOLS[@]}"; do
+        if ! command -v "$tool_name" >/dev/null 2>&1; then
+            debug_msg "AI 工具 $tool_name 未安裝，跳過..."
+            continue
+        fi
+
+        debug_msg "🔄 正在使用 AI 工具選擇前綴: $tool_name"
+        ai_tool_used="$tool_name"
+        
+        # 根據不同工具使用不同的調用方式
+        case "$tool_name" in
+            "codex")
+                if generated_prefix=$(run_codex_command "$prompt"); then
+                    break
+                fi
+                ;;
+            "gemini"|"claude")
+                if generated_prefix=$(run_stdin_ai_command "$tool_name" "$prompt"); then
+                    break
+                fi
+                ;;
+        esac
+        
+        debug_msg "$tool_name 執行失敗，嘗試下一個工具..."
+        generated_prefix=""
+        ai_tool_used=""
+    done
+    
+    # 檢查是否成功生成前綴
+    if [ -n "$generated_prefix" ] && [ -n "$ai_tool_used" ]; then
+        # 清理生成的前綴（移除空白和特殊字元）
+        generated_prefix=$(echo "$generated_prefix" | tr -d '[:space:]' | tr -d ':' | head -n 1)
+        
+        # 驗證前綴是否在預定義清單中
+        local valid_prefix=false
+        for item in "${COMMIT_PREFIXES[@]}"; do
+            local prefix="${item%%:*}"
+            if [ "$generated_prefix" = "$prefix" ]; then
+                valid_prefix=true
+                break
+            fi
+        done
+        
+        if [ "$valid_prefix" = true ]; then
+            success_msg "✅ AI ($ai_tool_used) 選擇的前綴: $generated_prefix"
+            echo "$generated_prefix"
+            return 0
+        else
+            warning_msg "AI 生成的前綴無效: '$generated_prefix'，將跳過前綴選擇"
+        fi
+    fi
+    
+    # 如果所有 AI 工具都不可用或失敗
+    debug_msg "所有 AI 工具都執行失敗或未生成有效的前綴"
+    echo ""
+    return 1
 }
 
 # ============================================
@@ -1134,7 +1310,19 @@ generate_auto_commit_message() {
         generated_message=$(clean_ai_message "$generated_message")
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            info_msg "✅ 使用 $ai_tool_used 生成的 commit message:"
+            # 使用 AI 自動選擇前綴
+            echo >&2
+            local ai_prefix=""
+            if ai_prefix=$(generate_commit_prefix_by_ai); then
+                if [ -n "$ai_prefix" ]; then
+                    generated_message="$ai_prefix: $generated_message"
+                    info_msg "✅ 使用 $ai_tool_used 生成的 commit message (含前綴):"
+                else
+                    info_msg "✅ 使用 $ai_tool_used 生成的 commit message:"
+                fi
+            else
+                info_msg "✅ 使用 $ai_tool_used 生成的 commit message:"
+            fi
             highlight_success_msg "🔖 $generated_message"
             echo "$generated_message"
             return 0
@@ -1213,11 +1401,24 @@ get_commit_message() {
         fi
     fi
    
+    # 先讓使用者選擇前綴
+    local selected_prefix=""
+    while true; do
+        if selected_prefix=$(select_commit_prefix); then
+            break
+        fi
+        # 選擇失敗，重新選擇
+    done
+    
     echo >&2
     echo "==================================================" >&2
     highlight_success_msg "💬 請輸入 commit 訊息"
     echo "==================================================" >&2
-    cyan_msg "輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
+    if [ -n "$selected_prefix" ]; then
+        cyan_msg "輸入您的 commit 訊息（將自動加上前綴: $selected_prefix:），或直接按 Enter 使用 AI 自動生成"
+    else
+        cyan_msg "輸入您的 commit 訊息，或直接按 Enter 使用 AI 自動生成"
+    fi
     
     echo >&2
     printf "➤ " >&2  # 提供明確的輸入提示符號
@@ -1225,8 +1426,13 @@ get_commit_message() {
     read -r message
     message=$(echo "$message" | xargs)  # 去除前後空白
     
-    # 如果用戶有輸入內容，帶入任務編號後返回
+    # 如果用戶有輸入內容，加上前綴和任務編號後返回
     if [ -n "$message" ]; then
+        # 加上前綴（如果有選擇）
+        if [ -n "$selected_prefix" ]; then
+            message="$selected_prefix: $message"
+        fi
+        
         local final_message
         final_message=$(append_ticket_number_to_message "$message")
         echo "$final_message"

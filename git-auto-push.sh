@@ -3,7 +3,7 @@
 
 # Git 自動化推送工具 - 提供完整的 Git 傳統工作流程自動化（add/commit/push）
 # 使用方式：./git-auto-push.sh 或 ./git-auto-push.sh --help 或 ./git-auto-push.sh -a
-# 作者：Lazy Jerry | 版本：v2.0.0 | 授權：MIT License
+# 作者：Lazy Jerry | 版本：v2.6.0 | 授權：MIT License
 
 # ==============================================
 # AI 工具配置區域

@@ -610,6 +610,167 @@ run_command_with_loading() {
     return $exit_code
 }
 
+# ==============================================
+# AI 工具核心執行函數（統一底層邏輯）
+# ==============================================
+
+# 執行 AI 工具的核心函數（統一超時、錯誤處理、NODE_OPTIONS 設定）
+# 參數：
+#   $1 - tool_name: AI 工具名稱 (gemini/claude/codex)
+#   $2 - input_file: 輸入檔案路徑
+#   $3 - timeout: 超時秒數（預設 45）
+#   $4 - use_loading: 是否使用 loading 動畫 (true/false，預設 false)
+#   $5 - loading_message: loading 訊息（可選）
+# 返回：0=成功，1=失敗
+# 輸出：AI 工具的原始輸出（成功時）
+_execute_ai_tool() {
+    local tool_name="$1"
+    local input_file="$2"
+    local timeout="${3:-45}"
+    local use_loading="${4:-false}"
+    local loading_message="${5:-正在等待 $tool_name 回應}"
+    
+    local output=""
+    local exit_code=0
+    
+    # 根據不同工具使用不同的調用方式
+    case "$tool_name" in
+        "codex")
+            # codex 使用 exec 子命令
+            if [[ "$use_loading" == "true" ]]; then
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 timeout ${timeout}s codex exec < '$input_file' 2>&1" "$loading_message" "$timeout")
+                    exit_code=$?
+                else
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 codex exec < '$input_file' 2>&1" "$loading_message" "$timeout")
+                    exit_code=$?
+                fi
+            else
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(LC_ALL=en_US.UTF-8 timeout ${timeout}s codex exec < "$input_file" 2>&1)
+                    exit_code=$?
+                else
+                    output=$(LC_ALL=en_US.UTF-8 codex exec < "$input_file" 2>&1)
+                    exit_code=$?
+                fi
+            fi
+            ;;
+        "gemini"|"claude")
+            # gemini 和 claude 使用 stdin
+            # 使用 NODE_OPTIONS='--no-deprecation' 隱藏 Node.js 棄用警告
+            if [[ "$use_loading" == "true" ]]; then
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' timeout ${timeout}s $tool_name < '$input_file'" "$loading_message" "$timeout")
+                    exit_code=$?
+                else
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' $tool_name < '$input_file'" "$loading_message" "$timeout")
+                    exit_code=$?
+                fi
+            else
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' timeout ${timeout}s "$tool_name" < "$input_file" 2>&1)
+                    exit_code=$?
+                else
+                    output=$(LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' "$tool_name" < "$input_file" 2>&1)
+                    exit_code=$?
+                fi
+            fi
+            ;;
+        *)
+            debug_msg "不支援的 AI 工具: $tool_name"
+            return 1
+            ;;
+    esac
+    
+    # 輸出結果供調用者處理
+    echo "$output"
+    return $exit_code
+}
+
+# 處理 AI 工具執行結果（統一錯誤處理和調試輸出）
+# 參數：
+#   $1 - tool_name: AI 工具名稱
+#   $2 - exit_code: 執行退出碼
+#   $3 - output: 執行輸出
+#   $4 - prompt: 原始提示詞（用於調試）
+#   $5 - timeout: 超時設定（用於調試）
+# 返回：0=成功，1=失敗
+_handle_ai_result() {
+    local tool_name="$1"
+    local exit_code="$2"
+    local output="$3"
+    local prompt="$4"
+    local timeout="${5:-45}"
+    
+    # 確保 exit_code 是有效數字
+    if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+        exit_code=1
+    fi
+    
+    # 檢查執行結果
+    if [ $exit_code -eq 124 ]; then
+        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
+        
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
+        debug_msg "執行的指令: $tool_name < [input_file]"
+        debug_msg "超時設定: $timeout 秒"
+        
+        if [ -n "$output" ]; then
+            show_ai_debug_info "$tool_name" "$prompt" "" "$(echo "$output" | head -n 5)"
+        else
+            show_ai_debug_info "$tool_name" "$prompt"
+            debug_msg "輸出內容: (無)"
+        fi
+        echo >&2
+        return 1
+        
+    elif [ $exit_code -ne 0 ]; then
+        local display_code="${exit_code:-未知}"
+        error_msg "❌ $tool_name 執行失敗（退出碼: ${display_code}）"
+        
+        # 檢查特定錯誤訊息
+        if [[ "$output" == *"stdout is not a terminal"* ]] && [[ "$tool_name" == "codex" ]]; then
+            warning_msg "💡 codex 需要互動式終端環境"
+            warning_msg "💡 已自動使用 'codex exec' 模式，如仍有問題請檢查終端設定"
+        elif [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+            warning_msg "💡 請執行：$tool_name auth login"
+        elif [[ "$output" == *"rate limit"* ]] || [[ "$output" == *"quota"* ]]; then
+            warning_msg "💡 API 配額已用盡，請稍後再試或檢查訂閱狀態"
+        elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+            warning_msg "💡 請檢查網路連接"
+        fi
+        
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
+        debug_msg "執行的指令: $tool_name < [input_file]"
+        debug_msg "退出碼: ${display_code}"
+        
+        if [ -n "$output" ]; then
+            show_ai_debug_info "$tool_name" "$prompt" "" "$output"
+        else
+            show_ai_debug_info "$tool_name" "$prompt"
+            debug_msg "輸出內容: (無)"
+        fi
+        echo >&2
+        return 1
+    fi
+    
+    if [ -z "$output" ]; then
+        error_msg "❌ $tool_name 沒有返回內容"
+        
+        echo >&2
+        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
+        debug_msg "執行的指令: $tool_name < [input_file]"
+        debug_msg "退出碼: $exit_code"
+        show_ai_debug_info "$tool_name" "$prompt"
+        echo >&2
+        return 1
+    fi
+    
+    return 0
+}
+
 # 執行 codex 命令並處理輸出
 run_codex_command() {
     local prompt="$1"
@@ -748,11 +909,16 @@ run_codex_command() {
     return 1
 }
 
-# 執行基於 stdin 的 AI 命令
+# 執行基於 stdin 的 AI 命令（用於 commit 訊息生成，自動獲取 git diff）
+# 參數：
+#   $1 - tool_name: AI 工具名稱 (gemini/claude)
+#   $2 - prompt: 提示詞內容
+# 返回：0=成功，1=失敗
+# 輸出：AI 生成的內容（成功時）
 run_stdin_ai_command() {
     local tool_name="$1"
     local prompt="$2"
-    local timeout=45  # 增加超時時間到 45 秒
+    local timeout=45
     
     info_msg "正在調用 $tool_name..."
     
@@ -761,9 +927,6 @@ run_stdin_ai_command() {
         warning_msg "$tool_name 工具未安裝"
         return 1
     fi
-    
-    # 檢查認證狀態
-    # FIXED 不要檢查，因為可能需要用戶手動登入或是有發送頻率限制。
     
     # 獲取 git diff 內容
     local diff_content
@@ -774,86 +937,26 @@ run_stdin_ai_command() {
         return 1
     fi
     
-    local output
-    local exit_code
+    # 創建臨時檔案：組合 prompt 和 diff 內容
+    local temp_input
+    temp_input=$(mktemp)
+    LC_ALL=en_US.UTF-8 cat > "$temp_input" <<EOF
+$prompt
+
+Git 變更內容:
+$diff_content
+EOF
     
-    # 創建臨時檔案存儲 diff 內容
-    local temp_diff
-    temp_diff=$(mktemp)
-    echo "$diff_content" > "$temp_diff"
-    
-    # 創建臨時檔案存儲 prompt 內容（避免引號解析問題）
-    local temp_prompt
-    temp_prompt=$(mktemp)
-    printf '%s' "$prompt" > "$temp_prompt"
-    
-    # 使用帶 loading 的命令執行
-    # 注意：使用 2>/dev/null 丟棄 stderr，避免 Node.js 警告等技術雜訊混入輸出
-    if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
-        exit_code=$?
-    else
-        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
-        exit_code=$?
-    fi
+    # 使用核心函數執行 AI 工具（帶 loading 動畫）
+    local output exit_code
+    output=$(_execute_ai_tool "$tool_name" "$temp_input" "$timeout" "true" "正在等待 $tool_name 回應")
+    exit_code=$?
     
     # 清理臨時檔案
-    rm -f "$temp_prompt"
+    rm -f "$temp_input"
     
-    # 確保退出碼是有效的數字
-    if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
-        exit_code=1
-    fi
-    
-    # 清理臨時檔案
-    rm -f "$temp_diff"
-    
-    if [ $exit_code -eq 124 ]; then
-        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
-        
-        # 顯示調試信息
-        echo >&2
-        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
-        debug_msg "執行的指令: $tool_name -p '$prompt' < [diff_file]"
-        debug_msg "超時設定: $timeout 秒"
-        debug_msg "diff 內容大小: $(echo "$diff_content" | wc -l) 行"
-        if [ -n "$output" ]; then
-            debug_msg "部分輸出內容:"
-            echo "$output" | head -n 5 | sed 's/^/  /' >&2
-        else
-            debug_msg "輸出內容: (無)"
-        fi
-        printf "\n" >&2
-        return 1
-    elif [ $exit_code -ne 0 ]; then
-        error_msg "❌ $tool_name 執行失敗（退出碼: $exit_code）"
-        
-        # 顯示調試信息
-        echo >&2
-        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
-        debug_msg "執行的指令: $tool_name -p '<prompt>' < [diff_file]"
-        debug_msg "退出碼: $exit_code"
-        if [ -n "$output" ]; then
-            debug_msg "原始輸出內容:"
-            echo "$output" | sed 's/^/  /' >&2
-        else
-            debug_msg "輸出內容: (無)"
-        fi
-        printf "\n" >&2
-        return 1
-    fi
-    
-    if [ -z "$output" ]; then
-        error_msg "❌ $tool_name 沒有返回內容"
-        
-        # 顯示調試信息
-        echo >&2
-        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
-        debug_msg "執行的指令: $tool_name -p '$prompt' < [diff_file]"
-        debug_msg "退出碼: $exit_code"
-        debug_msg "diff 內容預覽:"
-        echo "$diff_content" | head -n 5 | sed 's/^/  /' >&2
-        printf "\n" >&2
+    # 使用統一的結果處理函數
+    if ! _handle_ai_result "$tool_name" "$exit_code" "$output" "$prompt" "$timeout"; then
         return 1
     fi
     
@@ -1132,9 +1235,14 @@ get_commit_message() {
 }
 
 # 執行簡單的 AI 命令（不需要 git diff），用於品質檢查等場景
+# 參數：
+#   $1 - tool_name: AI 工具名稱 (gemini/claude/codex)
+#   $2 - prompt: 提示詞內容
+# 返回：0=成功，1=失敗
+# 輸出：AI 生成的內容（成功時，已清理）
 run_simple_ai_command() {
-    local tool_name="$1"  # AI 工具名稱
-    local prompt="$2"     # 提示詞內容
+    local tool_name="$1"
+    local prompt="$2"
     local timeout=45
     
     # 檢查工具是否可用
@@ -1143,118 +1251,23 @@ run_simple_ai_command() {
         return 1
     fi
     
-    local output=""
-    local exit_code=0
-    
     # 建立臨時檔案（確保 UTF-8 編碼）
-    local temp_prompt
-    temp_prompt=$(mktemp)
-    
-    # 設定 UTF-8 locale 並寫入檔案
-    # 使用 cat 而非 echo/printf 來避免 shell 對特殊字元的解析
-    LC_ALL=en_US.UTF-8 cat > "$temp_prompt" <<EOF
+    local temp_input
+    temp_input=$(mktemp)
+    LC_ALL=en_US.UTF-8 cat > "$temp_input" <<EOF
 $prompt
 EOF
     
-    # 根據不同工具使用不同的調用方式
-    case "$tool_name" in
-        "codex")
-            # codex 使用 exec 子命令
-            # 設定 UTF-8 環境變數確保正確讀取
-            if command -v timeout >/dev/null 2>&1; then
-                output=$(LC_ALL=en_US.UTF-8 timeout ${timeout}s codex exec < "$temp_prompt" 2>&1)
-                exit_code=$?
-            else
-                output=$(LC_ALL=en_US.UTF-8 codex exec < "$temp_prompt" 2>&1)
-                exit_code=$?
-            fi
-            ;;
-        "gemini"|"claude")
-            # gemini 和 claude 使用 stdin
-            if command -v timeout >/dev/null 2>&1; then
-                output=$(LC_ALL=en_US.UTF-8 timeout ${timeout}s "$tool_name" < "$temp_prompt" 2>&1)
-                exit_code=$?
-            else
-                output=$(LC_ALL=en_US.UTF-8 "$tool_name" < "$temp_prompt" 2>&1)
-                exit_code=$?
-            fi
-            ;;
-        *)
-            debug_msg "不支援的 AI 工具: $tool_name"
-            rm -f "$temp_prompt"
-            return 1
-            ;;
-    esac
+    # 使用核心函數執行 AI 工具（不帶 loading 動畫，品質檢查需要快速回應）
+    local output exit_code
+    output=$(_execute_ai_tool "$tool_name" "$temp_input" "$timeout" "false")
+    exit_code=$?
     
     # 清理臨時檔案
-    rm -f "$temp_prompt"
+    rm -f "$temp_input"
     
-    # 檢查執行結果
-    if [ $exit_code -eq 124 ]; then
-        error_msg "❌ $tool_name 執行超時（${timeout}秒）"
-        
-        # 顯示詳細調試信息
-        echo >&2
-        debug_msg "🔍 調試信息（$tool_name 超時錯誤）:"
-        debug_msg "執行的指令: $tool_name < [prompt_file]"
-        debug_msg "超時設定: $timeout 秒"
-        
-        # 使用統一函數顯示 AI 輸入輸出
-        if [ -n "$output" ]; then
-            show_ai_debug_info "$tool_name" "$prompt" "" "$(echo "$output" | head -n 5)"
-        else
-            show_ai_debug_info "$tool_name" "$prompt"
-            debug_msg "輸出內容: (無)"
-        fi
-        echo >&2
-        return 1
-    elif [ $exit_code -ne 0 ]; then
-        # 確保 exit_code 是有效數字
-        local display_code="${exit_code:-未知}"
-        error_msg "❌ $tool_name 執行失敗（退出碼: ${display_code}）"
-        
-        # 檢查特定錯誤訊息
-        if [[ "$output" == *"stdout is not a terminal"* ]]; then
-            # codex 特定錯誤：需要終端
-            if [[ "$tool_name" == "codex" ]]; then
-                warning_msg "💡 codex 需要互動式終端環境"
-                warning_msg "💡 已自動使用 'codex exec' 模式，如仍有問題請檢查終端設定"
-            fi
-        elif [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
-            warning_msg "💡 請執行：$tool_name auth login"
-        elif [[ "$output" == *"rate limit"* ]] || [[ "$output" == *"quota"* ]]; then
-            warning_msg "💡 API 配額已用盡，請稍後再試或檢查訂閱狀態"
-        fi
-        
-        # 顯示詳細調試信息
-        echo >&2
-        debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
-        debug_msg "執行的指令: $tool_name < [prompt_file]"
-        debug_msg "退出碼: ${display_code}"
-        
-        # 使用統一函數顯示 AI 輸入輸出
-        if [ -n "$output" ]; then
-            show_ai_debug_info "$tool_name" "$prompt" "" "$output"
-        else
-            show_ai_debug_info "$tool_name" "$prompt"
-            debug_msg "輸出內容: (無)"
-        fi
-        echo >&2
-        return 1
-    fi
-    
-    if [ -z "$output" ]; then
-        error_msg "❌ $tool_name 沒有返回內容"
-        
-        # 顯示詳細調試信息
-        echo >&2
-        debug_msg "🔍 調試信息（$tool_name 無輸出）:"
-        debug_msg "執行的指令: $tool_name < [prompt_file]"
-        debug_msg "退出碼: $exit_code"
-        
-        # 使用統一函數顯示 AI 輸入
-        show_ai_debug_info "$tool_name" "$prompt"
-        echo >&2
+    # 使用統一的結果處理函數
+    if ! _handle_ai_result "$tool_name" "$exit_code" "$output" "$prompt" "$timeout"; then
         return 1
     fi
     

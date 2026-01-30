@@ -184,7 +184,11 @@ EOF
 # 範例：
 #   readonly AI_TOOLS=("gemini")                    # 僅使用 gemini
 #   readonly AI_TOOLS=("codex" "gemini" "claude")   # 依序嘗試三個工具
-readonly AI_TOOLS=("codex" "gemini" "claude")
+readonly AI_TOOLS=(
+    "gemini"
+    "codex"
+    "claude"
+)
 
 # ==============================================
 # 分支配置區域

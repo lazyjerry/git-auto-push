@@ -107,8 +107,8 @@
 #   readonly AI_TOOLS=("codex")                    # 僅使用 codex
 #   readonly AI_TOOLS=("gemini" "codex" "claude")  # 調整優先順序
 readonly AI_TOOLS=(
-    "codex"
     "gemini"
+    "codex"
     "claude"
 )
 

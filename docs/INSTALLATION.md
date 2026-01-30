@@ -4,6 +4,7 @@
 
 ## 目錄
 
+- [一鍵安裝](#一鍵安裝)
 - [快速安裝](#快速安裝)
 - [詳細安裝步驟](#詳細安裝步驟)
   - [1. 複製專案](#1-複製專案)
@@ -13,6 +14,30 @@
   - [5. 相依工具安裝](#5-相依工具安裝)
 - [驗證安裝](#驗證安裝)
 - [解除安裝](#解除安裝)
+
+---
+
+## 一鍵安裝
+
+使用安裝腳本快速安裝到系統：
+
+```bash
+# 本地安裝（安裝到當前目錄）
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+
+# 全域安裝（安裝到 /usr/local/bin，需要 sudo）
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash -s -- --global
+```
+
+或使用 wget：
+
+```bash
+# 本地安裝
+wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+
+# 全域安裝
+wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash -s -- --global
+```
 
 ---
 

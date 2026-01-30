@@ -87,106 +87,43 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 
 ## 安裝與啟動
 
-### 1. 複製專案
+> 📋 **完整安裝指南**：查看 [docs/INSTALLATION.md](docs/INSTALLATION.md) 瞭解詳細安裝步驟、設定說明和問題排除
+
+### 快速安裝
 
 ```bash
+# 複製專案
 git clone https://github.com/lazyjerry/git-auto-push.git
 cd git-auto-push
+
+# 設定執行權限
+chmod +x git-auto-push.sh git-auto-pr.sh
+
+# 測試執行
+./git-auto-push.sh --help
 ```
 
-### 2. 設定執行權限
+### 全域安裝（選擇性）
 
 ```bash
-chmod +x git-auto-push.sh
-chmod +x git-auto-pr.sh
-```
-
-### 3. 調整個人化設定（建議）
-
-在使用前，建議先依據個人或團隊需求調整以下重要設定變數：
-
-#### git-auto-push.sh 設定（約第 100-210 行）
-
-```bash
-# AI 工具優先順序（第 109 行）
-readonly AI_TOOLS=(
-    "codex"     # GitHub Copilot CLI
-    "gemini"    # Google Gemini CLI  
-    "claude"    # Anthropic Claude CLI
-)
-
-# Commit 品質自動檢查（第 155 行）
-AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
-# AUTO_CHECK_COMMIT_QUALITY=false       # 詢問模式
-```
-
-#### git-auto-pr.sh 設定（約第 180-230 行）
-
-```bash
-# AI 工具優先順序（第 187 行）
-readonly AI_TOOLS=("codex" "gemini" "claude")
-
-# 主分支偵測順序（第 202 行）
-readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
-# readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")     # 標準配置
-# readonly -a DEFAULT_MAIN_BRANCHES=("develop" "main")    # Git Flow 風格
-
-# 預設使用者名稱（第 212 行）
-readonly DEFAULT_USERNAME="jerry"
-# readonly DEFAULT_USERNAME="your-name"    # 修改為您的名字
-
-# PR 合併後分支刪除策略（第 223 行）
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（建議）
-# readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true # 自動刪除
-```
-
-**設定建議**：
-- **AI_TOOLS**：根據已安裝的 AI 工具調整順序或移除不需要的工具
-- **DEFAULT_USERNAME**：修改為您的 GitHub 使用者名稱或團隊慣用名稱
-- **DEFAULT_MAIN_BRANCHES**：依專案的分支策略調整偵測順序
-- **AUTO_CHECK_COMMIT_QUALITY**：團隊協作建議設為 `true`，個人開發可設為 `false`
-
-### 4. 全域安裝（選擇性）
-
-```bash
-# 安裝 git-auto-push 到系統路徑
+# 安裝到系統路徑，可在任意目錄直接呼叫
 sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push
-
-# 安裝 git-auto-pr 到系統路徑
 sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
 ```
 
-安裝完之後能夠直接呼叫 git-auto-push 或 git-auto-pr 啟動腳本。
+### 相依工具
 
-### 5. 相依工具安裝
-
-#### GitHub CLI（git-auto-pr.sh 必需）
-
-```bash
-# macOS
-brew install gh
-gh auth login  # 選擇 GitHub.com → HTTPS → Browser 登入
-```
-
-#### AI CLI 工具（可選，建議）
-
-安裝任一或多個 AI CLI 工具以啟用內容產生功能：
+| 工具 | 用途 | 必要性 |
+|-----|------|--------|
+| **GitHub CLI** | PR 流程操作 | `git-auto-pr.sh` 必需 |
+| **AI CLI 工具** | 內容自動產生 | 選擇性（建議安裝） |
 
 ```bash
-# GitHub Copilot CLI (建議)
-gh extension install github/gh-copilot
-
-# Google Gemini CLI (需要 API Key)
-# 安裝方式請參考 Google AI Studio 官方文件
-
-# Anthropic Claude CLI (需要 API Key)
-# 安裝方式請參考 Anthropic Console 官方文件
-
-# 或其他相容的 AI CLI 工具
-# 工具會自動偵測可用的 AI 命令
+# 安裝 GitHub CLI (macOS)
+brew install gh && gh auth login
 ```
 
-**注意**：AI 工具需要相應的 API 金鑰或訂閱服務。如未安裝，工具仍可使用，僅會跳過 AI 輔助功能。
+> 📖 更多安裝選項、個人化設定和 AI 工具安裝，請參閱 [完整安裝指南](docs/INSTALLATION.md)
 
 ## 使用方法
 

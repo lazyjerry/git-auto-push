@@ -21,6 +21,14 @@
 readonly AI_TOOLS=("codex" "gemini" "claude")  # 優先順序陣列
 ```
 
+### 調試模式配置
+```bash
+# 位置：檔案頂部配置區域
+IS_DEBUG=false  # 一般使用（預設）
+IS_DEBUG=true   # 開發調試時開啟
+```
+> ⚠️ **注意**：調試訊息可能包含敏感資訊（如 API 回應、diff 內容），啟用後會大幅增加輸出內容，建議僅在開發調試時開啟。
+
 ### 分支管理配置 (git-auto-pr.sh 獨有)
 ```bash
 readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")  # 自動偵測順序

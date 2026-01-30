@@ -523,9 +523,18 @@ select_commit_prefix() {
     printf "  %2d. %-12s - %s\n" "$index" "(無前綴)" "跳過前綴選擇" >&2
     
     echo >&2
-    printf "請選擇前綴編號 [1-%d]: " "$index" >&2
+    cyan_msg "💡 直接按 Enter = AI 自動生成前綴 + commit message"
+    echo >&2
+    printf "請選擇前綴編號 [1-%d] 或直接 Enter: " "$index" >&2
     read -r choice
     choice=$(echo "$choice" | xargs)
+    
+    # 直接按 Enter，觸發 AI 自動生成
+    if [ -z "$choice" ]; then
+        info_msg "🤖 將使用 AI 自動生成前綴和 commit message"
+        echo "AUTO"
+        return 0
+    fi
     
     # 驗證輸入
     if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "$index" ]; then
@@ -569,7 +578,6 @@ select_commit_prefix() {
 generate_commit_prefix_by_ai() {
     info_msg "🤖 正在使用 AI 工具分析變更並選擇前綴..."
     
-    local prompt="$AI_PREFIX_PROMPT"
     local diff_content
     diff_content=$(git diff --cached 2>/dev/null)
     
@@ -578,6 +586,12 @@ generate_commit_prefix_by_ai() {
         echo ""
         return 1
     fi
+    
+    # 組合 prompt：指令 + diff 內容
+    local prompt="${AI_PREFIX_PROMPT}
+
+以下是 git diff 內容：
+${diff_content}"
     
     local generated_prefix
     local ai_tool_used=""
@@ -613,26 +627,33 @@ generate_commit_prefix_by_ai() {
     
     # 檢查是否成功生成前綴
     if [ -n "$generated_prefix" ] && [ -n "$ai_tool_used" ]; then
-        # 清理生成的前綴（移除空白和特殊字元）
-        generated_prefix=$(echo "$generated_prefix" | tr -d '[:space:]' | tr -d ':' | head -n 1)
+        # 清理 AI 回應：取第一行、移除冒號和多餘空白
+        local cleaned_response
+        cleaned_response=$(echo "$generated_prefix" | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]' | xargs)
         
-        # 驗證前綴是否在預定義清單中
-        local valid_prefix=false
+        debug_msg "AI 原始回應: '$generated_prefix'"
+        debug_msg "清理後回應: '$cleaned_response'"
+        
+        # 從 COMMIT_PREFIXES 提取前綴並按長度排序（長到短，避免短前綴誤匹配）
+        local -a all_prefixes=()
         for item in "${COMMIT_PREFIXES[@]}"; do
-            local prefix="${item%%:*}"
-            if [ "$generated_prefix" = "$prefix" ]; then
-                valid_prefix=true
-                break
+            all_prefixes+=("${item%%:*}")
+        done
+        # 按長度排序：長的優先
+        local -a sorted_prefixes
+        IFS=$'\n' sorted_prefixes=($(printf '%s\n' "${all_prefixes[@]}" | awk '{print length, $0}' | sort -rn | cut -d' ' -f2-))
+        unset IFS
+        
+        # 比對：檢查清理後的回應是否包含有效前綴
+        for prefix in "${sorted_prefixes[@]}"; do
+            if [[ "$cleaned_response" == *"$prefix"* ]]; then
+                success_msg "✅ AI ($ai_tool_used) 選擇的前綴: $prefix"
+                echo "$prefix"
+                return 0
             fi
         done
         
-        if [ "$valid_prefix" = true ]; then
-            success_msg "✅ AI ($ai_tool_used) 選擇的前綴: $generated_prefix"
-            echo "$generated_prefix"
-            return 0
-        else
-            warning_msg "AI 生成的前綴無效: '$generated_prefix'，將跳過前綴選擇"
-        fi
+        warning_msg "AI 生成的前綴無效: '$cleaned_response'，將跳過前綴選擇"
     fi
     
     # 如果所有 AI 工具都不可用或失敗
@@ -1421,6 +1442,40 @@ get_commit_message() {
         fi
         # 選擇失敗，重新選擇
     done
+    
+    # 如果選擇了 AUTO，直接跳到 AI 自動生成流程
+    if [ "$selected_prefix" = "AUTO" ]; then
+        info_msg "正在使用 AI 自動生成前綴和 commit message..."
+        
+        if auto_message=$(generate_auto_commit_message); then
+            echo >&2
+            cyan_msg "🤖 AI 生成的 commit message:"
+            highlight_success_msg "🔖 $auto_message"
+            echo >&2
+            cyan_msg "💡 下一步動作："
+            if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+                white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
+            else
+                white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
+            fi
+            white_msg "  • 輸入 n - 拒絕並手動輸入"
+            echo >&2
+            printf "是否使用此訊息？[Y/n]: " >&2
+            read -r confirm
+            confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+            
+            if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
+                local final_message
+                final_message=$(append_ticket_number_to_message "$auto_message")
+                echo "$final_message"
+                return 0
+            fi
+        fi
+        
+        # AI 生成失敗或用戶拒絕，切換到手動輸入模式
+        warning_msg "切換到手動輸入模式..."
+        selected_prefix=""
+    fi
     
     echo >&2
     echo "==================================================" >&2

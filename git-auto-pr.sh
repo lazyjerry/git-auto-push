@@ -559,11 +559,13 @@ run_stdin_ai_command() {
     printf '%s' "$prompt" > "$temp_prompt"
     
     # 使用帶 loading 的命令執行
+    # 注意：使用 NODE_OPTIONS='--no-deprecation' 隱藏 Node.js 棄用警告
+    # 這比 2>/dev/null 更安全，因為它只隱藏棄用警告，不會隱藏其他重要錯誤
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content'" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content'" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
@@ -1007,10 +1009,11 @@ generate_pr_content_with_ai() {
                 fi
                 
                 # 使用帶 loading 的命令執行
+                # 注意：使用 NODE_OPTIONS='--no-deprecation' 隱藏 Node.js 棄用警告
                 if command -v timeout >/dev/null 2>&1; then
-                    output=$(run_command_with_loading "timeout $timeout $tool -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool 分析 commit 訊息" "$timeout")
+                    output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' timeout $timeout $tool -p '$prompt' < '$temp_content'" "正在等待 $tool 分析 commit 訊息" "$timeout")
                 else
-                    output=$(run_command_with_loading "$tool -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool 分析 commit 訊息" "$timeout")
+                    output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' $tool -p '$prompt' < '$temp_content'" "正在等待 $tool 分析 commit 訊息" "$timeout")
                 fi
                 exit_code=$?
                 

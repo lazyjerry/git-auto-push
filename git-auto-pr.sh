@@ -864,37 +864,20 @@ run_codex_command() {
     fi
     
     # 創建臨時檔案傳遞提示詞和內容
-    # 確保使用 UTF-8 編碼以避免編碼轉換問題
     local temp_prompt
     temp_prompt=$(mktemp)
+    printf '%s\n\n%s' "$prompt" "$content" > "$temp_prompt"
     
-    # 使用 printf 確保 UTF-8 編碼
-    # 使用 C.UTF-8 或 en_US.UTF-8 避免 locale 相關問題
-    {
-        export LC_ALL=C.UTF-8 LANG=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-        printf '%s\n\n%s' "$prompt" "$content"
-    } > "$temp_prompt" || {
-        rm -f "$temp_prompt"
-        warning_msg "寫入臨時檔案失敗"
-        return 1
-    }
-    
-    # 驗證臨時檔案是否為有效的 UTF-8
-    if ! file "$temp_prompt" | grep -q "UTF-8\|ASCII"; then
-        info_msg "⚠️  臨時檔案編碼檢查：$(file -b "$temp_prompt")"
-    fi
+    # 創建臨時檔案接收乾淨的輸出
+    local temp_output
+    temp_output=$(mktemp)
     
     # 🔍 調試輸出：印出即將傳遞給 codex 的內容
     debug_msg "🔍 調試: run_codex_command() - 即將傳遞給 codex 的內容"
     debug_msg "─────────────────────────────────────────"
-    debug_msg "📄 文件內容（編碼: UTF-8）:"
-    debug_msg "─────────────────────────────────────────"
-    file -b "$temp_prompt" | sed 's/^/  /' >&2
-    debug_msg ""
     debug_msg "📊 內容統計:"
     debug_msg "   - 總行數: $(wc -l < "$temp_prompt") 行"
     debug_msg "   - 總位元組: $(wc -c < "$temp_prompt") 位元組"
-    debug_msg "   - 檔案大小: $(du -h "$temp_prompt" | cut -f1)"
     debug_msg ""
     debug_msg "📝 前 20 行內容:"
     debug_msg "─────────────────────────────────────────"
@@ -902,75 +885,41 @@ run_codex_command() {
     debug_msg "─────────────────────────────────────────"
     echo >&2
     
-    # 執行 codex 命令，設定 UTF-8 環境變數
-    local output exit_code
-    export LC_ALL=C.UTF-8 LANG=C.UTF-8 2>/dev/null || export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+    # 執行 codex 命令（使用 --output-last-message 獲取乾淨輸出）
+    local raw_output exit_code
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        raw_output=$(run_command_with_loading "timeout $timeout codex exec --output-last-message '$temp_output' < '$temp_prompt' 2>/dev/null" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析內容" "$timeout")
+        raw_output=$(run_command_with_loading "codex exec --output-last-message '$temp_output' < '$temp_prompt' 2>/dev/null" "正在等待 codex 分析內容" "$timeout")
         exit_code=$?
     fi
     
-    # 確保 exit_code 是乾淨的數字（清理所有可能的隱藏字符）
-    exit_code=$(echo "$exit_code" | tr -d '\r\n\t ' | tr -cd '0-9')
-    if ! [[ "$exit_code" =~ ^[0-9]+$ ]] || [ -z "$exit_code" ]; then
-        warning_msg "⚠️  退出碼無效: '$exit_code'，設為 1"
-        exit_code=1
+    # 讀取乾淨的輸出
+    local output=""
+    if [ -f "$temp_output" ]; then
+        output=$(cat "$temp_output" | xargs)
     fi
     
-    # 🔍 調試：顯示退出碼
+    # 🔍 調試：顯示退出碼和輸出
     debug_msg "🔍 調試: codex 退出碼 exit_code='$exit_code'"
+    debug_msg "🔍 調試: 乾淨輸出 output='$output'"
     
     # 清理臨時檔案
-    rm -f "$temp_prompt"
+    rm -f "$temp_prompt" "$temp_output"
     
     # 處理執行結果
     case $exit_code in
         0)
-            # 成功執行，處理輸出
-            if [ -n "$output" ]; then
-                local filtered_output
-                
-                # 清理 output 中的控制字符（保留換行）
-                output=$(echo "$output" | tr -d '\r')
-                
-                # 🔍 調試：顯示原始輸出
-                debug_msg "🔍 調試: codex 原始輸出（前 500 字符）"
-                echo "$output" | head -c 500 | sed 's/^/  /' >&2
-                echo >&2
-                
-                # 改進的過濾邏輯：使用 LC_ALL=C 避免 locale 相關錯誤
-                # 方法1：精確提取 "codex" 行之後、"tokens used" 行之前的內容
-                filtered_output=$(LC_ALL=C echo "$output" | \
-                    awk '/^codex$/{flag=1; next} /^tokens used/{flag=0} flag' | \
-                    grep -v '^[[:space:]]*$' | \
-                    grep -v -E '^(thinking|user|OpenAI Codex|workdir:|model:|provider:|approval:|sandbox:|reasoning|session id:|-----)' | \
-                    tr '\n' ' ' | \
-                    sed 's/[[:space:]]\+/ /g' | \
-                    xargs)
-                
-                # 方法2：如果方法1沒有結果，嘗試更簡單的過濾
-                if [ -z "$filtered_output" ]; then
-                    filtered_output=$(LC_ALL=C echo "$output" | \
-                        grep -v -E '^(OpenAI Codex|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|thinking|user|session id:|effort:|summaries:)' | \
-                        grep -E ".+" | \
-                        tail -n 5 | \
-                        tr '\n' ' ' | \
-                        xargs)
-                fi
-                
-                # 🔍 調試：顯示過濾後的輸出
-                debug_msg "🔍 調試: 過濾後的輸出 filtered_output='$filtered_output'"
-                
-                if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
-                    success_msg "codex 回應完成"
-                    echo "$filtered_output"
-                    return 0
-                fi
+            # 成功執行，檢查輸出
+            if [ -n "$output" ] && [ ${#output} -gt 3 ]; then
+                success_msg "codex 回應完成"
+                echo "$output"
+                return 0
             fi
             warning_msg "codex 沒有返回有效內容"
+            debug_msg "🔍 調試: codex 原始輸出（前 500 字符）"
+            echo "$raw_output" | head -c 500 | sed 's/^/  /' >&2
             ;;
         124)
             error_msg "❌ codex 執行超時（${timeout}秒）"
@@ -978,26 +927,17 @@ run_codex_command() {
             ;;
         *)
             # 檢查特定錯誤類型
-            if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+            if [[ "$raw_output" == *"401 Unauthorized"* ]] || [[ "$raw_output" == *"token_expired"* ]]; then
                 error_msg "❌ codex 認證錯誤"
                 warning_msg "💡 請執行：codex auth login"
-                show_ai_debug_info "codex" "$prompt" "$content" "$output"
-            elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+                show_ai_debug_info "codex" "$prompt" "$content" "$raw_output"
+            elif [[ "$raw_output" == *"stream error"* ]] || [[ "$raw_output" == *"connection"* ]] || [[ "$raw_output" == *"network"* ]]; then
                 error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
-                show_ai_debug_info "codex" "$prompt" "$content" "$output"
+                show_ai_debug_info "codex" "$prompt" "$content" "$raw_output"
             else
-                # 清理 exit_code 確保是純數字（最後一次保險）
-                local clean_code
-                clean_code=$(printf '%s' "$exit_code" | LC_ALL=C tr -cd '0-9')
-                [ -z "$clean_code" ] && clean_code="1"
-                
-                # 🔍 調試：顯示錯誤訊息前的 exit_code
-                debug_msg "🔍 調試: 準備顯示錯誤，clean_code='$clean_code' (原始: '$exit_code')"
-                warning_msg "codex 執行失敗"
-                
-                # 顯示 AI 的輸入和輸出訊息
-                show_ai_debug_info "codex" "$prompt" "$content" "$output"
+                warning_msg "codex 執行失敗（退出碼: $exit_code）"
+                show_ai_debug_info "codex" "$prompt" "$content" "$raw_output"
             fi
             ;;
     esac
@@ -1119,7 +1059,25 @@ clean_ai_message() {
     # 顯示原始訊息
     debug_msg "🔍 AI 原始輸出: '$message'"
     
-    # 最簡化處理：只移除前後空白，保留完整內容
+    # 使用管道逐行過濾，移除技術雜訊行
+    message=$(echo "$message" | grep -v -E \
+        -e '^\(node:[0-9]+\)' \
+        -e 'DeprecationWarning' \
+        -e 'trace-deprecation' \
+        -e '\[ERROR\].*\[IDEClient\]' \
+        -e 'IDE companion extension' \
+        -e 'overriding the built-in skill' \
+        -e '^Hook registry' \
+        -e '^Loaded cached' \
+        -e '^Loading credentials' \
+        -e '^Authentication successful' \
+        -e '^Skill.*SKILL\.md' \
+        -e 'punycode' \
+        -e 'userland alternative' \
+        -e '/ide install' \
+        2>/dev/null || echo "$message")
+    
+    # 移除前後空白和多餘空格
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果

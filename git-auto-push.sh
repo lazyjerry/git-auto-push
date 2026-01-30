@@ -789,16 +789,26 @@ clean_ai_message() {
     # 顯示原始訊息
     debug_msg "🔍 AI 原始輸出: '$message'"
     
-    # 步驟 1: 移除常見的 CLI 工具技術訊息
-    # gemini: "Loaded cached credentials."
-    # claude: 類似的認證訊息
-    message=$(echo "$message" | sed 's/^Loaded cached credentials\.//g')
-    message=$(echo "$message" | sed 's/^Loading credentials\.\.\.//g')
-    message=$(echo "$message" | sed 's/^Authentication successful\.//g')
+    # 使用管道逐行過濾，移除技術雜訊行
+    message=$(echo "$message" | grep -v -E \
+        -e '^\(node:[0-9]+\)' \
+        -e 'DeprecationWarning' \
+        -e 'trace-deprecation' \
+        -e '\[ERROR\].*\[IDEClient\]' \
+        -e 'IDE companion extension' \
+        -e 'overriding the built-in skill' \
+        -e '^Hook registry' \
+        -e '^Loaded cached' \
+        -e '^Loading credentials' \
+        -e '^Authentication successful' \
+        -e '^Skill.*SKILL\.md' \
+        -e 'punycode' \
+        -e 'userland alternative' \
+        -e '/ide install' \
+        2>/dev/null || echo "$message")
     
-    # 步驟 2: 對於 codex exec 的輸出，提取有效內容
+    # 對於 codex exec 的輸出，提取有效內容
     # codex exec 的輸出格式：可能包含 "codex", "tokens used" 等元數據
-    # 嘗試提取實際回應內容
     if [[ "$message" =~ codex.*tokens\ used ]]; then
         # 提取 "codex" 和 "tokens used" 之間的內容
         local extracted
@@ -809,7 +819,7 @@ clean_ai_message() {
         fi
     fi
     
-    # 步驟 3: 移除前後空白
+    # 移除前後空白和多餘空格
     message=$(echo "$message" | xargs)
     
     # 顯示清理結果
@@ -1039,58 +1049,48 @@ run_codex_command() {
     temp_prompt=$(mktemp)
     printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
     
-    # 執行 codex 命令
-    local output exit_code
+    # 創建臨時檔案接收乾淨的輸出
+    local temp_output
+    temp_output=$(mktemp)
+    
+    # 執行 codex 命令（使用 --output-last-message 獲取乾淨輸出）
+    local raw_output exit_code
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
+        raw_output=$(run_command_with_loading "timeout $timeout codex exec --output-last-message '$temp_output' < '$temp_prompt' 2>/dev/null" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "codex exec < '$temp_prompt'" "正在等待 codex 分析變更" "$timeout")
+        raw_output=$(run_command_with_loading "codex exec --output-last-message '$temp_output' < '$temp_prompt' 2>/dev/null" "正在等待 codex 分析變更" "$timeout")
         exit_code=$?
     fi
     
+    # 讀取乾淨的輸出
+    local output=""
+    if [ -f "$temp_output" ]; then
+        output=$(cat "$temp_output" | xargs)
+    fi
+    
     # 清理臨時檔案
-    rm -f "$temp_prompt"
+    rm -f "$temp_prompt" "$temp_output"
     
     # 處理執行結果
     case $exit_code in
         0)
-            # 成功執行，處理輸出
-            if [ -n "$output" ]; then
-                local filtered_output
-                
-                # 方法1：精確提取 "codex" 和 "tokens used" 之間的內容
-                filtered_output=$(echo "$output" | \
-                    sed -n '/^codex$/,/^tokens used/p' | \
-                    sed '1d;$d' | \
-                    grep -E ".+" | \
-                    xargs)
-                
-                # 方法2：如果方法1沒有結果，使用備用過濾邏輯
-                if [ -z "$filtered_output" ]; then
-                    filtered_output=$(echo "$output" | \
-                        grep -v -E "^(\[|workdir:|model:|provider:|approval:|sandbox:|reasoning|tokens used:|-------|User instructions:|codex$|^$|OpenAI Codex|effort:|summaries:)" | \
-                        grep -E ".+" | \
-                        tail -n 1 | \
-                        xargs)
-                fi
-                
-                if [ -n "$filtered_output" ] && [ ${#filtered_output} -gt 3 ]; then
-                    success_msg "codex 回應完成"
-                    echo "$filtered_output"
-                    return 0
-                fi
+            # 成功執行，檢查輸出
+            if [ -n "$output" ] && [ ${#output} -gt 3 ]; then
+                success_msg "codex 回應完成"
+                echo "$output"
+                return 0
             fi
             
             # 沒有有效內容，顯示調試信息
             warning_msg "codex 沒有返回有效內容"
             echo >&2
             debug_msg "🔍 調試信息（codex 無有效輸出）:"
-            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "執行的指令: codex exec --output-last-message [output_file] < [prompt_file]"
             debug_msg "退出碼: $exit_code"
-            if [ -n "$output" ]; then
+            if [ -n "$raw_output" ]; then
                 debug_msg "原始輸出內容:"
-                echo "$output" | sed 's/^/  /' >&2
+                echo "$raw_output" | sed 's/^/  /' >&2
             else
                 debug_msg "輸出內容: (無)"
             fi
@@ -1103,12 +1103,12 @@ run_codex_command() {
             # 顯示調試信息
             echo >&2
             debug_msg "🔍 調試信息（codex 超時錯誤）:"
-            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "執行的指令: codex exec --output-last-message [output_file] < [prompt_file]"
             debug_msg "超時設定: $timeout 秒"
             debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
-            if [ -n "$output" ]; then
+            if [ -n "$raw_output" ]; then
                 debug_msg "部分輸出內容:"
-                echo "$output" | head -n 5 | sed 's/^/  /' >&2
+                echo "$raw_output" | head -n 5 | sed 's/^/  /' >&2
             else
                 debug_msg "輸出內容: (無)"
             fi
@@ -1119,29 +1119,29 @@ run_codex_command() {
             # 檢查特定錯誤類型
             echo >&2
             debug_msg "🔍 調試信息（codex 執行失敗）:"
-            debug_msg "執行的指令: codex exec < [prompt_file]"
+            debug_msg "執行的指令: codex exec --output-last-message [output_file] < [prompt_file]"
             debug_msg "退出碼: $exit_code"
             debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
             
-            if [[ "$output" == *"401 Unauthorized"* ]] || [[ "$output" == *"token_expired"* ]]; then
+            if [[ "$raw_output" == *"401 Unauthorized"* ]] || [[ "$raw_output" == *"token_expired"* ]]; then
                 error_msg "❌ codex 認證錯誤"
                 warning_msg "💡 請執行：codex auth login"
-                if [ -n "$output" ]; then
+                if [ -n "$raw_output" ]; then
                     debug_msg "錯誤輸出:"
-                    echo "$output" | sed 's/^/  /' >&2
+                    echo "$raw_output" | sed 's/^/  /' >&2
                 fi
-            elif [[ "$output" == *"stream error"* ]] || [[ "$output" == *"connection"* ]] || [[ "$output" == *"network"* ]]; then
+            elif [[ "$raw_output" == *"stream error"* ]] || [[ "$raw_output" == *"connection"* ]] || [[ "$raw_output" == *"network"* ]]; then
                 error_msg "❌ codex 網路錯誤"
                 warning_msg "💡 請檢查網路連接"
-                if [ -n "$output" ]; then
+                if [ -n "$raw_output" ]; then
                     debug_msg "錯誤輸出:"
-                    echo "$output" | sed 's/^/  /' >&2
+                    echo "$raw_output" | sed 's/^/  /' >&2
                 fi
             else
                 warning_msg "codex 執行失敗（退出碼: $exit_code）"
-                if [ -n "$output" ]; then
+                if [ -n "$raw_output" ]; then
                     debug_msg "完整輸出內容:"
-                    echo "$output" | sed 's/^/  /' >&2
+                    echo "$raw_output" | sed 's/^/  /' >&2
                 else
                     debug_msg "輸出內容: (無)"
                 fi
@@ -1193,11 +1193,12 @@ run_stdin_ai_command() {
     printf '%s' "$prompt" > "$temp_prompt"
     
     # 使用帶 loading 的命令執行
+    # 注意：使用 2>/dev/null 丟棄 stderr，避免 Node.js 警告等技術雜訊混入輸出
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>&1" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>&1" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     

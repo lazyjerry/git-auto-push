@@ -1,96 +1,9 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
 
-# 腳本用途：
-#   提供完整的 Git 傳統工作流程自動化，從檔案暫存（add）到遠端推送（push）。
-#   支援 AI 輔助生成 commit 訊息，提供互動式選單與全自動模式。
-#   適用於個人開發與小型團隊的日常 Git 操作自動化需求。
-#
-# 使用方式：
-#   互動模式：    ./git-auto-push.sh
-#   全自動模式：  ./git-auto-push.sh --auto 或 -a
-#   直接執行：    ./git-auto-push.sh <選項編號 1-7>
-#   顯示說明：    ./git-auto-push.sh -h 或 --help
-#   全域使用：    git-auto-push（需先將腳本連結至 PATH）
-#
-# 七種操作模式：
-#   1. 完整流程 - add → commit → push（預設操作，支援檔案過濾）
-#   2. 本地提交 - add → commit（不推送至遠端，支援檔案過濾）
-#   3. 僅添加變更 - 選擇性 add（僅暫存檔案，支援檔案過濾）
-#   4. 全自動流程 - add → AI commit → push（無互動，支援檔案過濾）
-#   5. 僅提交 - commit（僅針對已暫存的檔案）
-#   6. 顯示倉庫資訊 - 顯示分支、遠端、狀態等詳細資訊
-#   7. 變更 commit 訊息 - 修改最後一次的 commit 訊息（amend）
-#
-# 相依工具：
-#   bash>=4.0       必需，腳本執行環境
-#   git>=2.0        必需，版本控制操作
-#   codex/gemini/claude  可選，AI CLI 工具，用於自動生成 commit 訊息
-#
-# 權限與安全：
-#   - 不需要 root 權限
-#   - 會讀取當前目錄的 Git 倉庫配置與狀態
-#   - 會執行 git 指令進行 add、commit、push 操作
-#   - 會透過網路推送至 Git 遠端倉庫（如 GitHub、GitLab）
-#   - AI 工具可能透過網路呼叫 API（視工具而定）
-#
-# 輸入來源：
-#   - CLI 參數：--auto/-a（全自動模式）、-h/--help（顯示說明）
-#   - 環境變數：無特定環境變數需求，使用 Git 預設配置
-#   - STDIN：互動式輸入（選單選項、commit 訊息、確認提示等）
-#   - 設定檔：Git 配置（~/.gitconfig、.git/config）
-#   - 過濾檔案：git-auto-push-ignore.txt（可選，控制 git add 時忽略的檔案）
-#
-# 輸出結果：
-#   - STDOUT：無資料輸出（所有訊息均輸出至 STDERR）
-#   - STDERR：所有狀態訊息、錯誤訊息、互動提示、彩色輸出
-#   - 格式：UTF-8 編碼，ANSI 彩色碼
-#
-# 退出碼表：
-#   0   成功完成操作
-#   1   一般錯誤（參數錯誤、Git 操作失敗、使用者取消等）
-#   130 使用者中斷（Ctrl+C）
-#
-# 主要流程：
-#   1. 初始化與環境檢查（驗證 Git 倉庫、檢查是否有變更）
-#   2. 解析命令列參數（--auto/-a 進入全自動模式）
-#   3. 互動模式：顯示操作選單並接收使用者選擇
-#   4. 全自動模式：直接執行 add → AI commit → push
-#   5. 根據選擇執行對應工作流程：
-#      - 模式 1：選擇性 add → 輸入/AI 生成 commit → commit → push
-#      - 模式 2：選擇性 add → 輸入/AI 生成 commit → commit（不 push）
-#      - 模式 3：選擇性 add（僅暫存，自動過濾符合規則的檔案）
-#      - 模式 4：選擇性 add → AI 生成 commit → commit → push（無互動）
-#      - 模式 5：輸入 commit 訊息 → commit（針對已暫存檔案）
-#      - 模式 6：顯示分支、遠端、狀態等倉庫資訊
-#      - 模式 7：變更最後一次 commit 訊息（amend）
-#   6. 輸出操作結果與後續建議
-#   7. 清理暫存資源並退出
-#
-# 注意事項：
-#   - AI 工具調用有 45 秒超時機制，失敗時會自動切換至下一個工具
-#   - 所有 AI 工具都失敗時，會降級至手動輸入 commit 訊息
-#   - git push 操作需要遠端倉庫推送權限（SSH key 或 HTTPS 認證）
-#   - diff 超過 500 行時，AI 工具超時時間會自動延長至 90 秒
-#   - 全自動模式（--auto）會跳過所有確認提示，建議謹慎使用
-#   - 腳本會檢測 Git 倉庫狀態，無變更時會提示並退出
-#   - 時區假設：使用系統本地時區
-#   - 支援離線模式：模式 2、3、5 不需要網路連線
-#   - 檔案過濾功能：透過 git-auto-push-ignore.txt 控制要忽略的檔案
-#   - 過濾規則支援 glob pattern（* 和 **），格式同 .gitignore
-#   - 相對路徑以執行命令的當前目錄為基準
-#
-# 參考：
-#   - Git 使用說明：docs/git-usage.md
-#   - Git 倉庫資訊功能：docs/git-info-feature.md
-#   - Conventional Commits：https://www.conventionalcommits.org/
-#
-# 作者：Lazy Jerry
-# 版本：v2.0.0
-# 最後更新：2025-10-24
-# 授權：MIT License
-# 倉庫：https://github.com/lazyjerry/git-auto-push
-#
+# Git 自動化推送工具 - 提供完整的 Git 傳統工作流程自動化（add/commit/push）
+# 使用方式：./git-auto-push.sh 或 ./git-auto-push.sh --help 或 ./git-auto-push.sh -a
+# 作者：Lazy Jerry | 版本：v2.0.0 | 授權：MIT License
 
 # ==============================================
 # AI 工具配置區域

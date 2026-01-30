@@ -1039,17 +1039,22 @@ run_stdin_ai_command() {
     temp_content=$(mktemp)
     echo "$content" > "$temp_content"
     
+    # 創建臨時檔案存儲 prompt 內容（避免引號解析問題）
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s' "$prompt" > "$temp_prompt"
+    
     # 使用帶 loading 的命令執行
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
     # 清理臨時檔案
-    rm -f "$temp_content"
+    rm -f "$temp_content" "$temp_prompt"
     
     if [ $exit_code -eq 124 ]; then
         error_msg "❌ $tool_name 執行超時（${timeout}秒）"

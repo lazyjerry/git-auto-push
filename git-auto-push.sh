@@ -195,7 +195,7 @@ AUTO_CHECK_COMMIT_QUALITY=true
 # 注意：
 #   - 調試訊息可能包含敏感資訊（如 API 回應、diff 內容）
 #   - 啟用後會大幅增加輸出內容，建議僅在需要時開啟
-IS_DEBUG=false
+IS_DEBUG=true
 
 # ==============================================
 # 訊息輸出函數區域
@@ -559,6 +559,82 @@ select_commit_prefix() {
     return 0
 }
 
+# 全域變數：記錄最後成功使用的 AI 工具名稱
+LAST_AI_TOOL=""
+
+# 函式：run_ai_with_fallback
+# 功能說明：依序嘗試多個 AI 工具執行任務，支援容錯機制
+# 輸入參數：
+#   $1 <prompt> 提示詞內容
+#   $2 <show_hints> 是否顯示工具提示（true/false，預設 false）
+# 輸出結果：
+#   STDOUT 輸出 AI 回應內容
+#   全域變數 LAST_AI_TOOL 記錄成功使用的工具名稱
+# 返回值：
+#   0=成功，1=所有工具都失敗
+# 流程：
+#   1. 遍歷 AI_TOOLS 陣列中的每個工具
+#   2. 檢查工具是否安裝
+#   3. 可選顯示工具提示訊息
+#   4. 調用對應的 AI 命令
+#   5. 成功則返回結果，失敗則嘗試下一個
+# 副作用：修改全域變數 LAST_AI_TOOL
+# 參考：AI_TOOLS 陣列、run_codex_command()、run_stdin_ai_command()
+run_ai_with_fallback() {
+    local prompt="$1"
+    local show_hints="${2:-false}"
+    
+    local result=""
+    LAST_AI_TOOL=""
+    
+    for tool_name in "${AI_TOOLS[@]}"; do
+        if ! command -v "$tool_name" >/dev/null 2>&1; then
+            debug_msg "AI 工具 $tool_name 未安裝，跳過..."
+            continue
+        fi
+        
+        # 顯示工具提示（如果啟用）
+        if [ "$show_hints" = "true" ]; then
+            echo >&2
+            info_msg "🤖 即將嘗試使用 AI 工具: $tool_name"
+            case "$tool_name" in
+                "gemini")
+                    warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試"
+                    ;;
+                "claude")
+                    warning_msg "💡 提醒: Claude 需要登入付費帳號或 API 參數設定"
+                    ;;
+                "codex")
+                    info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定"
+                    ;;
+            esac
+        fi
+        
+        debug_msg "🔄 正在使用 AI 工具: $tool_name"
+        
+        case "$tool_name" in
+            "codex")
+                if result=$(run_codex_command "$prompt"); then
+                    LAST_AI_TOOL="$tool_name"
+                    echo "$result"
+                    return 0
+                fi
+                ;;
+            "gemini"|"claude")
+                if result=$(run_stdin_ai_command "$tool_name" "$prompt"); then
+                    LAST_AI_TOOL="$tool_name"
+                    echo "$result"
+                    return 0
+                fi
+                ;;
+        esac
+        
+        debug_msg "$tool_name 執行失敗，嘗試下一個工具..."
+    done
+    
+    return 1
+}
+
 # 函式：generate_commit_prefix_by_ai
 # 功能說明：使用 AI 工具根據 git diff 自動選擇最適合的 Conventional Commits 前綴。
 # 輸入參數：無（直接讀取當前的 git diff）
@@ -569,12 +645,11 @@ select_commit_prefix() {
 #   0=成功，1=所有 AI 工具都失敗
 # 流程：
 #   1. 取得當前的 git diff
-#   2. 依序嘗試每個可用的 AI 工具
-#   3. 使用 AI_PREFIX_PROMPT 讓 AI 選擇前綴
-#   4. 驗證 AI 輸出是否為有效的前綴
-#   5. 返回選擇的前綴
+#   2. 使用 run_ai_with_fallback 調用 AI 工具
+#   3. 驗證 AI 輸出是否為有效的前綴
+#   4. 返回選擇的前綴
 # 副作用：輸出至 stderr（狀態訊息）
-# 參考：AI_TOOLS、AI_PREFIX_PROMPT、COMMIT_PREFIXES 常數
+# 參考：run_ai_with_fallback()、AI_PREFIX_PROMPT、COMMIT_PREFIXES 常數
 generate_commit_prefix_by_ai() {
     info_msg "🤖 正在使用 AI 工具分析變更並選擇前綴..."
     
@@ -594,39 +669,9 @@ generate_commit_prefix_by_ai() {
 ${diff_content}"
     
     local generated_prefix
-    local ai_tool_used=""
     
-    # 依序檢查每個 AI 工具
-    for tool_name in "${AI_TOOLS[@]}"; do
-        if ! command -v "$tool_name" >/dev/null 2>&1; then
-            debug_msg "AI 工具 $tool_name 未安裝，跳過..."
-            continue
-        fi
-
-        debug_msg "🔄 正在使用 AI 工具選擇前綴: $tool_name"
-        ai_tool_used="$tool_name"
-        
-        # 根據不同工具使用不同的調用方式
-        case "$tool_name" in
-            "codex")
-                if generated_prefix=$(run_codex_command "$prompt"); then
-                    break
-                fi
-                ;;
-            "gemini"|"claude")
-                if generated_prefix=$(run_stdin_ai_command "$tool_name" "$prompt"); then
-                    break
-                fi
-                ;;
-        esac
-        
-        debug_msg "$tool_name 執行失敗，嘗試下一個工具..."
-        generated_prefix=""
-        ai_tool_used=""
-    done
-    
-    # 檢查是否成功生成前綴
-    if [ -n "$generated_prefix" ] && [ -n "$ai_tool_used" ]; then
+    # 使用統一的 AI 工具調用
+    if generated_prefix=$(run_ai_with_fallback "$prompt" "false"); then
         # 清理 AI 回應：取第一行、移除冒號和多餘空白
         local cleaned_response
         cleaned_response=$(echo "$generated_prefix" | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]' | xargs)
@@ -647,7 +692,7 @@ ${diff_content}"
         # 比對：檢查清理後的回應是否包含有效前綴
         for prefix in "${sorted_prefixes[@]}"; do
             if [[ "$cleaned_response" == *"$prefix"* ]]; then
-                success_msg "✅ AI ($ai_tool_used) 選擇的前綴: $prefix"
+                success_msg "✅ AI ($LAST_AI_TOOL) 選擇的前綴: $prefix"
                 echo "$prefix"
                 return 0
             fi
@@ -1142,13 +1187,26 @@ run_stdin_ai_command() {
     temp_diff=$(mktemp)
     echo "$diff_content" > "$temp_diff"
     
+    # 創建臨時檔案存儲 prompt 內容（避免引號解析問題）
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s' "$prompt" > "$temp_prompt"
+    
     # 使用帶 loading 的命令執行
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "timeout $timeout $tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>&1" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "$tool_name -p '$prompt' < '$temp_diff' 2>/dev/null" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "$tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_diff' 2>&1" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
+    fi
+    
+    # 清理臨時檔案
+    rm -f "$temp_prompt"
+    
+    # 確保退出碼是有效的數字
+    if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+        exit_code=1
     fi
     
     # 清理臨時檔案
@@ -1177,10 +1235,10 @@ run_stdin_ai_command() {
         # 顯示調試信息
         echo >&2
         debug_msg "🔍 調試信息（$tool_name 執行失敗）:"
-        debug_msg "執行的指令: $tool_name -p '$prompt' < [diff_file]"
+        debug_msg "執行的指令: $tool_name -p '<prompt>' < [diff_file]"
         debug_msg "退出碼: $exit_code"
         if [ -n "$output" ]; then
-            debug_msg "完整輸出內容:"
+            debug_msg "原始輸出內容:"
             echo "$output" | sed 's/^/  /' >&2
         else
             debug_msg "輸出內容: (無)"
@@ -1208,166 +1266,98 @@ run_stdin_ai_command() {
     return 0
 }
 
-# 全自動生成 commit message（不需要用戶交互）
-generate_auto_commit_message_silent() {
-    info_msg "🤖 全自動模式：正在使用 AI 工具分析變更並生成 commit message..."
+# 全自動生成 commit message
+# 函式：generate_auto_commit_message
+# 功能說明：使用 AI 工具自動生成 commit message
+# 輸入參數：
+#   $1 <silent_mode> 是否為靜默模式（true=不顯示提示，失敗用預設訊息，預設 false）
+# 輸出結果：
+#   STDOUT 輸出生成的 commit 訊息
+# 返回值：
+#   0=成功，1=失敗（僅非靜默模式）
+# 流程：
+#   1. 根據模式顯示不同的資訊提示
+#   2. 調用 run_ai_with_fallback 執行 AI 工具
+#   3. 清理生成的訊息
+#   4. 自動選擇前綴
+#   5. 失敗時根據模式返回錯誤或預設訊息
+# 副作用：輸出至 stderr（狀態訊息）
+# 參考：run_ai_with_fallback()、generate_commit_prefix_by_ai()、clean_ai_message()
+generate_auto_commit_message() {
+    local silent_mode="${1:-false}"
+    local show_hints="true"
+    
+    if [ "$silent_mode" = "true" ]; then
+        info_msg "🤖 全自動模式：正在使用 AI 工具分析變更並生成 commit message..."
+        show_hints="false"
+    else
+        info_msg "正在使用 AI 工具分析變更並生成 commit message..."
+    fi
     
     local prompt="$AI_COMMIT_PROMPT"
     local generated_message
-    local ai_tool_used=""
     
-    # 依序檢查每個 AI 工具
-    for tool_name in "${AI_TOOLS[@]}"; do
-        if ! command -v "$tool_name" >/dev/null 2>&1; then
-            info_msg "🔄 AI 工具 $tool_name 未安裝，嘗試下一個..."
-            continue
-        fi
-
-        info_msg "🔄 自動使用 AI 工具: $tool_name"
-        ai_tool_used="$tool_name"
-        
-        # 根據不同工具使用不同的調用方式
-        case "$tool_name" in
-            "codex")
-                if generated_message=$(run_codex_command "$prompt"); then
-                    break
-                fi
-                ;;
-            "gemini"|"claude")
-                if generated_message=$(run_stdin_ai_command "$tool_name" "$prompt"); then
-                    break
-                fi
-                ;;
-        esac
-        
-        warning_msg "❌ $tool_name 執行失敗，嘗試下一個工具..."
-        generated_message=""
-        ai_tool_used=""
-    done
-    
-    # 檢查是否成功生成訊息
-    if [ -n "$generated_message" ] && [ -n "$ai_tool_used" ]; then
+    # 使用統一的 AI 工具調用
+    if generated_message=$(run_ai_with_fallback "$prompt" "$show_hints"); then
         # 清理生成的訊息
         generated_message=$(clean_ai_message "$generated_message")
         
         if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            # 使用 AI 自動選擇前綴（全自動模式）
+            # 使用 AI 自動選擇前綴
+            [ "$silent_mode" != "true" ] && echo >&2
             local ai_prefix=""
             if ai_prefix=$(generate_commit_prefix_by_ai); then
                 if [ -n "$ai_prefix" ]; then
                     generated_message="$ai_prefix: $generated_message"
-                    info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message (含前綴):"
+                    if [ "$silent_mode" = "true" ]; then
+                        info_msg "✅ 自動使用 $LAST_AI_TOOL 生成的 commit message (含前綴):"
+                    else
+                        info_msg "✅ 使用 $LAST_AI_TOOL 生成的 commit message (含前綴):"
+                    fi
                 else
-                    info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
+                    if [ "$silent_mode" = "true" ]; then
+                        info_msg "✅ 自動使用 $LAST_AI_TOOL 生成的 commit message:"
+                    else
+                        info_msg "✅ 使用 $LAST_AI_TOOL 生成的 commit message:"
+                    fi
                 fi
             else
-                info_msg "✅ 自動使用 $ai_tool_used 生成的 commit message:"
+                if [ "$silent_mode" = "true" ]; then
+                    info_msg "✅ 自動使用 $LAST_AI_TOOL 生成的 commit message:"
+                else
+                    info_msg "✅ 使用 $LAST_AI_TOOL 生成的 commit message:"
+                fi
             fi
             highlight_success_msg "🔖 $generated_message"
-            local final_message
-            final_message=$(append_ticket_number_to_message "$generated_message")
-            echo "$final_message"
+            
+            # 靜默模式需要加上任務編號
+            if [ "$silent_mode" = "true" ]; then
+                local final_message
+                final_message=$(append_ticket_number_to_message "$generated_message")
+                echo "$final_message"
+            else
+                echo "$generated_message"
+            fi
             return 0
         else
             warning_msg "⚠️  AI 生成的訊息太短或無效: '$generated_message'"
         fi
     fi
     
-    # 如果所有 AI 工具都不可用或失敗，使用預設訊息
-    warning_msg "⚠️  所有 AI 工具都執行失敗，使用預設 commit message"
-    local default_message="自動提交：更新專案檔案"
-    info_msg "🔖 使用預設訊息: $default_message"
-    local final_message
-    final_message=$(append_ticket_number_to_message "$default_message")
-    echo "$final_message"
-    return 0
-}
-
-# 使用 AI 工具自動生成 commit message
-generate_auto_commit_message() {
-    info_msg "正在使用 AI 工具分析變更並生成 commit message..."
-    
-    local prompt="$AI_COMMIT_PROMPT"
-    local generated_message
-    local ai_tool_used=""
-    
-    # 依序檢查每個 AI 工具
-    for tool_name in "${AI_TOOLS[@]}"; do
-        if ! command -v "$tool_name" >/dev/null 2>&1; then
-            info_msg "AI 工具 $tool_name 未安裝，跳過..."
-            continue
-        fi
-
-        # 提示用戶即將使用 AI 工具，並提供狀態提醒
-        echo >&2
-        info_msg "🤖 即將嘗試使用 AI 工具: $tool_name"
-        
-        # 根據不同工具提供特定的狀態提醒
-        case "$tool_name" in
-            "gemini")
-                warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試"
-                ;;
-            "claude")
-                warning_msg "💡 提醒: Claude 需要登入付費帳號登入或 API 參數設定，如未登入請執行 'claude /login'"
-                ;;
-            "codex")
-                info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定"
-                ;;
-        esac
-        
-        info_msg "🔄 正在使用 AI 工具: $tool_name"
-        ai_tool_used="$tool_name"
-        
-        # 根據不同工具使用不同的調用方式
-        case "$tool_name" in
-            "codex")
-                if generated_message=$(run_codex_command "$prompt"); then
-                    break
-                fi
-                ;;
-            "gemini"|"claude")
-                if generated_message=$(run_stdin_ai_command "$tool_name" "$prompt"); then
-                    break
-                fi
-                ;;
-        esac
-        
-        warning_msg "$tool_name 執行失敗，嘗試下一個工具..."
-        generated_message=""
-        ai_tool_used=""
-    done
-    
-    # 檢查是否成功生成訊息
-    if [ -n "$generated_message" ] && [ -n "$ai_tool_used" ]; then
-        # 清理生成的訊息
-        generated_message=$(clean_ai_message "$generated_message")
-        
-        if [ -n "$generated_message" ] && [ ${#generated_message} -gt 3 ]; then
-            # 使用 AI 自動選擇前綴
-            echo >&2
-            local ai_prefix=""
-            if ai_prefix=$(generate_commit_prefix_by_ai); then
-                if [ -n "$ai_prefix" ]; then
-                    generated_message="$ai_prefix: $generated_message"
-                    info_msg "✅ 使用 $ai_tool_used 生成的 commit message (含前綴):"
-                else
-                    info_msg "✅ 使用 $ai_tool_used 生成的 commit message:"
-                fi
-            else
-                info_msg "✅ 使用 $ai_tool_used 生成的 commit message:"
-            fi
-            highlight_success_msg "🔖 $generated_message"
-            echo "$generated_message"
-            return 0
-        else
-            warning_msg "AI 生成的訊息太短或無效: '$generated_message'"
-        fi
+    # 失敗處理
+    if [ "$silent_mode" = "true" ]; then
+        warning_msg "⚠️  所有 AI 工具都執行失敗，使用預設 commit message"
+        local default_message="自動提交：更新專案檔案"
+        info_msg "🔖 使用預設訊息: $default_message"
+        local final_message
+        final_message=$(append_ticket_number_to_message "$default_message")
+        echo "$final_message"
+        return 0
+    else
+        warning_msg "所有 AI 工具都執行失敗或未生成有效的 commit message"
+        info_msg "已嘗試的工具: ${AI_TOOLS[*]}"
+        return 1
     fi
-    
-    # 如果所有 AI 工具都不可用或失敗
-    warning_msg "所有 AI 工具都執行失敗或未生成有效的 commit message"
-    info_msg "已嘗試的工具: ${AI_TOOLS[*]}"
-    return 1
 }
 
 # 函式：append_ticket_number_to_message
@@ -1421,6 +1411,51 @@ append_ticket_number_to_message() {
     fi
 }
 
+# 函式：confirm_ai_message
+# 功能說明：顯示 AI 生成的訊息並詢問使用者確認
+# 輸入參數：
+#   $1 <message> AI 生成的 commit 訊息
+#   $2 <label> 顯示標籤（可選，預設為 "🤖 AI 生成的"）
+# 輸出結果：
+#   STDOUT 輸出確認後的訊息（含任務編號）
+#   返回 0=確認使用，1=拒絕
+# 流程：
+#   1. 顯示 AI 生成的訊息
+#   2. 根據品質檢查設定顯示不同提示
+#   3. 讀取使用者確認
+#   4. 確認則附加任務編號並返回
+# 副作用：輸出至 stderr（訊息顯示和確認提示）
+# 參考：append_ticket_number_to_message()、AUTO_CHECK_COMMIT_QUALITY 變數
+confirm_ai_message() {
+    local message="$1"
+    local label="${2:-🤖 AI 生成的}"
+    
+    echo >&2
+    cyan_msg "$label commit message:"
+    highlight_success_msg "🔖 $message"
+    echo >&2
+    cyan_msg "💡 下一步動作："
+    if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
+        white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
+    else
+        white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
+    fi
+    white_msg "  • 輸入 n - 拒絕並手動輸入"
+    echo >&2
+    printf "是否使用此訊息？[Y/n]: " >&2
+    read -r confirm
+    confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+    
+    if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
+        local final_message
+        final_message=$(append_ticket_number_to_message "$message")
+        echo "$final_message"
+        return 0
+    fi
+    
+    return 1
+}
+
 # 獲取用戶輸入的 commit message
 get_commit_message() {
    
@@ -1448,25 +1483,7 @@ get_commit_message() {
         info_msg "正在使用 AI 自動生成前綴和 commit message..."
         
         if auto_message=$(generate_auto_commit_message); then
-            echo >&2
-            cyan_msg "🤖 AI 生成的 commit message:"
-            highlight_success_msg "🔖 $auto_message"
-            echo >&2
-            cyan_msg "💡 下一步動作："
-            if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
-                white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
-            else
-                white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
-            fi
-            white_msg "  • 輸入 n - 拒絕並手動輸入"
-            echo >&2
-            printf "是否使用此訊息？[Y/n]: " >&2
-            read -r confirm
-            confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
-            
-            if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
-                local final_message
-                final_message=$(append_ticket_number_to_message "$auto_message")
+            if final_message=$(confirm_ai_message "$auto_message"); then
                 echo "$final_message"
                 return 0
             fi
@@ -1511,26 +1528,7 @@ get_commit_message() {
     info_msg "未輸入 commit message，正在使用 AI 自動生成..."
     
     if auto_message=$(generate_auto_commit_message); then
-        echo >&2
-        cyan_msg "🤖 AI 生成的 commit message:"
-        highlight_success_msg "🔖 $auto_message"
-        echo >&2
-        cyan_msg "💡 下一步動作："
-        if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
-            white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
-        else
-            white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
-        fi
-        white_msg "  • 輸入 n - 拒絕並手動輸入"
-        echo >&2
-        printf "是否使用此訊息？[Y/n]: " >&2
-        read -r confirm
-        confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
-        
-        # 如果用戶直接按 Enter 或輸入確認，使用 AI 生成的訊息
-        if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
-            local final_message
-            final_message=$(append_ticket_number_to_message "$auto_message")
+        if final_message=$(confirm_ai_message "$auto_message"); then
             echo "$final_message"
             return 0
         fi
@@ -1549,25 +1547,7 @@ get_commit_message() {
         elif [ "$manual_message" = "ai" ] || [ "$manual_message" = "AI" ]; then
             # 重新嘗試 AI 生成
             if auto_message=$(generate_auto_commit_message); then
-                echo >&2
-                cyan_msg "🔄 AI 重新生成的 commit message:"
-                highlight_success_msg "🔖 $auto_message"
-                echo >&2
-                cyan_msg "💡 下一步動作："
-                if [[ "$AUTO_CHECK_COMMIT_QUALITY" == "true" ]]; then
-                    white_msg "  • 按 Enter 或輸入 y - 使用此訊息並進行品質檢查"
-                else
-                    white_msg "  • 按 Enter 或輸入 y - 使用此訊息（稍後詢問是否檢查品質）"
-                fi
-                white_msg "  • 輸入 n - 拒絕並繼續手動輸入"
-                echo >&2
-                printf "是否使用此訊息？[Y/n]: " >&2
-                read -r confirm
-                confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
-                
-                if [ -z "$confirm" ] || [[ "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
-                    local final_message
-                    final_message=$(append_ticket_number_to_message "$auto_message")
+                if final_message=$(confirm_ai_message "$auto_message" "🔄 AI 重新生成的"); then
                     echo "$final_message"
                     return 0
                 fi
@@ -2986,7 +2966,7 @@ execute_auto_workflow() {
     
     # 步驟 4: 使用 AI 自動生成 commit message（無需用戶確認）
     local message
-    if ! message=$(generate_auto_commit_message_silent); then
+    if ! message=$(generate_auto_commit_message "true"); then
         # 如果 AI 生成失敗，使用預設訊息
         message="自動提交：更新專案檔案"
         warning_msg "⚠️  使用預設 commit message: $message"

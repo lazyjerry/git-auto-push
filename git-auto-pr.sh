@@ -1002,48 +1002,19 @@ generate_pr_content_with_ai() {
                 fi
                 ;;
             "gemini"|"claude")
-                # 檢查工具是否可用
-                if ! command -v "$tool" >/dev/null 2>&1; then
-                    warning_msg "$tool 工具未安裝"
-                    continue
-                fi
+                # 讀取臨時文件內容
+                local content_text
+                content_text=$(cat "$temp_content")
                 
-                # 使用帶 loading 的命令執行
-                # 注意：使用 NODE_OPTIONS='--no-deprecation' 隱藏 Node.js 棄用警告
-                if command -v timeout >/dev/null 2>&1; then
-                    output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' timeout $timeout $tool -p '$prompt' < '$temp_content'" "正在等待 $tool 分析 commit 訊息" "$timeout")
-                else
-                    output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' $tool -p '$prompt' < '$temp_content'" "正在等待 $tool 分析 commit 訊息" "$timeout")
-                fi
-                exit_code=$?
-                
-                # 確保 exit_code 是有效的整數
-                if ! [[ "$exit_code" =~ ^[0-9]+$ ]]; then
-                    exit_code=1
-                fi
-                
-                if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
-                    debug_msg "🔍 調試: $tool PR 內容原始輸出 output='$output'"
+                # 調用統一的 run_stdin_ai_command 函數
+                if result=$(run_stdin_ai_command "$tool" "$prompt" "$content_text" "$timeout"); then
+                    debug_msg "🔍 調試: $tool PR 內容原始輸出 result='$result'"
                     success_msg "✅ $tool 生成 PR 內容成功"
                     rm -f "$temp_content"
-                    echo "$output"
+                    echo "$result"
                     return 0
                 else
-                    if [ $exit_code -eq 124 ]; then
-                        warning_msg "$tool 執行超時（${timeout}秒）"
-                        if [ -n "$output" ]; then
-                            debug_msg "💬 $tool 部分輸出："
-                            echo "$output" | head -n 10 | sed 's/^/  /' >&2
-                        fi
-                    elif [ $exit_code -ne 0 ]; then
-                        warning_msg "$tool 執行失敗"
-                        if [ -n "$output" ]; then
-                            debug_msg "💬 $tool 輸出："
-                            echo "$output" | sed 's/^/  /' >&2
-                        fi
-                    elif [ -z "$output" ]; then
-                        warning_msg "$tool 沒有產生輸出"
-                    fi
+                    warning_msg "$tool 無法生成 PR 內容"
                 fi
                 ;;
         esac

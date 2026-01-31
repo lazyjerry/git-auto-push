@@ -137,320 +137,42 @@ brew install gh && gh auth login
 
 ## 使用方法
 
-### git-auto-push.sh - 傳統 Git 自動化
+> 📋 **完整操作指南**：查看 [docs/USAGE.md](docs/USAGE.md) 瞭解詳細操作模式、使用情境和最佳實踐
+
+### 功能總覽
+
+| 工具 | 用途 | 核心功能 |
+|-----|------|----------|
+| **git-auto-push.sh** | 🔥 傳統 Git 自動化 | Add, Commit, Push, 變更訊息, 倉庫資訊 |
+| **git-auto-pr.sh** | 🌿 GitHub Flow 自動化 | 建立分支, 建立 PR, 審查 PR, 撤銷 PR, 刪除分支 |
+
+### 常用指令速查
+
+#### git-auto-push.sh
 
 ```bash
-# 互動式模式（預設）
+# 互動式選單（推薦）
 ./git-auto-push.sh
 
-# 全自動模式
-./git-auto-push.sh --auto
-./git-auto-push.sh -a
-
-# 直接執行指定選項（跳過選單）🆕
+# 快速執行指定功能
 ./git-auto-push.sh 1    # 完整流程 (add → commit → push)
-./git-auto-push.sh 2    # 本地提交 (add → commit)
-./git-auto-push.sh 3    # 僅添加檔案 (add)
-./git-auto-push.sh 4    # 全自動模式 (add → AI commit → push)
-./git-auto-push.sh 5    # 僅提交 (commit)
-./git-auto-push.sh 6    # 顯示倉庫資訊
-./git-auto-push.sh 7    # 變更 commit 訊息
-
-# 全域安裝後使用
-git-auto-push
-git-auto-push --auto
-git-auto-push 1
+./git-auto-push.sh 4    # 全自動模式 (AI 生成內容)
+./git-auto-push.sh 7    # 修改最後一次 commit 訊息
 ```
 
-#### git-auto-push.sh 操作模式
-
-1. 完整流程：add → 選擇前綴 → 互動輸入 commit → push（日常開發提交）
-2. 本機提交：add → 選擇前綴 → 互動輸入 commit（離線開發或測試提交）
-3. 僅新增檔案：add（暫存檔案變更）
-4. 全自動模式：add → AI 選擇前綴 → AI 產生 commit → push（CI/CD 或快速提交）
-5. 僅提交：commit（提交已暫存的檔案）
-6. 顯示倉庫資訊：顯示 Git 倉庫詳細資訊（查看倉庫狀態與配置）
-7. 變更最後一次 commit 訊息：修改最近一次提交的訊息內容（修正錯誤或補充說明）
-
-**Conventional Commits 前綴支援** 🆕：
-- 手動輸入時：先選擇前綴（feat/fix/docs 等 11 種），再輸入訊息內容
-- AI 自動生成時：AI 分析 diff 自動選擇最適合的前綴
-- 支援前綴：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-- 可選擇跳過前綴，保持原有訊息格式
-
-**智慧品質檢查** 🆕：
-- 模式 1-5 支援可配置的 AI commit 訊息品質檢查
-- 檢測訊息是否清楚描述變更內容和目的
-- 可設定自動檢查（預設）或詢問模式
-
-### git-auto-pr.sh - GitHub Flow PR 自動化
+#### git-auto-pr.sh
 
 ```bash
-# 互動式模式（預設）
+# 互動式選單
 ./git-auto-pr.sh
 
-# 全域安裝後使用
-git-auto-pr
+# 根據提示選擇：
+# 1. 建立功能分支 (jerry/feature/issue-123)
+# 2. 建立 Pull Request (AI 生成內容)
+# 4. 審查與合併 PR
 ```
 
-#### git-auto-pr.sh 操作模式
-
-1. 建立功能分支：輸入 issue key、擁有者、類型，自動生成分支（開始新功能開發）
-2. 建立 PR：基於目前分支建立 Pull Request（提交程式碼審查）
-3. 撤銷目前 PR：關閉開放 PR / Revert 已合併 PR（PR 錯誤修正）
-4. 審查與合併 PR：審查 → 批准/請求變更 → 合併（專案擁有者 PR 管理）
-5. 刪除分支：安全刪除本地/遠端功能分支（分支清理與維護）
-
-#### GitHub Flow 工作流程特色
-
-- Issue 整合：支援 JIRA、GitHub Issue 等多種編號格式
-- 分支類型分類：提供 issue、bug、feature、enhancement、blocker 五種分支類型
-- 自動分支命名：基於 `{username}/{type}/{issue-key}` 格式自動生成標準分支名
-- AI 內容產生：commit message、PR 標題和內容可由 AI 輔助生成
-- PR 生命週期管理：建立 → 撤銷 → 審查 → 合併，涵蓋 PR 各階段操作
-- 撤銷機制：自動偵測 PR 狀態，提供安全的關閉或 revert 選項
-- 驗證機制：檢查 Git 儲存庫、gh CLI 登入狀態、分支狀態
-- 錯誤處理：錯誤偵測與修復建議
-- 中斷復原：支援 Ctrl+C 中斷與優雅清理
-- 多分支支援：自動偵測 main/master 主分支
-
-## 使用情境
-
-### git-auto-push.sh 使用情境
-
-#### 日常開發流程（含前綴選擇）🆕
-
-```bash
-# 修改程式碼後，執行流程
-./git-auto-push.sh
-# 或直接執行選項 1
-./git-auto-push.sh 1
-
-# 流程：
-# 1. 選擇前綴（feat/fix/docs 等 11 種，或跳過）
-# 2. 輸入 commit 訊息
-# 3. 自動組合：[任務編號] 前綴: 訊息
-# 範例輸出：[issue-123] feat: 新增使用者登入功能
-```
-
-#### 快速自動提交
-
-```bash
-# AI 自動生成 commit message（含前綴）並推送
-./git-auto-push.sh --auto
-# 範例輸出：[issue-123] feat: 新增使用者設定頁面
-```
-
-#### 離線開發
-
-```bash
-# 只提交到本地，不推送
-./git-auto-push.sh 2
-```
-
-#### 分階段操作
-
-```bash
-# 先新增檔案
-./git-auto-push.sh 3
-
-# 稍後提交
-./git-auto-push.sh 5
-```
-
-#### 查看 Git 倉庫資訊
-
-```bash
-# 快速查看倉庫狀態、分支、遠端配置等資訊
-./git-auto-push.sh 6
-# 顯示內容包括：
-# - 當前分支和追蹤狀態
-# - 遠端倉庫 URL
-# - 最近 5 筆 commit
-# - 分支來源分析
-# - 同步狀態（領先/落後）
-# - 工作區狀態
-```
-
-#### 修改最後一次 commit 訊息
-
-```bash
-# 修正 commit 訊息錯誤或補充說明
-./git-auto-push.sh 7
-# 功能特色：
-# - 自動檢查是否有未提交的變更（有則警告並中止）
-# - 顯示目前的 commit 訊息供參考
-# - 支援任務編號自動帶入
-# - 二次確認機制
-# - 安全執行 git commit --amend
-# ⚠️ 注意：僅適用於尚未推送的本地 commit
-```
-
-#### Conventional Commits 前綴範例 🆕
-
-```bash
-# 可用前綴列表：
-# feat:     新功能
-# fix:      錯誤修復
-# docs:     文件變更
-# style:    程式碼格式（不影響運行）
-# refactor: 重構（不改變功能）
-# perf:     效能改進
-# test:     測試相關
-# build:    建置系統
-# ci:       CI 配置
-# chore:    雜項維護
-# revert:   回退提交
-
-# 範例輸出：
-# [issue-123] feat: 新增使用者登入功能
-# [BUG-456] fix: 修復資料載入時的記憶體洩漏
-# docs: 更新 API 文件說明
-# refactor: 優化資料處理邏輯
-```
-
-#### Commit 訊息品質檢查 🆕
-
-```bash
-# 自動檢查模式（預設）
-# 每次 commit 前自動使用 AI 檢查訊息品質
-./git-auto-push.sh
-# 選擇選項 1-5 任一操作
-# 功能特色：
-# - AI 分析訊息是否明確描述變更內容和目的
-# - 檢查不良時提供警告和改進建議
-# - AI 失敗時自動跳過，不影響提交流程
-# - 可配置為詢問模式（false），每次詢問是否檢查
-# - 設定位置：腳本頂部 AUTO_CHECK_COMMIT_QUALITY 變數（約 149 行）
-
-# 檢查標準：
-# ✅ 良好：「新增用戶登入功能，支援 OAuth 2.0 驗證」
-# ❌ 不良：「fix bug」、「update」、「修改程式碼」
-```
-
-### git-auto-pr.sh 使用情境 ✨
-
-#### GitHub Flow 開發流程
-
-```bash
-# 1. 開始新功能開發
-./git-auto-pr.sh
-# 選擇選項 1，輸入 issue key、擁有者名字、選擇分支類型，自動生成分支
-
-# 2. 開發完成後建立 PR
-./git-auto-pr.sh
-# 選擇選項 2（建立 PR）
-# AI 產生 PR 標題和內容
-```
-
-#### 撤銷 Pull Request
-
-```bash
-# 撤銷當前分支的 PR（檢測 PR 狀態）
-./git-auto-pr.sh
-# 選擇選項 3（撤銷當前 PR）
-# 系統會自動偵測：
-# - 開放中的 PR：提供關閉選項
-# - 已合併的 PR：提供 revert 選項（預設為否）
-# - 顯示詳細影響分析供決策參考
-```
-
-#### 分步驟操作
-
-```bash
-# 1. 建立功能分支
-./git-auto-pr.sh  # 選擇選項 1
-# 輸入 issue key（如 PROJ-123）、擁有者名字（預設 jerry）、選擇分支類型
-# 系統自動生成分支：jerry/feature/proj-123
-
-# 2. 建立 PR
-./git-auto-pr.sh  # 選擇選項 2
-# AI 產生 PR 標題和內容
-
-# 3. 如需撤銷 PR（錯誤提交、需要重構等）
-./git-auto-pr.sh  # 選擇選項 3
-# 系統自動偵測並提供撤銷選項
-```
-
-#### 團隊協作場景
-
-```bash
-# 開發者：基於 main 分支開始新功能
-git checkout main && git pull
-./git-auto-pr.sh  # 選擇選項 1
-# 輸入：issue key: PROJ-123, 擁有者: tom, 類型: feature
-# 自動建立分支：tom/feature/proj-123
-
-# 開發者：功能完成，建立 PR 供審查
-./git-auto-pr.sh  # 選擇選項 2（建立 PR）
-
-# 專案擁有者：審查並合併 PR
-./git-auto-pr.sh  # 選擇選項 4，審查 → 批准 → 合併
-```
-
-#### 分支建立流程說明
-
-```bash
-# 執行分支建立
-./git-auto-pr.sh  # 選擇選項 1
-
-# 步驟 1：輸入 Issue Key
-請輸入 issue key: PROJ-123
-✅ 使用標準格式 issue key: PROJ-123
-
-# 步驟 2：輸入擁有者名字（預設：jerry）
-請輸入擁有者名字 [預設: jerry]: tom
-👤 使用者名稱: tom
-
-# 步驟 3：選擇分支類型
-📋 分支類型說明：
-1. issue - 問題（專案障礙、延誤）
-2. bug - 錯誤（系統性錯誤）
-3. feature - 功能請求（新功能）
-4. enhancement - 增強（改進現有功能）
-5. blocker - 阻礙（關鍵問題）
-
-請選擇分支類型 [1-5]: 3
-🏷️  分支類型: feature
-
-# 自動生成分支
-📝 將建立分支: tom/feature/proj-123
-✅ 成功建立功能分支: tom/feature/proj-123
-```
-
-**分支命名規則**：
-
-- 格式：`{username}/{type}/{issue-key}`
-- 自動轉換為小寫
-- 範例：`jerry/bug/issue-456`、`mary/enhancement/jira-789`
-
-#### 專案擁有者 PR 管理
-
-```bash
-# 查看和審查待處理的 PR
-./git-auto-pr.sh  # 選擇選項 4
-
-# 系統會自動：
-# 1. 列出所有待審查的 PR
-# 2. 顯示選定 PR 的詳細資訊和 CI 狀態
-# 3. 提供審查選項：批准並合併、添加評論、請求變更
-# 4. 自動使用 squash 合併並刪除功能分支
-# 5. 更新本地 main 分支
-```
-
-#### 分支管理與清理
-
-```bash
-# 清理不需要的功能分支
-./git-auto-pr.sh  # 選擇選項 5
-
-# 系統會自動：
-# 1. 列出所有可刪除的分支（排除主分支）
-# 2. 標記當前分支，防止誤刪
-# 3. 提供多重安全確認機制
-# 4. 處理已合併/未合併分支
-# 5. 可選擇同時清理對應的遠端分支
-```
+> 💡 支援 Conventional Commits 前綴、AI 內容生成、品質檢查、任務編號自動帶入等功能。詳細說明請見 [使用指南](docs/USAGE.md)。
 
 ## 特色功能
 

@@ -87,7 +87,17 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 
 ## 安裝與啟動
 
-> 📋 **完整安裝指南**：查看 [docs/INSTALLATION.md](docs/INSTALLATION.md) 瞭解詳細安裝步驟、設定說明和問題排除
+> 📋 **完整安裝指南**：查看 [docs/INSTALLATION.md](docs/INSTALLATION.md) 瞭解詳細安裝步驟、個人化設定和問題排除
+
+### 一鍵安裝 🆕
+
+```bash
+# 互動式安裝（選擇本地或全域）
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+
+# 直接全域安裝（需要 sudo）
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash -s -- --global
+```
 
 ### 快速安裝
 

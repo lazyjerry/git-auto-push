@@ -5,8 +5,8 @@
 ## 🏗️ 架構概覽
 
 ### 雙腳本架構
-- **`git-auto-push.sh`** (2397 行) - 傳統 Git 操作自動化（add/commit/push）
-- **`git-auto-pr.sh`** (2619 行) - GitHub Flow PR 流程自動化
+- **`git-auto-push.sh`** (2562 行) - 傳統 Git 操作自動化（add/commit/push）
+- **`git-auto-pr.sh`** (2780 行) - GitHub Flow PR 流程自動化
 - **`install.sh`** (532 行) - POSIX Shell 相容安裝腳本
 
 ### 核心設計模式
@@ -112,8 +112,8 @@ for tool in codex gemini claude; do command -v "$tool" && echo "$tool 可用"; d
 
 ### 行數統計維護
 README.md 中包含精確的行數統計，修改後需同步更新：
-- `git-auto-push.sh`: 當前 2397 行
-- `git-auto-pr.sh`: 當前 2619 行
+- `git-auto-push.sh`: 當前 2562 行
+- `git-auto-pr.sh`: 當前 2780 行
 - `install.sh`: 當前 532 行
 
 ### Commit 訊息規範

@@ -98,15 +98,17 @@ load_config
 #       腳本會依陣列順序逐一調用，直到成功或全部失敗。
 # 修改方式：調整陣列元素順序或新增其他 AI CLI 工具名稱（需系統已安裝）
 # 工具特性：
+#   - copilot：GitHub Copilot CLI，需要 Copilot 訂閱，支援 programmatic mode
 #   - codex：通常較穩定，建議優先使用
 #   - gemini：可能有網路或認證問題，需配置 API key
 #   - claude：需要登入認證或 API 設定
 # 範例：
 #   AI_TOOLS=("codex")                    # 僅使用 codex
-#   AI_TOOLS=("gemini" "codex" "claude")  # 調整優先順序
+#   AI_TOOLS=("copilot" "gemini" "codex") # 調整優先順序
 : "${AI_TOOLS:=}"
 if [ ${#AI_TOOLS[@]} -eq 0 ]; then
     AI_TOOLS=(
+        "copilot"
         "gemini"
         "codex"
         "claude"
@@ -388,6 +390,9 @@ run_ai_with_fallback() {
             echo >&2
             info_msg "🤖 即將嘗試使用 AI 工具: $tool_name"
             case "$tool_name" in
+                "copilot")
+                    info_msg "💡 提醒: Copilot CLI 需要 GitHub Copilot 訂閱，使用 programmatic mode"
+                    ;;
                 "gemini")
                     warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試"
                     ;;
@@ -403,6 +408,13 @@ run_ai_with_fallback() {
         debug_msg "🔄 正在使用 AI 工具: $tool_name"
         
         case "$tool_name" in
+            "copilot")
+                if result=$(run_copilot_command "$prompt"); then
+                    LAST_AI_TOOL="$tool_name"
+                    echo "$result"
+                    return 0
+                fi
+                ;;
             "codex")
                 if result=$(run_codex_command "$prompt"); then
                     LAST_AI_TOOL="$tool_name"
@@ -722,6 +734,29 @@ _execute_ai_tool() {
     
     # 根據不同工具使用不同的調用方式
     case "$tool_name" in
+        "copilot")
+            # copilot 使用 -p (programmatic mode) 參數，-s (silent) 隱藏統計資訊
+            # 讀取輸入檔案內容作為 prompt
+            local copilot_prompt
+            copilot_prompt=$(cat "$input_file")
+            if [[ "$use_loading" == "true" ]]; then
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 timeout ${timeout}s copilot -s -p \"$copilot_prompt\" 2>&1" "$loading_message" "$timeout")
+                    exit_code=$?
+                else
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 copilot -s -p \"$copilot_prompt\" 2>&1" "$loading_message" "$timeout")
+                    exit_code=$?
+                fi
+            else
+                if command -v timeout >/dev/null 2>&1; then
+                    output=$(LC_ALL=en_US.UTF-8 timeout ${timeout}s copilot -s -p "$copilot_prompt" 2>&1)
+                    exit_code=$?
+                else
+                    output=$(LC_ALL=en_US.UTF-8 copilot -s -p "$copilot_prompt" 2>&1)
+                    exit_code=$?
+                fi
+            fi
+            ;;
         "codex")
             # codex 使用 exec 子命令
             if [[ "$use_loading" == "true" ]]; then
@@ -856,6 +891,136 @@ _handle_ai_result() {
     fi
     
     return 0
+}
+
+# 執行 GitHub Copilot CLI 命令（使用 programmatic mode）
+# 參數：
+#   $1 - prompt: 提示詞內容
+# 返回：0=成功，1=失敗
+# 輸出：AI 生成的內容（成功時）
+run_copilot_command() {
+    local prompt="$1"
+    local timeout=60
+    
+    info_msg "正在調用 copilot..."
+    
+    # 檢查 copilot 是否可用
+    if ! command -v copilot >/dev/null 2>&1; then
+        warning_msg "copilot 工具未安裝"
+        warning_msg "💡 安裝方式: brew install copilot-cli 或 npm install -g @github/copilot"
+        return 1
+    fi
+    
+    # 檢查 git diff 大小並調整超時
+    local diff_size
+    diff_size=$(git diff --cached 2>/dev/null | wc -l)
+    if [ "$diff_size" -gt 500 ]; then
+        timeout=90
+        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..."
+    fi
+    
+    # 準備 git diff 內容
+    local git_diff
+    git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
+    if [ -z "$git_diff" ]; then
+        warning_msg "沒有檢測到任何變更內容"
+        return 1
+    fi
+    
+    # 創建臨時檔案存放 prompt（避免 shell 特殊字符問題）
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_prompt"
+    
+    # 創建臨時檔案接收輸出
+    local temp_output
+    temp_output=$(mktemp)
+    
+    # 顯示 loading 動畫並執行 copilot（使用臨時檔案避免 eval 問題）
+    info_msg "正在等待 copilot 分析變更..."
+    
+    local exit_code=0
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$timeout" copilot -s -p "$(cat "$temp_prompt")" > "$temp_output" 2>&1
+        exit_code=$?
+    else
+        copilot -s -p "$(cat "$temp_prompt")" > "$temp_output" 2>&1
+        exit_code=$?
+    fi
+    
+    # 讀取輸出
+    local output=""
+    if [ -f "$temp_output" ]; then
+        output=$(cat "$temp_output")
+    fi
+    
+    # 清理臨時檔案
+    rm -f "$temp_prompt" "$temp_output"
+    
+    # 處理執行結果
+    case $exit_code in
+        0)
+            # 成功執行，檢查輸出
+            # 清理輸出（移除可能的 ANSI 色碼和多餘空白）
+            output=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g' | xargs)
+            
+            if [ -n "$output" ] && [ ${#output} -gt 3 ]; then
+                success_msg "copilot 回應完成"
+                echo "$output"
+                return 0
+            fi
+            
+            # 沒有有效內容
+            warning_msg "copilot 沒有返回有效內容"
+            echo >&2
+            debug_msg "🔍 調試信息（copilot 無有效輸出）:"
+            debug_msg "執行的指令: copilot -p [prompt]"
+            debug_msg "退出碼: $exit_code"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            printf "\n" >&2
+            ;;
+        124)
+            error_msg "❌ copilot 執行超時（${timeout}秒）"
+            
+            echo >&2
+            debug_msg "🔍 調試信息（copilot 超時錯誤）:"
+            debug_msg "執行的指令: copilot -p [prompt]"
+            debug_msg "超時設定: $timeout 秒"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
+            printf "\n" >&2
+            ;;
+        *)
+            echo >&2
+            debug_msg "🔍 調試信息（copilot 執行失敗）:"
+            debug_msg "執行的指令: copilot -p [prompt]"
+            debug_msg "退出碼: $exit_code"
+            debug_msg "diff 內容大小: $(echo "$git_diff" | wc -l) 行"
+            
+            if [[ "$output" == *"not logged in"* ]] || [[ "$output" == *"authentication"* ]] || [[ "$output" == *"unauthorized"* ]]; then
+                error_msg "❌ copilot 認證錯誤"
+                warning_msg "💡 請執行：copilot /login"
+            elif [[ "$output" == *"subscription"* ]] || [[ "$output" == *"Copilot"* && "$output" == *"access"* ]]; then
+                error_msg "❌ copilot 訂閱問題"
+                warning_msg "💡 請確認您的 GitHub Copilot 訂閱狀態"
+            elif [[ "$output" == *"rate limit"* ]] || [[ "$output" == *"quota"* ]] || [[ "$output" == *"premium"* ]]; then
+                error_msg "❌ copilot 配額限制"
+                warning_msg "💡 您的 premium requests 配額可能已用盡，請稍後再試"
+            elif [[ "$output" == *"network"* ]] || [[ "$output" == *"connection"* ]]; then
+                error_msg "❌ copilot 網路錯誤"
+                warning_msg "💡 請檢查網路連接"
+            else
+                warning_msg "copilot 執行失敗（退出碼: $exit_code）"
+                if [ -n "$output" ]; then
+                    debug_msg "完整輸出內容:"
+                    echo "$output" | sed 's/^/  /' >&2
+                fi
+            fi
+            printf "\n" >&2
+            ;;
+    esac
+    
+    return 1
 }
 
 # 執行 codex 命令並處理輸出
@@ -1909,7 +2074,7 @@ show_help() {
         white_msg "      ✓ 詢問模式：提交前詢問是否使用 AI 檢查（預設 N）"
         white_msg "      ✓ 使用者可選擇檢查或跳過，不影響快速提交流程"
     fi
-    white_msg "    檢查工具：依 AI_TOOLS 順序使用（codex/gemini/claude）"
+    white_msg "    檢查工具：依 AI_TOOLS 順序使用（copilot/gemini/codex/claude）"
     white_msg "    容錯機制：AI 失敗時不影響提交流程"
     white_msg "    適用場景：提升 commit 訊息品質、團隊規範執行"
     echo >&2

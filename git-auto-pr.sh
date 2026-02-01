@@ -3,7 +3,7 @@
 
 # Git 自動化 PR 工具 - 提供完整的 GitHub Flow 工作流程自動化
 # 使用方式：./git-auto-pr.sh 或 ./git-auto-pr.sh --help
-# 作者：Lazy Jerry | 版本：v2.7.0 | 授權：MIT License
+# 作者：Lazy Jerry | 版本：v2.8.0 | 授權：MIT License
 
 # ==============================================
 # 配置文件加載區域

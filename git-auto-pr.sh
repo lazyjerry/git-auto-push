@@ -554,31 +554,20 @@ run_copilot_command() {
     temp_prompt=$(mktemp)
     printf '%s\n\n%s' "$prompt" "$content" > "$temp_prompt"
     
-    # 創建臨時檔案接收輸出
-    local temp_output
-    temp_output=$(mktemp)
-    
     # 顯示 loading 動畫並執行 copilot（使用臨時檔案避免 eval 問題）
     # 使用 -s (silent) 選項隱藏統計資訊
-    info_msg "正在等待 copilot 分析內容..."
-    
+    local output=""
     local exit_code=0
     if command -v timeout >/dev/null 2>&1; then
-        timeout "$timeout" copilot -s -p "$(cat "$temp_prompt")" > "$temp_output" 2>&1
+        output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 timeout ${timeout}s copilot -s -p \"\$(cat '$temp_prompt')\" 2>&1" "正在等待 copilot 分析內容" "$timeout")
         exit_code=$?
     else
-        copilot -s -p "$(cat "$temp_prompt")" > "$temp_output" 2>&1
+        output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 copilot -s -p \"\$(cat '$temp_prompt')\" 2>&1" "正在等待 copilot 分析內容" "$timeout")
         exit_code=$?
-    fi
-    
-    # 讀取輸出
-    local output=""
-    if [ -f "$temp_output" ]; then
-        output=$(cat "$temp_output")
     fi
     
     # 清理臨時檔案
-    rm -f "$temp_prompt" "$temp_output"
+    rm -f "$temp_prompt"
     
     # 🔍 調試：顯示退出碼和輸出
     debug_msg "🔍 調試: copilot 退出碼 exit_code='$exit_code'"

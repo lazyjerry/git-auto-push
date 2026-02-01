@@ -23,20 +23,20 @@
 
 ```bash
 # 本地安裝（安裝到當前目錄）
-curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
 # 全域安裝（安裝到 /usr/local/bin，需要 sudo）
-curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 ```
 
 或使用 wget：
 
 ```bash
 # 本地安裝
-wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
 # 全域安裝
-wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash -s -- --global
+wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 ```
 
 ---
@@ -123,37 +123,37 @@ IS_DEBUG=false
 
 您也可以直接修改腳本頂部的預設值：
 
-#### git-auto-push.sh 設定（約第 100-210 行）
+#### git-auto-push.sh 設定（約第 90-200 行）
 
 ```bash
-# AI 工具優先順序（第 109 行）
+# AI 工具優先順序（預設值區塊）
 AI_TOOLS=(
-    "codex"     # GitHub Copilot CLI
-    "gemini"    # Google Gemini CLI  
+    "gemini"    # Google Gemini CLI
+    "codex"     # GitHub Copilot CLI  
     "claude"    # Anthropic Claude CLI
 )
 
-# Commit 品質自動檢查（第 155 行）
+# Commit 品質自動檢查
 AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 # AUTO_CHECK_COMMIT_QUALITY=false       # 詢問模式
 ```
 
-#### git-auto-pr.sh 設定（約第 180-230 行）
+#### git-auto-pr.sh 設定（約第 140-180 行）
 
 ```bash
-# AI 工具優先順序（第 187 行）
-AI_TOOLS=("codex" "gemini" "claude")
+# AI 工具優先順序（預設值區塊）
+AI_TOOLS=("gemini" "codex" "claude")
 
-# 主分支偵測順序（第 202 行）
+# 主分支偵測順序
 DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
 # DEFAULT_MAIN_BRANCHES=("main" "master")     # 標準配置
 # DEFAULT_MAIN_BRANCHES=("develop" "main")    # Git Flow 風格
 
-# 預設使用者名稱（第 212 行）
+# 預設使用者名稱
 DEFAULT_USERNAME="jerry"
 # DEFAULT_USERNAME="your-name"    # 修改為您的名字
 
-# PR 合併後分支刪除策略（第 223 行）
+# PR 合併後分支刪除策略
 AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（建議）
 # AUTO_DELETE_BRANCH_AFTER_MERGE=true # 自動刪除
 ```

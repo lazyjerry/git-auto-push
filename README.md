@@ -28,8 +28,8 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（2975 行，註解與流程說明）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（3139 行，程式碼文件與流程註解）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（2397 行，註解與流程說明）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2619 行，程式碼文件與流程註解）
 ├── Conventional Commits 🆕 # Commit 訊息前綴支援
 │   ├── 手動選擇前綴      # feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert
 │   ├── AI 自動判斷        # 根據 git diff 自動選擇最適合的前綴
@@ -93,10 +93,10 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 
 ```bash
 # 互動式安裝（選擇本地或全域）
-curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
 # 直接全域安裝（需要 sudo）
-curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 ```
 
 ### 快速安裝
@@ -442,8 +442,8 @@ git-auto-pr                    # 選擇選項 3（建立 PR）
 #### 統一變數管理
 
 - **AI_TOOLS 變數**：統一的 AI 工具優先順序陣列
-- **readonly 保護**：防止意外修改配置
-- **調用順序**：codex → gemini → claude
+- **條件賦值**：使用 `: "${VAR:=default}"` 語法，配置文件優先於預設值
+- **預設調用順序**：gemini → codex → claude（可透過配置文件覆蓋）
 
 ### 📝 程式碼文檔標準
 
@@ -487,8 +487,13 @@ generate_ai_pr_prompt() {
 #### 2. AI 工具順序調整
 
 ```bash
-# 修改 AI_TOOLS 陣列即可改變調用順序
-readonly AI_TOOLS=(
+# 方式一：透過配置文件覆蓋（推薦）
+# ~/.git-auto-push-config/.env
+AI_TOOLS=("codex" "gemini" "claude")
+
+# 方式二：修改腳本預設值（進階）
+# 找到 AI_TOOLS 預設值區塊，修改陣列內容
+AI_TOOLS=(
     "codex"     # 第一優先
     "gemini"    # 第二優先
     "claude"    # 第三優先
@@ -525,29 +530,21 @@ AUTO_CHECK_COMMIT_QUALITY=false
 #### 5. 分支配置自定義
 
 ```bash
-# git-auto-pr.sh 主分支配置修改（第 200 行）
-readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")
+# 方式一：透過配置文件覆蓋（推薦）
+# ~/.git-auto-push-config/.env
+DEFAULT_MAIN_BRANCHES=("main" "master" "develop")
+DEFAULT_USERNAME="tom"
+AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
-# 添加更多分支選項
-readonly -a DEFAULT_MAIN_BRANCHES=("main" "master" "develop" "dev")
+# 方式二：修改腳本預設值（進階）
+# 主分支候選清單
+DEFAULT_MAIN_BRANCHES=("main" "master")
 
-# 只使用特定分支
-readonly -a DEFAULT_MAIN_BRANCHES=("main")
+# 預設使用者名稱
+DEFAULT_USERNAME="jerry"
 
-# 預設使用者名稱配置（第 211 行）
-readonly DEFAULT_USERNAME="jerry"
-
-# 修改為您的名字或團隊慣例
-readonly DEFAULT_USERNAME="tom"
-
-# PR 合併後分支刪除策略配置（第 217 行）
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
-
-# 自動刪除分支（適合短期功能分支）
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
-
-# 保留分支（適合需要追蹤的分支，預設值）
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
+# PR 合併後分支刪除策略（true=自動刪除，false=保留）
+AUTO_DELETE_BRANCH_AFTER_MERGE=false
 ```
 
 **配置說明**：
@@ -620,10 +617,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 > 📋 **完整版本歷史**：查看 [CHANGELOG.md](CHANGELOG.md) 瞭解所有版本更新記錄和詳細功能說明
 
-- 📅 **最新版本**：v2.5.1 (2025-11-09)
-- 📈 **總版本數**：14 個主要版本  
+- 📅 **最新版本**：v2.7.0 (2026-02-01)
+- 📈 **總版本數**：15 個主要版本  
 - 🗓️ **開發期間**：2025-09-13 至今
-- 📊 **程式碼行數**：`git-auto-push.sh` 3,072 行、`git-auto-pr.sh` 3,135 行
+- 📊 **程式碼行數**：`git-auto-push.sh` 2,397 行、`git-auto-pr.sh` 2,619 行
 
 ### 參考資源
 

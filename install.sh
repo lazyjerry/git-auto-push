@@ -72,6 +72,115 @@ check_download_tool() {
     info "使用 ${DOWNLOAD_TOOL} 進行下載"
 }
 
+# ========== 必要套件檢測 ==========
+check_dependencies() {
+    echo ""
+    info "檢查必要套件..."
+    
+    missing_required=false
+    missing_optional=""
+    
+    # 檢查 git（必須）
+    if command -v git > /dev/null 2>&1; then
+        success "git 已安裝：$(git --version | head -1)"
+    else
+        error "git 未安裝！這是必要的核心依賴"
+        echo ""
+        echo "   📦 Git 安裝方式："
+        echo "      macOS:   brew install git"
+        echo "      Ubuntu:  sudo apt install git"
+        echo "      Windows: https://git-scm.com/download/win"
+        echo "      官方網站: https://git-scm.com/"
+        echo ""
+        missing_required=true
+    fi
+    
+    # 檢查 gh CLI（git-auto-pr.sh 必須）
+    if command -v gh > /dev/null 2>&1; then
+        if gh auth status > /dev/null 2>&1; then
+            success "GitHub CLI 已安裝且已登入"
+        else
+            warning "GitHub CLI 已安裝但未登入"
+            echo "   請執行：gh auth login"
+        fi
+    else
+        warning "GitHub CLI (gh) 未安裝"
+        echo "   git-auto-pr.sh 需要此工具來建立和管理 Pull Request"
+        echo ""
+        echo "   📦 GitHub CLI 安裝方式："
+        echo "      macOS:   brew install gh"
+        echo "      Ubuntu:  sudo apt install gh"
+        echo "      Windows: winget install GitHub.cli"
+        echo "      官方網站: https://cli.github.com/"
+        echo ""
+        echo "   安裝後請執行：gh auth login"
+        missing_optional="${missing_optional}gh "
+    fi
+    
+    # 檢查 AI CLI 工具（選擇性）
+    echo ""
+    info "檢查 AI CLI 工具（選擇性）..."
+    ai_tools_found=0
+    
+    # Copilot CLI
+    if command -v gh > /dev/null 2>&1 && gh copilot --version > /dev/null 2>&1; then
+        success "copilot 可用（gh copilot extension）"
+        ai_tools_found=$((ai_tools_found + 1))
+    fi
+    
+    # Gemini CLI
+    if command -v gemini > /dev/null 2>&1; then
+        success "gemini 可用"
+        ai_tools_found=$((ai_tools_found + 1))
+    fi
+    
+    # Codex CLI
+    if command -v codex > /dev/null 2>&1; then
+        success "codex 可用"
+        ai_tools_found=$((ai_tools_found + 1))
+    fi
+    
+    # Claude CLI
+    if command -v claude > /dev/null 2>&1; then
+        success "claude 可用"
+        ai_tools_found=$((ai_tools_found + 1))
+    fi
+    
+    if [ "$ai_tools_found" -eq 0 ]; then
+        warning "未偵測到任何 AI CLI 工具"
+        echo "   AI 功能將無法使用，但腳本仍可正常運作"
+        echo ""
+        echo "   💡 建議至少安裝一個 AI 工具以啟用自動內容產生功能："
+        echo ""
+        echo "   📦 GitHub Copilot CLI（推薦，需要 Copilot 訂閱）"
+        echo "      gh extension install github/gh-copilot"
+        echo "      https://github.com/github/copilot-cli"
+        echo ""
+        echo "   📦 Google Gemini CLI"
+        echo "      npm install -g @anthropic-ai/claude-cli"
+        echo "      https://github.com/google-gemini/gemini-cli"
+        echo ""
+        echo "   📦 OpenAI Codex CLI"
+        echo "      npm install -g @openai/codex"
+        echo "      https://github.com/openai/codex"
+        echo ""
+        echo "   📦 Anthropic Claude CLI"
+        echo "      npm install -g @anthropic-ai/claude-code"
+        echo "      https://docs.anthropic.com/en/docs/claude-code/overview"
+        echo ""
+    else
+        info "已偵測到 ${ai_tools_found} 個 AI 工具"
+    fi
+    
+    echo ""
+    
+    # 如果缺少必要套件，詢問是否繼續
+    if [ "$missing_required" = "true" ]; then
+        error "缺少必要套件，無法繼續安裝"
+        exit 1
+    fi
+}
+
 # ========== 下載函數 ==========
 download_file() {
     url="$1"
@@ -208,6 +317,51 @@ show_usage() {
     echo "📚 更多資訊："
     echo "   https://github.com/lazyjerry/git-auto-push"
     echo ""
+    
+    # 顯示隨機感謝語
+    show_random_thanks
+}
+
+# ========== 隨機感謝語 ==========
+show_random_thanks() {
+    # 感謝語清單（Jerry 風格）
+    thanks_messages="
+讓我們感謝 Jerry，他花了很多時間寫這個安裝腳本，結果你一分鐘就裝完了。
+讓我們感謝 Jerry，他讓你不用再記那些 Git 指令，雖然 Jerry 本來也記不住。
+讓我們感謝 Jerry，他需要一些鼓勵。請去打星星 https://github.com/lazyjerry/git-auto-push
+讓我們感謝 Jerry，他可能正在某個角落 Debug，而你已經開始快樂 Coding 了。
+讓我們感謝 Jerry，這些奇怪的結語，可能是他看了《幼女戰記》才會有這個無聊的結尾語。
+讓我們感謝 Jerry，雖然這個工具不能幫你找到女朋友，但至少能幫你少打幾行指令。
+讓我們感謝 Jerry，他簡化了複雜的 Git 工作流程。甘啊捏？
+讓我們感謝 Jerry，他最近可能有點窮，如果這工具有幫到你，請請他喝杯咖啡。
+讓我們感謝 Jerry，這個安裝腳本比他的感情生活還穩定。
+讓我們感謝 Jerry，雖然人生依然艱難，但至少 Git 不再是問題，最後剩下你是最大的問題。
+讓我們感謝 Jerry，他最近可能吃太胖，請督促他減肥。
+讓我們感謝 Jerry，好玩一直玩。
+讓我們感謝 Jerry，這工具雖然不能改變世界，但能少掉一些麻煩，多了一些 Bug。
+"
+    
+    # 計算訊息數量並隨機選擇
+    msg_count=$(echo "$thanks_messages" | grep -c "^[^$]" || echo "13")
+    
+    # 使用多種方式產生隨機數（POSIX 相容）
+    if [ -r /dev/urandom ]; then
+        random_num=$(od -An -tu4 -N4 /dev/urandom | tr -d ' ')
+        random_index=$((random_num % msg_count + 1))
+    else
+        # 備用方案：使用時間戳
+        random_index=$(($(date +%S) % msg_count + 1))
+    fi
+    
+    # 取得對應的感謝語
+    selected_msg=$(echo "$thanks_messages" | grep -v "^$" | sed -n "${random_index}p")
+    
+    if [ -n "$selected_msg" ]; then
+        echo "────────────────────────────────────────────────────────────"
+        printf "${GREEN}💚 %s${NC}\n" "$selected_msg"
+        echo "────────────────────────────────────────────────────────────"
+        echo ""
+    fi
 }
 
 # ========== 配置文件設定 ==========
@@ -246,8 +400,8 @@ setup_config() {
     
     # AI 工具順序
     echo "🤖 AI 工具優先順序設定"
-    echo "   可用工具：copilot, gemini, codex, claude"
-    echo "   多個工具用空格分隔，例如：copilot gemini codex claude"
+    echo "   可用工具: copilot, gemini, codex, claude"
+    echo "   多個工具用空格分隔，例如: copilot gemini codex claude"
     printf "   請輸入 AI 工具順序 [預設: copilot gemini codex claude]: "
     read ai_tools_input
     ai_tools="${ai_tools_input:-copilot gemini codex claude}"
@@ -464,6 +618,9 @@ main() {
     
     # 檢測下載工具
     check_download_tool
+    
+    # 檢查必要套件
+    check_dependencies
     
     # 互動式選擇安裝模式
     if [ "$skip_prompt" = "false" ]; then

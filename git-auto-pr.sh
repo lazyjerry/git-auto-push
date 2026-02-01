@@ -143,6 +143,7 @@ EOF
 : "${AI_TOOLS:=}"
 if [ ${#AI_TOOLS[@]} -eq 0 ]; then
     AI_TOOLS=(
+        "copilot"
         "gemini"
         "codex"
         "claude"
@@ -508,6 +509,127 @@ run_command_with_loading() {
     # 確保 exit_code 是整數再返回
     exit_code=$((exit_code + 0))
     return $exit_code
+}
+
+# 執行 GitHub Copilot CLI 命令（使用 programmatic mode）
+# 參數：
+#   $1 - prompt 提示詞
+#   $2 - content 要分析的內容
+#   $3 - timeout 超時時間（可選，預設 60 秒）
+run_copilot_command() {
+    local prompt="$1"
+    local content="$2"
+    local timeout="${3:-60}"
+    
+    info_msg "正在調用 copilot..."
+    
+    # 檢查 copilot 是否可用
+    if ! command -v copilot >/dev/null 2>&1; then
+        warning_msg "copilot 工具未安裝"
+        warning_msg "💡 安裝方式: brew install copilot-cli 或 npm install -g @github/copilot"
+        return 1
+    fi
+    
+    # 檢查內容是否為空
+    if [ -z "$content" ]; then
+        warning_msg "沒有內容可供分析"
+        return 1
+    fi
+    
+    # 🔍 調試輸出
+    debug_msg "🔍 調試: run_copilot_command() - 即將傳遞給 copilot 的內容"
+    debug_msg "─────────────────────────────────────────"
+    debug_msg "📊 內容統計:"
+    debug_msg "   - Prompt 長度: ${#prompt} 字符"
+    debug_msg "   - Content 長度: ${#content} 字符"
+    debug_msg ""
+    debug_msg "📝 Prompt 內容:"
+    debug_msg "─────────────────────────────────────────"
+    echo "$prompt" | head -n 10 | sed 's/^/  /' >&2
+    debug_msg "─────────────────────────────────────────"
+    echo >&2
+    
+    # 創建臨時檔案存放 prompt（避免 shell 特殊字符問題）
+    local temp_prompt
+    temp_prompt=$(mktemp)
+    printf '%s\n\n%s' "$prompt" "$content" > "$temp_prompt"
+    
+    # 創建臨時檔案接收輸出
+    local temp_output
+    temp_output=$(mktemp)
+    
+    # 顯示 loading 動畫並執行 copilot（使用臨時檔案避免 eval 問題）
+    # 使用 -s (silent) 選項隱藏統計資訊
+    info_msg "正在等待 copilot 分析內容..."
+    
+    local exit_code=0
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$timeout" copilot -s -p "$(cat "$temp_prompt")" > "$temp_output" 2>&1
+        exit_code=$?
+    else
+        copilot -s -p "$(cat "$temp_prompt")" > "$temp_output" 2>&1
+        exit_code=$?
+    fi
+    
+    # 讀取輸出
+    local output=""
+    if [ -f "$temp_output" ]; then
+        output=$(cat "$temp_output")
+    fi
+    
+    # 清理臨時檔案
+    rm -f "$temp_prompt" "$temp_output"
+    
+    # 🔍 調試：顯示退出碼和輸出
+    debug_msg "🔍 調試: copilot 退出碼 exit_code='$exit_code'"
+    debug_msg "🔍 調試: 輸出 output='$output'"
+    
+    # 處理執行結果
+    case $exit_code in
+        0)
+            # 成功執行，檢查輸出
+            # 清理輸出（移除可能的 ANSI 色碼和多餘空白）
+            output=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g' | xargs)
+            
+            if [ -n "$output" ] && [ ${#output} -gt 3 ]; then
+                success_msg "copilot 回應完成"
+                echo "$output"
+                return 0
+            fi
+            warning_msg "copilot 沒有返回有效內容"
+            debug_msg "🔍 調試: copilot 原始輸出（前 500 字符）"
+            echo "$output" | head -c 500 | sed 's/^/  /' >&2
+            ;;
+        124)
+            error_msg "❌ copilot 執行超時（${timeout}秒）"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
+            ;;
+        *)
+            # 檢查特定錯誤類型
+            if [[ "$output" == *"not logged in"* ]] || [[ "$output" == *"authentication"* ]] || [[ "$output" == *"unauthorized"* ]]; then
+                error_msg "❌ copilot 認證錯誤"
+                warning_msg "💡 請執行：copilot /login"
+                show_ai_debug_info "copilot" "$prompt" "$content" "$output"
+            elif [[ "$output" == *"subscription"* ]] || [[ "$output" == *"Copilot"* && "$output" == *"access"* ]]; then
+                error_msg "❌ copilot 訂閱問題"
+                warning_msg "💡 請確認您的 GitHub Copilot 訂閱狀態"
+                show_ai_debug_info "copilot" "$prompt" "$content" "$output"
+            elif [[ "$output" == *"rate limit"* ]] || [[ "$output" == *"quota"* ]] || [[ "$output" == *"premium"* ]]; then
+                error_msg "❌ copilot 配額限制"
+                warning_msg "💡 您的 premium requests 配額可能已用盡，請稍後再試"
+                show_ai_debug_info "copilot" "$prompt" "$content" "$output"
+            elif [[ "$output" == *"network"* ]] || [[ "$output" == *"connection"* ]]; then
+                error_msg "❌ copilot 網路錯誤"
+                warning_msg "💡 請檢查網路連接"
+                show_ai_debug_info "copilot" "$prompt" "$content" "$output"
+            else
+                warning_msg "copilot 執行失敗（退出碼: $exit_code）"
+                show_ai_debug_info "copilot" "$prompt" "$content" "$output"
+            fi
+            ;;
+    esac
+    
+    return 1
 }
 
 # 執行 codex 命令並處理輸出
@@ -968,6 +1090,23 @@ Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lo
         
         local result
         case "$tool" in
+            "copilot")
+                # 為分支名稱生成使用較短的超時時間（30秒）
+                if result=$(run_copilot_command "$prompt" "$content" 30); then
+                    debug_msg "🔍 調試: copilot 原始輸出 result='$result'"
+                    result=$(clean_branch_name "$result")
+                    debug_msg "🔍 調試: 清理後的 result='$result'"
+                    if [ -n "$result" ]; then
+                        success_msg "✅ $tool 生成分支名稱成功: $result"
+                        echo "$result"
+                        return 0
+                    else
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空"
+                    fi
+                else
+                    warning_msg "⚠️  run_copilot_command 執行失敗或返回空結果"
+                fi
+                ;;
             "codex")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_codex_command "$prompt" "$content" 30); then
@@ -1076,6 +1215,28 @@ generate_pr_content_with_ai() {
         local timeout=60
         
         case "$tool" in
+            "copilot")
+                # 檢查 copilot 是否可用
+                if ! command -v copilot >/dev/null 2>&1; then
+                    warning_msg "copilot 工具未安裝"
+                    continue
+                fi
+                
+                # 讀取臨時文件內容
+                local content_text
+                content_text=$(cat "$temp_content")
+                
+                # 調用 run_copilot_command 函數
+                if result=$(run_copilot_command "$prompt" "$content_text" "$timeout"); then
+                    debug_msg "🔍 調試: copilot PR 內容原始輸出 result='$result'"
+                    success_msg "✅ $tool 生成 PR 內容成功"
+                    rm -f "$temp_content"
+                    echo "$result"
+                    return 0
+                else
+                    warning_msg "$tool 無法生成 PR 內容"
+                fi
+                ;;
             "codex")
                 # 檢查 codex 是否可用
                 if ! command -v codex >/dev/null 2>&1; then

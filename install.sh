@@ -246,11 +246,11 @@ setup_config() {
     
     # AI 工具順序
     echo "🤖 AI 工具優先順序設定"
-    echo "   可用工具：gemini, codex, claude"
-    echo "   多個工具用空格分隔，例如：gemini codex claude"
-    printf "   請輸入 AI 工具順序 [預設: gemini codex claude]: "
+    echo "   可用工具：copilot, gemini, codex, claude"
+    echo "   多個工具用空格分隔，例如：copilot gemini codex claude"
+    printf "   請輸入 AI 工具順序 [預設: copilot gemini codex claude]: "
     read ai_tools_input
-    ai_tools="${ai_tools_input:-gemini codex claude}"
+    ai_tools="${ai_tools_input:-copilot gemini codex claude}"
     echo ""
     
     # 預設使用者名稱

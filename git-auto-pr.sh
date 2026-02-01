@@ -6,6 +6,86 @@
 # 作者：Lazy Jerry | 版本：v2.6.0 | 授權：MIT License
 
 # ==============================================
+# 配置文件加載區域
+# ==============================================
+
+# 配置文件目錄與檔案名稱
+readonly CONFIG_DIR_NAME=".git-auto-push-config"
+readonly CONFIG_FILE_NAME=".env"
+
+# 獲取腳本所在目錄（解析符號連結）
+get_script_dir() {
+    local source="${BASH_SOURCE[0]}"
+    while [ -L "$source" ]; do
+        local dir
+        dir=$(cd -P "$(dirname "$source")" && pwd)
+        source=$(readlink "$source")
+        [[ $source != /* ]] && source="$dir/$source"
+    done
+    cd -P "$(dirname "$source")" && pwd
+}
+
+# 加載配置文件（如果存在）
+# 參數：$1 - 配置文件路徑
+# 返回：0=成功加載，1=文件不存在或加載失敗
+load_config_file() {
+    local config_path="$1"
+    if [ -f "$config_path" ]; then
+        # shellcheck source=/dev/null
+        if source "$config_path" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# 加載配置文件（按優先級）
+# 優先級：當前工作目錄 > 用戶 Home > 腳本所在目錄
+load_config() {
+    local script_dir
+    script_dir=$(get_script_dir)
+    local config_loaded=false
+    local loaded_from=""
+    local config_path=""
+    
+    # 優先級 1：當前工作目錄（與腳本執行位置無關）
+    config_path="$PWD/$CONFIG_DIR_NAME/$CONFIG_FILE_NAME"
+    if load_config_file "$config_path"; then
+        config_loaded=true
+        loaded_from="$config_path"
+    fi
+    
+    # 優先級 2：用戶 Home 目錄
+    if [ "$config_loaded" = false ]; then
+        config_path="$HOME/$CONFIG_DIR_NAME/$CONFIG_FILE_NAME"
+        if load_config_file "$config_path"; then
+            config_loaded=true
+            loaded_from="$config_path"
+        fi
+    fi
+    
+    # 優先級 3：腳本所在目錄（主要用於全域安裝時的預設配置）
+    if [ "$config_loaded" = false ]; then
+        config_path="$script_dir/$CONFIG_DIR_NAME/$CONFIG_FILE_NAME"
+        if load_config_file "$config_path"; then
+            config_loaded=true
+            loaded_from="$config_path"
+        fi
+    fi
+    
+    # 如果有加載配置文件，在調試模式下顯示訊息
+    if [ "$config_loaded" = true ]; then
+        # 注意：此時 IS_DEBUG 可能已被配置文件覆蓋
+        if [ "${IS_DEBUG:-false}" = true ]; then
+            printf "\033[0;90m📁 已加載配置文件: %s\033[0m\n" "$loaded_from" >&2
+        fi
+    fi
+}
+
+# 在設定預設值之前先加載配置文件
+load_config
+
+# ==============================================
 # AI 提示詞配置區域 - 管理所有 AI 工具的提示詞模板函數
 # ==============================================
 
@@ -51,25 +131,38 @@ Issue Key: $issue_key
 EOF
 }
 
+# ==============================================
+# AI 工具配置區域（預設值，可被配置文件覆蓋）
+# ==============================================
+
 # AI 工具優先順序配置（依陣列順序調用，失敗時自動嘗試下一個）
-readonly AI_TOOLS=(
-    "gemini"
-    "codex"
-    "claude"
-)
+: "${AI_TOOLS:=}"
+if [ ${#AI_TOOLS[@]} -eq 0 ]; then
+    AI_TOOLS=(
+        "gemini"
+        "codex"
+        "claude"
+    )
+fi
+
+# 調試模式設定
+: "${IS_DEBUG:=false}"
 
 # ==============================================
-# 分支配置區域
+# 分支配置區域（預設值，可被配置文件覆蓋）
 # ==============================================
 
 # 主分支候選清單（依陣列順序檢測第一個存在的遠端分支）
-readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
+: "${DEFAULT_MAIN_BRANCHES:=}"
+if [ ${#DEFAULT_MAIN_BRANCHES[@]} -eq 0 ]; then
+    DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
+fi
 
 # 預設使用者名稱（用於生成分支名稱前綴：username/type/issue-description）
-readonly DEFAULT_USERNAME="jerry"
+: "${DEFAULT_USERNAME:=jerry}"
 
 # PR 合併後分支刪除策略（true=自動刪除，false=保留分支）
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false
+: "${AUTO_DELETE_BRANCH_AFTER_MERGE:=false}"
 
 # ==============================================
 # 訊息輸出函數區域 - ANSI 彩色格式化輸出至 stderr

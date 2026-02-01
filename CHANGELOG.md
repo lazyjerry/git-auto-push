@@ -4,6 +4,62 @@
 
 ## 版本歷史
 
+### v2.6.0 - 外部配置文件系統 (2025-01-XX)
+
+**🆕 新功能**
+
+- **外部配置文件系統** 🆕：支援透過 `.git-auto-config` 配置文件自訂設定，無需修改腳本
+  - **配置文件名稱**：`.git-auto-config`
+  - **範例文件**：`.git-auto-config.example`
+  - **支援的配置項**：AI_TOOLS、IS_DEBUG、AUTO_INCLUDE_TICKET、AUTO_CHECK_COMMIT_QUALITY、DEFAULT_MAIN_BRANCHES、DEFAULT_USERNAME、AUTO_DELETE_BRANCH_AFTER_MERGE 等
+
+- **配置文件優先級系統** 🆕：支援多層級配置讀取
+  - **優先級 1**：當前工作目錄 `$PWD/.git-auto-config`（僅非全域安裝時）
+  - **優先級 2**：用戶 Home 目錄 `$HOME/.git-auto-config`
+  - **優先級 3**：腳本所在目錄 `[script_dir]/.git-auto-config`
+
+**🔧 改進**
+
+- **符號連結解析** ⚡：正確解析腳本的實際路徑，支援全域安裝時的符號連結
+- **調試訊息** 🐛：配置文件加載時在調試模式下顯示來源路徑
+- **預設值系統** 🎯：使用 Bash `${var:=default}` 語法，確保配置文件的值優先於預設值
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：3072 行 → 2310 行（新增配置加載系統後的行數）
+- `git-auto-pr.sh`：2523 行 → 2621 行（新增配置加載系統後的行數）
+- 新增 `.git-auto-config.example`：80 行
+
+**🎯 使用場景**
+
+- **用戶級配置**：在 `~/.git-auto-config` 設定個人偏好（如使用者名稱、AI 工具順序）
+- **專案級配置**：在專案目錄放置 `.git-auto-config` 覆蓋特定專案的設定
+- **全域安裝配置**：在 `/usr/local/bin/.git-auto-config` 設定系統預設值
+
+**⚙️ 配置方式**
+
+```bash
+# 複製範例配置
+cp .git-auto-config.example ~/.git-auto-config
+
+# 編輯配置
+nano ~/.git-auto-config
+
+# 範例配置內容
+AI_TOOLS=("claude" "gemini")
+DEFAULT_USERNAME="your-name"
+IS_DEBUG=false
+```
+
+**💡 效益提升**
+
+- ✅ **無需修改腳本**：所有配置都可透過外部文件設定
+- ✅ **版本控制友善**：配置文件可納入 .gitignore 或分開管理
+- ✅ **多環境支援**：同一腳本可在不同環境使用不同配置
+- ✅ **升級無痛**：更新腳本時不會覆蓋個人配置
+
+---
+
 ### v2.5.1 - 檔案過濾功能優化與可配置性提升 (2025-11-09)
 
 **🆕 新功能**

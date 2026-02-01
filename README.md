@@ -133,6 +133,34 @@ sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr
 brew install gh && gh auth login
 ```
 
+### 個人化配置 🆕
+
+支援外部配置文件自訂設定，無需修改腳本：
+
+```bash
+# 建立配置目錄並複製配置範例
+mkdir -p ~/.git-auto-push-config
+cp .git-auto-push-config/.env.example ~/.git-auto-push-config/.env
+
+# 編輯配置
+nano ~/.git-auto-push-config/.env
+```
+
+**配置文件優先級**：當前工作目錄 → Home 目錄 → 腳本目錄
+
+常用配置選項：
+
+```bash
+# AI 工具優先順序
+AI_TOOLS=("claude" "gemini" "codex")
+
+# 預設使用者名稱
+DEFAULT_USERNAME="your-name"
+
+# 調試模式
+IS_DEBUG=false
+```
+
 > 📖 更多安裝選項、個人化設定和 AI 工具安裝，請參閱 [完整安裝指南](docs/INSTALLATION.md)
 
 ## 使用方法

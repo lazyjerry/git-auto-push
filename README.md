@@ -2,7 +2,7 @@
 
 Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitHub Flow PR 流程。整合 AI 驅動的內容產生功能、Conventional Commits 前綴支援、Commit 訊息品質檢查、任務編號自動帶入、調試模式和錯誤處理機制。
 
-版本：v2.6.0
+版本：v2.7.0
 
 ## 專案簡介
 

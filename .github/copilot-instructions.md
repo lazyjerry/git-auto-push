@@ -5,8 +5,9 @@
 ## 🏗️ 架構概覽
 
 ### 雙腳本架構
-- **`git-auto-push.sh`** (3065 行) - 傳統 Git 操作自動化（add/commit/push）
-- **`git-auto-pr.sh`** (3135 行) - GitHub Flow PR 流程自動化
+- **`git-auto-push.sh`** (2397 行) - 傳統 Git 操作自動化（add/commit/push）
+- **`git-auto-pr.sh`** (2619 行) - GitHub Flow PR 流程自動化
+- **`install.sh`** (532 行) - POSIX Shell 相容安裝腳本
 
 ### 核心設計模式
 - **模組化函數設計**：所有主要功能都封裝為獨立函數（如 `error_msg()`, `run_command()`）
@@ -17,8 +18,19 @@
 
 ### AI 工具配置 (兩檔案同步)
 ```bash
-# 位置：檔案頂部配置區域
-readonly AI_TOOLS=("codex" "gemini" "claude")  # 優先順序陣列
+# 位置：檔案頂部預設值區域，使用條件賦值
+# 配置文件優先載入，若未設定則使用預設值
+if [ ${#AI_TOOLS[@]} -eq 0 ]; then
+    AI_TOOLS=("gemini" "codex" "claude")  # 預設優先順序
+fi
+```
+
+### 外部配置文件
+```bash
+# 配置文件位置（優先級順序）
+# 1. $PWD/.git-auto-push-config/.env  （專案級）
+# 2. $HOME/.git-auto-push-config/.env （用戶級）
+# 3. [script_dir]/.git-auto-push-config/.env （全域）
 ```
 
 ### 調試模式配置
@@ -31,9 +43,10 @@ IS_DEBUG=true   # 開發調試時開啟
 
 ### 分支管理配置 (git-auto-pr.sh 獨有)
 ```bash
-readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")  # 自動偵測順序
-readonly DEFAULT_USERNAME="jerry"                          # 預設使用者名稱  
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false              # PR 合併後分支處理策略
+# 使用條件賦值，配置文件優先
+DEFAULT_MAIN_BRANCHES=("uat" "main" "master")  # 自動偵測順序
+DEFAULT_USERNAME="jerry"                        # 預設使用者名稱  
+AUTO_DELETE_BRANCH_AFTER_MERGE=false            # PR 合併後分支處理策略
 ```
 
 ## 🔧 開發工作流程
@@ -99,8 +112,9 @@ for tool in codex gemini claude; do command -v "$tool" && echo "$tool 可用"; d
 
 ### 行數統計維護
 README.md 中包含精確的行數統計，修改後需同步更新：
-- `git-auto-push.sh`: 當前 3065 行
-- `git-auto-pr.sh`: 當前 3135 行
+- `git-auto-push.sh`: 當前 2397 行
+- `git-auto-pr.sh`: 當前 2619 行
+- `install.sh`: 當前 532 行
 
 ### Commit 訊息規範
 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 格式，工具本身也會產生符合此規範的 commit 訊息。

@@ -123,13 +123,14 @@ IS_DEBUG=false
 
 您也可以直接修改腳本頂部的預設值：
 
-#### git-auto-push.sh 設定（約第 90-200 行）
+#### git-auto-push.sh 設定（約第 100-130 行）
 
 ```bash
 # AI 工具優先順序（預設值區塊）
 AI_TOOLS=(
+    "copilot"   # GitHub Copilot CLI（推薦）
     "gemini"    # Google Gemini CLI
-    "codex"     # GitHub Copilot CLI  
+    "codex"     # GitHub Copilot CLI (codex)
     "claude"    # Anthropic Claude CLI
 )
 
@@ -142,7 +143,7 @@ AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 
 ```bash
 # AI 工具優先順序（預設值區塊）
-AI_TOOLS=("gemini" "codex" "claude")
+AI_TOOLS=("copilot" "gemini" "codex" "claude")
 
 # 主分支偵測順序
 DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
@@ -273,7 +274,7 @@ bash -n git-auto-pr.sh && echo "✅ git-auto-pr.sh 語法正確"
 ./git-auto-pr.sh --help
 
 # 檢查 AI 工具可用性
-for tool in codex gemini claude; do 
+for tool in copilot codex gemini claude; do 
     command -v "$tool" >/dev/null 2>&1 && echo "✅ $tool 可用" || echo "⚠️ $tool 未安裝"
 done
 

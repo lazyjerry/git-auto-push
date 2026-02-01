@@ -28,13 +28,13 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 ### 核心元件架構
 
 ```
-├── git-auto-push.sh      # 傳統 Git 工作流程自動化（2397 行，註解與流程說明）
-├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2619 行，程式碼文件與流程註解）
+├── git-auto-push.sh      # 傳統 Git 工作流程自動化（2562 行，註解與流程說明）
+├── git-auto-pr.sh        # GitHub Flow PR 流程自動化（2780 行，程式碼文件與流程註解）
 ├── Conventional Commits 🆕 # Commit 訊息前綴支援
 │   ├── 手動選擇前綴      # feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert
 │   ├── AI 自動判斷        # 根據 git diff 自動選擇最適合的前綴
 │   └── 跳過選項          # 可選擇不使用前綴
-├── AI 工具整合模組        # 支援 codex、gemini、claude
+├── AI 工具整合模組        # 支援 copilot、gemini、codex、claude
 │   ├── 錯誤偵測          # 認證過期、網路錯誤自動識別
 │   ├── 錯誤提示          # 提供具體解決方案
 │   ├── 多工具容錯機制    # AI 工具失效時的備援機制
@@ -152,7 +152,7 @@ nano ~/.git-auto-push-config/.env
 
 ```bash
 # AI 工具優先順序
-AI_TOOLS=("claude" "gemini" "codex")
+AI_TOOLS=("copilot" "claude" "gemini" "codex")
 
 # 預設使用者名稱
 DEFAULT_USERNAME="your-name"
@@ -208,7 +208,7 @@ IS_DEBUG=false
 
 **多 AI 工具整合**
 
-- 支援 codex、gemini、claude 三種 AI CLI 工具
+- 支援 copilot、gemini、codex、claude 四種 AI CLI 工具
 - 自動容錯機制：當一個 AI 工具失效時自動嘗試下一個
 - 輸出清理：過濾 AI 工具的元數據和技術雜訊
 - 提示優化：精簡 70%+ 提示長度，提升處理速度和準確性
@@ -443,7 +443,7 @@ git-auto-pr                    # 選擇選項 3（建立 PR）
 
 - **AI_TOOLS 變數**：統一的 AI 工具優先順序陣列
 - **條件賦值**：使用 `: "${VAR:=default}"` 語法，配置文件優先於預設值
-- **預設調用順序**：gemini → codex → claude（可透過配置文件覆蓋）
+- **預設調用順序**：copilot → gemini → codex → claude（可透過配置文件覆蓋）
 
 ### 📝 程式碼文檔標準
 
@@ -489,14 +489,15 @@ generate_ai_pr_prompt() {
 ```bash
 # 方式一：透過配置文件覆蓋（推薦）
 # ~/.git-auto-push-config/.env
-AI_TOOLS=("codex" "gemini" "claude")
+AI_TOOLS=("copilot" "codex" "gemini" "claude")
 
 # 方式二：修改腳本預設值（進階）
 # 找到 AI_TOOLS 預設值區塊，修改陣列內容
 AI_TOOLS=(
-    "codex"     # 第一優先
-    "gemini"    # 第二優先
-    "claude"    # 第三優先
+    "copilot"   # 第一優先
+    "codex"     # 第二優先
+    "gemini"    # 第三優先
+    "claude"    # 第四優先
 )
 ```
 
@@ -620,7 +621,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - 📅 **最新版本**：v2.7.0 (2026-02-01)
 - 📈 **總版本數**：15 個主要版本  
 - 🗓️ **開發期間**：2025-09-13 至今
-- 📊 **程式碼行數**：`git-auto-push.sh` 2,397 行、`git-auto-pr.sh` 2,619 行
+- 📊 **程式碼行數**：`git-auto-push.sh` 2,562 行、`git-auto-pr.sh` 2,780 行、`install.sh` 532 行
 
 ### 參考資源
 

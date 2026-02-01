@@ -4,7 +4,60 @@
 
 ## 版本歷史
 
-### v2.7.0 - 外部配置文件系統與 POSIX Shell 相容性 (2025-02-01)
+### v2.8.0 - GitHub Copilot CLI 整合與安裝腳本強化 (2026-02-01)
+
+**🆕 新功能**
+
+- **GitHub Copilot CLI 整合** 🆕：新增 copilot 作為 AI 工具選項
+  - **優先順序**：copilot → gemini → codex → claude（copilot 為第一優先）
+  - **統一執行邏輯**：run_copilot_command 使用 run_command_with_loading 顯示 loading 動畫
+  - **錯誤處理**：支援認證錯誤、訂閱問題、配額限制等錯誤偵測與提示
+  - **雙腳本同步**：git-auto-push.sh 和 git-auto-pr.sh 同時支援
+
+- **安裝腳本依賴檢測** 🆕：新增 check_dependencies() 函數
+  - **必要工具檢查**：git、gh CLI
+  - **AI 工具檢測**：copilot、gemini、codex、claude（顯示可用狀態）
+  - **安裝 URL 提示**：未安裝的 AI 工具提供官方安裝連結
+    - copilot: https://docs.github.com/en/copilot/github-copilot-in-the-cli
+    - gemini: https://github.com/nicholasgriffintn/gemini-cli
+    - codex: https://github.com/openai/codex
+    - claude: https://docs.anthropic.com/en/docs/claude-cli
+
+- **隨機感謝語功能** 🆕：新增 show_random_thanks() 函數
+  - **13 條幽默感謝語**：Jerry 風格的趣味訊息
+  - **安裝完成提示**：每次安裝後隨機顯示一條感謝語
+
+**🔧 改進**
+
+- **Loading 動畫統一** ⚡：copilot 執行時顯示 spinner 和倒數計時
+- **文檔同步更新** 📝：README.md、INSTALLATION.md、copilot-instructions.md 同步更新
+- **配置範例更新** 📋：.env.example 新增 copilot 工具
+
+**📊 行數統計更新**
+
+- `git-auto-push.sh`：2397 行 → 2552 行（+155 行 Copilot 整合）
+- `git-auto-pr.sh`：2619 行 → 2769 行（+150 行 Copilot 整合）
+- `install.sh`：532 行 → 689 行（+157 行依賴檢測與感謝語）
+
+**🎯 使用場景**
+
+- **GitHub Copilot 用戶**：已有 Copilot 訂閱的用戶可直接使用 copilot CLI 產生 commit 訊息
+- **快速安裝驗證**：安裝後立即知道哪些 AI 工具可用、哪些需要安裝
+- **輕鬆的使用體驗**：幽默的感謝語讓工具更有溫度
+
+**⚙️ 配置方式**
+
+```bash
+# 在 .env 中設定 AI 工具順序（copilot 優先）
+AI_TOOLS=("copilot" "gemini" "codex" "claude")
+
+# 或調整為其他順序
+AI_TOOLS=("gemini" "copilot" "claude" "codex")
+```
+
+---
+
+### v2.7.0 - 外部配置文件系統與 POSIX Shell 相容性 (2026-01-31)
 
 **🆕 新功能**
 
@@ -554,9 +607,9 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 ## 版本統計
 
-- **最新版本**：v2.7.0 (2025-02-01)
-- **總版本數**：15 個主要版本
-- **開發期間**：2025-09-13 至 2025-02-01
+- **最新版本**：v2.8.0 (2026-02-01)
+- **總版本數**：16 個主要版本
+- **開發期間**：2025-08-21 至 2026-02-01
 - **功能里程碑**：
   - v1.x：基礎功能和 PR 管理
   - v2.0：程式碼品質提升
@@ -565,6 +618,7 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
   - v2.5：程式碼重構和專案優化
   - v2.5.1：檔案過濾功能優化
   - v2.7.0：外部配置文件系統與 POSIX Shell 相容性
+  - v2.8.0：GitHub Copilot CLI 整合與安裝腳本強化
 
 ## 相關文檔
 

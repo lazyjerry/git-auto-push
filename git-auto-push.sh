@@ -78,6 +78,10 @@ load_config() {
         # 注意：此時 IS_DEBUG 可能已被配置文件覆蓋
         if [ "${IS_DEBUG:-false}" = true ]; then
             printf "\033[0;90m📁 已加載配置文件: %s\033[0m\n" "$loaded_from" >&2
+            # 顯示 AI_TOOLS 配置（如果已設定）
+            if [ ${#AI_TOOLS[@]} -gt 0 ]; then
+                printf "\033[0;90m   AI_TOOLS=(%s)\033[0m\n" "${AI_TOOLS[*]}" >&2
+            fi
         fi
     fi
 }
@@ -89,7 +93,7 @@ load_config
 # AI 工具配置區域
 # ==============================================
 
-# AI 工具優先順序配置
+# AI 工具優先順序配置（預設值，可被配置文件覆蓋）
 # 說明：定義 AI 工具的調用順序，當前一個工具失敗時會自動嘗試下一個。
 #       腳本會依陣列順序逐一調用，直到成功或全部失敗。
 # 修改方式：調整陣列元素順序或新增其他 AI CLI 工具名稱（需系統已安裝）
@@ -98,13 +102,16 @@ load_config
 #   - gemini：可能有網路或認證問題，需配置 API key
 #   - claude：需要登入認證或 API 設定
 # 範例：
-#   readonly AI_TOOLS=("codex")                    # 僅使用 codex
-#   readonly AI_TOOLS=("gemini" "codex" "claude")  # 調整優先順序
-readonly AI_TOOLS=(
-    "gemini"
-    "codex"
-    "claude"
-)
+#   AI_TOOLS=("codex")                    # 僅使用 codex
+#   AI_TOOLS=("gemini" "codex" "claude")  # 調整優先順序
+: "${AI_TOOLS:=}"
+if [ ${#AI_TOOLS[@]} -eq 0 ]; then
+    AI_TOOLS=(
+        "gemini"
+        "codex"
+        "claude"
+    )
+fi
 
 # AI 提示詞配置
 # 說明：用於 commit 訊息生成的統一提示詞模板。
@@ -143,7 +150,7 @@ readonly -a COMMIT_PREFIXES=(
 #   - 必須從預定義的前綴清單中選擇
 readonly AI_PREFIX_PROMPT="根據以下 git 變更，選擇最適合的 Conventional Commits 前綴類型。可用前綴：feat(新功能)、fix(錯誤修復)、docs(文件)、style(格式)、refactor(重構)、perf(效能)、test(測試)、build(建置)、ci(CI)、chore(維護)、revert(回退)。只輸出前綴關鍵字(例如:feat)，不要包含冒號或說明："
 
-# 任務編號自動帶入設定
+# 任務編號自動帶入設定（預設值，可被配置文件覆蓋）
 # 說明：控制是否在 commit 訊息前自動加入任務編號（從分支名稱偵測）。
 #       任務編號格式如：JIRA-123、PROJ-456、feat-001 等。
 # 效果：
@@ -155,9 +162,9 @@ readonly AI_PREFIX_PROMPT="根據以下 git 變更，選擇最適合的 Conventi
 # 適用場景：
 #   - 團隊要求 commit 關聯任務編號時啟用
 #   - 個人專案或不需要任務編號時停用
-AUTO_INCLUDE_TICKET=true
+: "${AUTO_INCLUDE_TICKET:=true}"
 
-# Commit 訊息品質檢查設定
+# Commit 訊息品質檢查設定（預設值，可被配置文件覆蓋）
 # 說明：在 commit 前使用 AI 檢查訊息是否具有明確的目的和功能性。
 #       確保 commit 訊息清楚描述變更內容，避免無意義或模糊的訊息。
 # 效果：
@@ -173,9 +180,9 @@ AUTO_INCLUDE_TICKET=true
 # 適用場景：
 #   - 團隊要求高品質 commit 訊息時啟用
 #   - 個人專案或快速提交時可停用
-AUTO_CHECK_COMMIT_QUALITY=true
+: "${AUTO_CHECK_COMMIT_QUALITY:=true}"
 
-# 調試模式設定
+# 調試模式設定（預設值，可被配置文件覆蓋）
 # 說明：控制是否顯示調試訊息（debug_msg）和 AI 輸入輸出詳情（show_ai_debug_info）。
 #       調試訊息包含 AI 工具執行細節、錯誤追蹤、輸入輸出內容等技術資訊。
 # 效果：
@@ -188,7 +195,7 @@ AUTO_CHECK_COMMIT_QUALITY=true
 # 注意：
 #   - 調試訊息可能包含敏感資訊（如 API 回應、diff 內容）
 #   - 啟用後會大幅增加輸出內容，建議僅在需要時開啟
-IS_DEBUG=true
+: "${IS_DEBUG:=false}"
 
 # ==============================================
 # 訊息輸出函數區域

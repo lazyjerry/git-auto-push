@@ -1,66 +1,67 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Git 工作流程自動化工具集 - 安裝腳本
 # 
 # 使用方式：
-#   curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 #   或
-#   wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | bash
+#   wget -qO- https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 #
 # 選項：
 #   --local    僅安裝到當前目錄（預設）
 #   --global   安裝到系統路徑 /usr/local/bin（需要 sudo）
+#   --no-config 跳過配置文件設定
 #
 
 set -e
 
 # ========== 顏色定義 ==========
-readonly RED='\033[0;31m'
-readonly GREEN='\033[0;32m'
-readonly YELLOW='\033[1;33m'
-readonly BLUE='\033[0;34m'
-readonly CYAN='\033[0;36m'
-readonly NC='\033[0m' # No Color
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
 # ========== 配置 ==========
-readonly REPO_BASE_URL="https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master"
-readonly SCRIPTS=("git-auto-push.sh" "git-auto-pr.sh")
-readonly CONFIG_DIR=".git-auto-push-config"
-readonly CONFIG_FILE=".env"
-readonly GLOBAL_INSTALL_DIR="/usr/local/bin"
-readonly LOCAL_INSTALL_DIR="${PWD}"
+REPO_BASE_URL="https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master"
+SCRIPTS="git-auto-push.sh git-auto-pr.sh"
+CONFIG_DIR=".git-auto-push-config"
+CONFIG_FILE=".env"
+GLOBAL_INSTALL_DIR="/usr/local/bin"
+LOCAL_INSTALL_DIR="${PWD}"
 
 # ========== 輸出函數 ==========
 info() {
-    echo -e "${BLUE}ℹ️  ${NC}$1"
+    printf "${BLUE}ℹ️  ${NC}%s\n" "$1"
 }
 
 success() {
-    echo -e "${GREEN}✅ ${NC}$1"
+    printf "${GREEN}✅ ${NC}%s\n" "$1"
 }
 
 warning() {
-    echo -e "${YELLOW}⚠️  ${NC}$1"
+    printf "${YELLOW}⚠️  ${NC}%s\n" "$1"
 }
 
 error() {
-    echo -e "${RED}❌ ${NC}$1" >&2
+    printf "${RED}❌ ${NC}%s\n" "$1" >&2
 }
 
 header() {
     echo ""
-    echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  $1${NC}"
-    echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
+    printf "${CYAN}════════════════════════════════════════════════════════════${NC}\n"
+    printf "${CYAN}  %s${NC}\n" "$1"
+    printf "${CYAN}════════════════════════════════════════════════════════════${NC}\n"
     echo ""
 }
 
 # ========== 工具檢測 ==========
 check_download_tool() {
-    if command -v curl &> /dev/null; then
+    if command -v curl > /dev/null 2>&1; then
         DOWNLOAD_TOOL="curl"
         DOWNLOAD_CMD="curl -fsSL"
-    elif command -v wget &> /dev/null; then
+    elif command -v wget > /dev/null 2>&1; then
         DOWNLOAD_TOOL="wget"
         DOWNLOAD_CMD="wget -qO-"
     else
@@ -73,10 +74,10 @@ check_download_tool() {
 
 # ========== 下載函數 ==========
 download_file() {
-    local url="$1"
-    local output="$2"
+    url="$1"
+    output="$2"
     
-    if [[ "$DOWNLOAD_TOOL" == "curl" ]]; then
+    if [ "$DOWNLOAD_TOOL" = "curl" ]; then
         curl -fsSL "$url" -o "$output"
     else
         wget -q "$url" -O "$output"
@@ -85,18 +86,19 @@ download_file() {
 
 # ========== 安裝函數 ==========
 install_scripts() {
-    local install_dir="$1"
-    local use_sudo="$2"
-    local sudo_cmd=""
+    install_dir="$1"
+    use_sudo="$2"
+    sudo_cmd=""
     
-    [[ "$use_sudo" == "true" ]] && sudo_cmd="sudo"
+    if [ "$use_sudo" = "true" ]; then
+        sudo_cmd="sudo"
+    fi
     
-    for script in "${SCRIPTS[@]}"; do
-        local url="${REPO_BASE_URL}/${script}"
-        local script_name="${script%.sh}"  # 移除 .sh 副檔名（全域安裝用）
-        local target_path
+    for script in $SCRIPTS; do
+        url="${REPO_BASE_URL}/${script}"
+        script_name=$(echo "$script" | sed 's/\.sh$//')
         
-        if [[ "$use_sudo" == "true" ]]; then
+        if [ "$use_sudo" = "true" ]; then
             target_path="${install_dir}/${script_name}"
         else
             target_path="${install_dir}/${script}"
@@ -105,7 +107,7 @@ install_scripts() {
         info "下載 ${script}..."
         
         # 下載到暫存檔
-        local tmp_file=$(mktemp)
+        tmp_file=$(mktemp)
         if ! download_file "$url" "$tmp_file"; then
             error "下載 ${script} 失敗"
             rm -f "$tmp_file"
@@ -113,7 +115,7 @@ install_scripts() {
         fi
         
         # 驗證下載內容
-        if [[ ! -s "$tmp_file" ]]; then
+        if [ ! -s "$tmp_file" ]; then
             error "下載的檔案為空：${script}"
             rm -f "$tmp_file"
             exit 1
@@ -127,7 +129,7 @@ install_scripts() {
         fi
         
         # 移動到目標位置
-        if [[ "$use_sudo" == "true" ]]; then
+        if [ "$use_sudo" = "true" ]; then
             $sudo_cmd install -m 755 "$tmp_file" "$target_path"
         else
             mv "$tmp_file" "$target_path"
@@ -141,24 +143,23 @@ install_scripts() {
 
 # ========== 驗證安裝 ==========
 verify_installation() {
-    local install_dir="$1"
-    local is_global="$2"
+    install_dir="$1"
+    is_global="$2"
     
     echo ""
     info "驗證安裝..."
     
-    local all_ok=true
-    for script in "${SCRIPTS[@]}"; do
-        local script_name="${script%.sh}"
-        local target_path
+    all_ok=true
+    for script in $SCRIPTS; do
+        script_name=$(echo "$script" | sed 's/\.sh$//')
         
-        if [[ "$is_global" == "true" ]]; then
+        if [ "$is_global" = "true" ]; then
             target_path="${install_dir}/${script_name}"
         else
             target_path="${install_dir}/${script}"
         fi
         
-        if [[ -x "$target_path" ]]; then
+        if [ -x "$target_path" ]; then
             success "${target_path} 已安裝且可執行"
         else
             error "${target_path} 安裝失敗或不可執行"
@@ -166,7 +167,7 @@ verify_installation() {
         fi
     done
     
-    if [[ "$all_ok" == "true" ]]; then
+    if [ "$all_ok" = "true" ]; then
         return 0
     else
         return 1
@@ -175,13 +176,13 @@ verify_installation() {
 
 # ========== 顯示使用說明 ==========
 show_usage() {
-    local install_dir="$1"
-    local is_global="$2"
+    install_dir="$1"
+    is_global="$2"
     
     echo ""
     header "安裝完成！"
     
-    if [[ "$is_global" == "true" ]]; then
+    if [ "$is_global" = "true" ]; then
         echo "📌 已安裝到系統路徑，可在任意目錄使用："
         echo ""
         echo "   git-auto-push          # 傳統 Git 自動化"
@@ -211,9 +212,9 @@ show_usage() {
 
 # ========== 配置文件設定 ==========
 setup_config() {
-    local config_location="$1"
-    local config_dir_path=""
-    local config_file_path=""
+    config_location="$1"
+    config_dir_path=""
+    config_file_path=""
     
     case "$config_location" in
         home)
@@ -236,38 +237,43 @@ setup_config() {
     header "配置文件設定"
     
     # 收集配置選項
-    local ai_tools=""
-    local default_username=""
-    local is_debug=""
-    local auto_include_ticket=""
-    local auto_check_quality=""
-    local main_branches=""
+    ai_tools=""
+    default_username=""
+    is_debug=""
+    auto_include_ticket=""
+    auto_check_quality=""
+    main_branches=""
     
     # AI 工具順序
     echo "🤖 AI 工具優先順序設定"
     echo "   可用工具：gemini, codex, claude"
     echo "   多個工具用空格分隔，例如：gemini codex claude"
-    read -p "   請輸入 AI 工具順序 [預設: gemini codex claude]: " ai_tools_input
+    printf "   請輸入 AI 工具順序 [預設: gemini codex claude]: "
+    read ai_tools_input
     ai_tools="${ai_tools_input:-gemini codex claude}"
     echo ""
     
     # 預設使用者名稱
     echo "👤 預設使用者名稱（用於分支命名）"
-    local current_git_user=""
+    current_git_user=""
     current_git_user=$(git config user.name 2>/dev/null || echo "")
-    if [[ -n "$current_git_user" ]]; then
-        read -p "   請輸入使用者名稱 [預設: ${current_git_user}]: " default_username
+    if [ -n "$current_git_user" ]; then
+        printf "   請輸入使用者名稱 [預設: %s]: " "$current_git_user"
+        read default_username
         default_username="${default_username:-$current_git_user}"
     else
-        read -p "   請輸入使用者名稱 [預設: jerry]: " default_username
+        printf "   請輸入使用者名稱 [預設: jerry]: "
+        read default_username
         default_username="${default_username:-jerry}"
     fi
     echo ""
     
     # 調試模式
     echo "🐛 調試模式"
-    read -p "   是否啟用調試模式？(y/N) [預設: N]: " is_debug_input
-    case "${is_debug_input,,}" in
+    printf "   是否啟用調試模式？(y/N) [預設: N]: "
+    read is_debug_input
+    is_debug_input=$(echo "$is_debug_input" | tr '[:upper:]' '[:lower:]')
+    case "$is_debug_input" in
         y|yes) is_debug="true" ;;
         *) is_debug="false" ;;
     esac
@@ -276,8 +282,10 @@ setup_config() {
     # 任務編號自動帶入
     echo "🎫 任務編號自動帶入"
     echo "   從分支名稱偵測任務編號（如 JIRA-123）並加入 commit 訊息"
-    read -p "   是否啟用？(Y/n) [預設: Y]: " auto_ticket_input
-    case "${auto_ticket_input,,}" in
+    printf "   是否啟用？(Y/n) [預設: Y]: "
+    read auto_ticket_input
+    auto_ticket_input=$(echo "$auto_ticket_input" | tr '[:upper:]' '[:lower:]')
+    case "$auto_ticket_input" in
         n|no) auto_include_ticket="false" ;;
         *) auto_include_ticket="true" ;;
     esac
@@ -286,8 +294,10 @@ setup_config() {
     # Commit 品質檢查
     echo "✅ Commit 訊息品質檢查"
     echo "   使用 AI 檢查 commit 訊息是否具有明確的目的"
-    read -p "   是否啟用？(Y/n) [預設: Y]: " auto_quality_input
-    case "${auto_quality_input,,}" in
+    printf "   是否啟用？(Y/n) [預設: Y]: "
+    read auto_quality_input
+    auto_quality_input=$(echo "$auto_quality_input" | tr '[:upper:]' '[:lower:]')
+    case "$auto_quality_input" in
         n|no) auto_check_quality="false" ;;
         *) auto_check_quality="true" ;;
     esac
@@ -296,7 +306,8 @@ setup_config() {
     # 主分支候選清單
     echo "🌿 主分支候選清單（用於 PR 目標分支偵測）"
     echo "   多個分支用空格分隔，依順序偵測第一個存在的分支"
-    read -p "   請輸入主分支清單 [預設: uat main master]: " main_branches_input
+    printf "   請輸入主分支清單 [預設: uat main master]: "
+    read main_branches_input
     main_branches="${main_branches_input:-uat main master}"
     echo ""
     
@@ -304,14 +315,14 @@ setup_config() {
     info "正在生成配置文件..."
     
     # 轉換 AI 工具為陣列格式
-    local ai_tools_array=""
+    ai_tools_array=""
     for tool in $ai_tools; do
         ai_tools_array="${ai_tools_array}\"${tool}\" "
     done
     ai_tools_array=$(echo "$ai_tools_array" | xargs)
     
     # 轉換主分支為陣列格式
-    local main_branches_array=""
+    main_branches_array=""
     for branch in $main_branches; do
         main_branches_array="${main_branches_array}\"${branch}\" "
     done
@@ -360,7 +371,7 @@ EOF
     echo ""
     echo "📄 配置內容預覽："
     echo "────────────────────────────────────"
-    cat "$config_file_path" | grep -v "^#" | grep -v "^$" | sed 's/^/   /'
+    grep -v "^#" "$config_file_path" | grep -v "^$" | sed 's/^/   /'
     echo "────────────────────────────────────"
 }
 
@@ -369,13 +380,14 @@ ask_config_setup() {
     echo ""
     echo "⚙️  是否要設定配置文件？"
     echo ""
-    echo -e "  ${CYAN}1)${NC} 設定到 Home 目錄 (~/${CONFIG_DIR}/${CONFIG_FILE}) [推薦]"
-    echo -e "  ${CYAN}2)${NC} 設定到當前目錄 (./${CONFIG_DIR}/${CONFIG_FILE})"
-    echo -e "  ${CYAN}3)${NC} 跳過配置設定（使用預設值）"
+    printf "  ${CYAN}1)${NC} 設定到 Home 目錄 (~/${CONFIG_DIR}/${CONFIG_FILE}) [推薦]\n"
+    printf "  ${CYAN}2)${NC} 設定到當前目錄 (./${CONFIG_DIR}/${CONFIG_FILE})\n"
+    printf "  ${CYAN}3)${NC} 跳過配置設定（使用預設值）\n"
     echo ""
     
     while true; do
-        read -p "請輸入選項 [1/2/3] (預設: 3): " config_choice
+        printf "請輸入選項 [1/2/3] (預設: 3): "
+        read config_choice
         config_choice="${config_choice:-3}"
         
         case "$config_choice" in
@@ -404,12 +416,12 @@ ask_config_setup() {
 
 # ========== 主程式 ==========
 main() {
-    local install_mode=""
-    local skip_prompt=false
-    local skip_config=false
+    install_mode=""
+    skip_prompt=false
+    skip_config=false
     
     # 解析參數
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case "$1" in
             --global|-g)
                 install_mode="global"
@@ -454,16 +466,17 @@ main() {
     check_download_tool
     
     # 互動式選擇安裝模式
-    if [[ "$skip_prompt" == "false" ]]; then
+    if [ "$skip_prompt" = "false" ]; then
         echo ""
         echo "請選擇安裝方式："
         echo ""
-        echo -e "  ${CYAN}1)${NC} 本地安裝 - 安裝到當前目錄 (${LOCAL_INSTALL_DIR})"
-        echo -e "  ${CYAN}2)${NC} 全域安裝 - 安裝到系統路徑 (${GLOBAL_INSTALL_DIR}) [需要 sudo]"
+        printf "  ${CYAN}1)${NC} 本地安裝 - 安裝到當前目錄 (${LOCAL_INSTALL_DIR})\n"
+        printf "  ${CYAN}2)${NC} 全域安裝 - 安裝到系統路徑 (${GLOBAL_INSTALL_DIR}) [需要 sudo]\n"
         echo ""
         
         while true; do
-            read -p "請輸入選項 [1/2] (預設: 1): " choice
+            printf "請輸入選項 [1/2] (預設: 1): "
+            read choice
             choice="${choice:-1}"
             
             case "$choice" in
@@ -483,7 +496,7 @@ main() {
         echo ""
     fi
     
-    if [[ "$install_mode" == "global" ]]; then
+    if [ "$install_mode" = "global" ]; then
         info "安裝模式：全域安裝 (${GLOBAL_INSTALL_DIR})"
         
         # 檢查是否有 sudo 權限
@@ -496,7 +509,7 @@ main() {
         verify_installation "$GLOBAL_INSTALL_DIR" "true"
         
         # 詢問配置設定
-        if [[ "$skip_config" == "false" ]]; then
+        if [ "$skip_config" = "false" ]; then
             ask_config_setup
         fi
         
@@ -507,7 +520,7 @@ main() {
         verify_installation "$LOCAL_INSTALL_DIR" "false"
         
         # 詢問配置設定
-        if [[ "$skip_config" == "false" ]]; then
+        if [ "$skip_config" = "false" ]; then
             ask_config_setup
         fi
         

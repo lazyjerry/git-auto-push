@@ -76,13 +76,58 @@ chmod +x git-auto-pr.sh
 
 ### 3. 調整個人化設定（建議）
 
-在使用前，建議先依據個人或團隊需求調整以下重要設定變數：
+在使用前，建議先依據個人或團隊需求調整設定。有兩種方式可以自訂設定：
+
+#### 方式一：使用配置文件（推薦）
+
+配置文件讓您可以在不修改腳本的情況下自訂設定，並支援不同層級的配置優先級：
+
+```bash
+# 建立配置目錄並複製範例配置文件
+mkdir -p ~/.git-auto-push-config
+cp .git-auto-push-config/.env.example ~/.git-auto-push-config/.env
+
+# 編輯配置（取消註解並修改需要的設定）
+nano ~/.git-auto-push-config/.env
+```
+
+**配置文件讀取優先級**（由高到低）：
+
+| 優先級 | 位置 | 說明 |
+|--------|------|------|
+| 1 | `$PWD/.git-auto-push-config/.env` | 當前工作目錄（執行指令時所在目錄） |
+| 2 | `$HOME/.git-auto-push-config/.env` | 用戶 Home 目錄 |
+| 3 | `[script_dir]/.git-auto-push-config/.env` | 腳本所在目錄 |
+
+**常用配置範例**：
+
+```bash
+# ~/.git-auto-push-config/.env
+
+# AI 工具優先順序（僅使用 Claude）
+AI_TOOLS=("claude")
+
+# 預設使用者名稱
+DEFAULT_USERNAME="your-name"
+
+# 主分支偵測順序（Git Flow 風格）
+DEFAULT_MAIN_BRANCHES=("develop" "main" "master")
+
+# 關閉調試模式
+IS_DEBUG=false
+```
+
+> 💡 **提示**：配置文件僅需設定要覆蓋的選項，未設定的選項會使用預設值。
+
+#### 方式二：直接修改腳本（進階）
+
+您也可以直接修改腳本頂部的預設值：
 
 #### git-auto-push.sh 設定（約第 100-210 行）
 
 ```bash
 # AI 工具優先順序（第 109 行）
-readonly AI_TOOLS=(
+AI_TOOLS=(
     "codex"     # GitHub Copilot CLI
     "gemini"    # Google Gemini CLI  
     "claude"    # Anthropic Claude CLI
@@ -97,20 +142,20 @@ AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 
 ```bash
 # AI 工具優先順序（第 187 行）
-readonly AI_TOOLS=("codex" "gemini" "claude")
+AI_TOOLS=("codex" "gemini" "claude")
 
 # 主分支偵測順序（第 202 行）
-readonly -a DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
-# readonly -a DEFAULT_MAIN_BRANCHES=("main" "master")     # 標準配置
-# readonly -a DEFAULT_MAIN_BRANCHES=("develop" "main")    # Git Flow 風格
+DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
+# DEFAULT_MAIN_BRANCHES=("main" "master")     # 標準配置
+# DEFAULT_MAIN_BRANCHES=("develop" "main")    # Git Flow 風格
 
 # 預設使用者名稱（第 212 行）
-readonly DEFAULT_USERNAME="jerry"
-# readonly DEFAULT_USERNAME="your-name"    # 修改為您的名字
+DEFAULT_USERNAME="jerry"
+# DEFAULT_USERNAME="your-name"    # 修改為您的名字
 
 # PR 合併後分支刪除策略（第 223 行）
-readonly AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（建議）
-# readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true # 自動刪除
+AUTO_DELETE_BRANCH_AFTER_MERGE=false  # 保留分支（建議）
+# AUTO_DELETE_BRANCH_AFTER_MERGE=true # 自動刪除
 ```
 
 #### 設定建議

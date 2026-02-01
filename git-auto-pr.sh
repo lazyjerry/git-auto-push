@@ -78,6 +78,10 @@ load_config() {
         # 注意：此時 IS_DEBUG 可能已被配置文件覆蓋
         if [ "${IS_DEBUG:-false}" = true ]; then
             printf "\033[0;90m📁 已加載配置文件: %s\033[0m\n" "$loaded_from" >&2
+            # 顯示 AI_TOOLS 配置（如果已設定）
+            if [ ${#AI_TOOLS[@]} -gt 0 ]; then
+                printf "\033[0;90m   AI_TOOLS=(%s)\033[0m\n" "${AI_TOOLS[*]}" >&2
+            fi
         fi
     fi
 }

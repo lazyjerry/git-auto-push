@@ -403,7 +403,7 @@ setup_config() {
     echo "   可用工具: copilot, gemini, codex, claude"
     echo "   多個工具用空格分隔，例如: copilot gemini codex claude"
     printf "   請輸入 AI 工具順序 [預設: copilot gemini codex claude]: "
-    read ai_tools_input
+    read ai_tools_input < /dev/tty
     ai_tools="${ai_tools_input:-copilot gemini codex claude}"
     echo ""
     
@@ -413,11 +413,11 @@ setup_config() {
     current_git_user=$(git config user.name 2>/dev/null || echo "")
     if [ -n "$current_git_user" ]; then
         printf "   請輸入使用者名稱 [預設: %s]: " "$current_git_user"
-        read default_username
+        read default_username < /dev/tty
         default_username="${default_username:-$current_git_user}"
     else
         printf "   請輸入使用者名稱 [預設: jerry]: "
-        read default_username
+        read default_username < /dev/tty
         default_username="${default_username:-jerry}"
     fi
     echo ""
@@ -425,7 +425,7 @@ setup_config() {
     # 調試模式
     echo "🐛 調試模式"
     printf "   是否啟用調試模式？(y/N) [預設: N]: "
-    read is_debug_input
+    read is_debug_input < /dev/tty
     is_debug_input=$(echo "$is_debug_input" | tr '[:upper:]' '[:lower:]')
     case "$is_debug_input" in
         y|yes) is_debug="true" ;;
@@ -437,7 +437,7 @@ setup_config() {
     echo "🎫 任務編號自動帶入"
     echo "   從分支名稱偵測任務編號（如 JIRA-123）並加入 commit 訊息"
     printf "   是否啟用？(Y/n) [預設: Y]: "
-    read auto_ticket_input
+    read auto_ticket_input < /dev/tty
     auto_ticket_input=$(echo "$auto_ticket_input" | tr '[:upper:]' '[:lower:]')
     case "$auto_ticket_input" in
         n|no) auto_include_ticket="false" ;;
@@ -449,7 +449,7 @@ setup_config() {
     echo "✅ Commit 訊息品質檢查"
     echo "   使用 AI 檢查 commit 訊息是否具有明確的目的"
     printf "   是否啟用？(Y/n) [預設: Y]: "
-    read auto_quality_input
+    read auto_quality_input < /dev/tty
     auto_quality_input=$(echo "$auto_quality_input" | tr '[:upper:]' '[:lower:]')
     case "$auto_quality_input" in
         n|no) auto_check_quality="false" ;;
@@ -461,7 +461,7 @@ setup_config() {
     echo "🌿 主分支候選清單（用於 PR 目標分支偵測）"
     echo "   多個分支用空格分隔，依順序偵測第一個存在的分支"
     printf "   請輸入主分支清單 [預設: uat main master]: "
-    read main_branches_input
+    read main_branches_input < /dev/tty
     main_branches="${main_branches_input:-uat main master}"
     echo ""
     
@@ -541,7 +541,7 @@ ask_config_setup() {
     
     while true; do
         printf "請輸入選項 [1/2/3] (預設: 3): "
-        read config_choice
+        read config_choice < /dev/tty
         config_choice="${config_choice:-3}"
         
         case "$config_choice" in
@@ -633,7 +633,7 @@ main() {
         
         while true; do
             printf "請輸入選項 [1/2] (預設: 1): "
-            read choice
+            read choice < /dev/tty
             choice="${choice:-1}"
             
             case "$choice" in

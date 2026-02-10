@@ -251,5 +251,5 @@
 
 - [README.md](README.md) - 專案概述與快速開始
 - [CHANGELOG.md](CHANGELOG.md) - 詳細版本更新記錄
-- [docs/INSTALLATION.md](docs/INSTALLATION.md) - 安裝指南
-- [docs/USAGE.md](docs/USAGE.md) - 使用說明
+- [INSTALLATION.md](INSTALLATION.md) - 安裝指南
+- [USAGE.md](USAGE.md) - 使用說明

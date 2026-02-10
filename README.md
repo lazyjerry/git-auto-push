@@ -87,7 +87,7 @@ Git 工作流程自動化解決方案，包含傳統 Git 操作自動化和 GitH
 
 ## 安裝與啟動
 
-> 📋 **完整安裝指南**：查看 [docs/INSTALLATION.md](docs/INSTALLATION.md) 瞭解詳細安裝步驟、個人化設定和問題排除
+> 📋 **完整安裝指南**：查看 [INSTALLATION.md](INSTALLATION.md) 瞭解詳細安裝步驟、個人化設定和問題排除
 
 ### 一鍵安裝 🆕
 
@@ -161,11 +161,11 @@ DEFAULT_USERNAME="your-name"
 IS_DEBUG=false
 ```
 
-> 📖 更多安裝選項、個人化設定和 AI 工具安裝，請參閱 [完整安裝指南](docs/INSTALLATION.md)
+> 📖 更多安裝選項、個人化設定和 AI 工具安裝，請參閱 [完整安裝指南](INSTALLATION.md)
 
 ## 使用方法
 
-> 📋 **完整操作指南**：查看 [docs/USAGE.md](docs/USAGE.md) 瞭解詳細操作模式、使用情境和最佳實踐
+> 📋 **完整操作指南**：查看 [USAGE.md](USAGE.md) 瞭解詳細操作模式、使用情境和最佳實踐
 
 ### 功能總覽
 
@@ -200,7 +200,7 @@ IS_DEBUG=false
 # 4. 審查與合併 PR
 ```
 
-> 💡 支援 Conventional Commits 前綴、AI 內容生成、品質檢查、任務編號自動帶入等功能。詳細說明請見 [使用指南](docs/USAGE.md)。
+> 💡 支援 Conventional Commits 前綴、AI 內容生成、品質檢查、任務編號自動帶入等功能。詳細說明請見 [使用指南](USAGE.md)。
 
 ## 特色功能
 

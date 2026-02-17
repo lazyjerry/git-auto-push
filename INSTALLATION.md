@@ -306,12 +306,12 @@ rm -rf /path/to/git-auto-push
 
 ## 相關文件
 
-- [README.md](../README.md) - 專案說明與使用方法
-- [CHANGELOG.md](../CHANGELOG.md) - 版本更新紀錄
-- [reports/](reports/) - 功能詳細說明文件
+- [README.md](README.md) - 專案說明與使用方法
+- [CHANGELOG.md](CHANGELOG.md) - 版本更新紀錄
+- [docs/reports/](docs/reports/) - 功能詳細說明文件
 
 ---
 
 ## 問題排除
 
-如果遇到安裝問題，請參考 [README.md](../README.md) 中的「錯誤排除」章節，或在 GitHub Issues 提出問題。
+如果遇到安裝問題，請參考 [README.md](README.md) 中的「錯誤排除」章節，或在 GitHub Issues 提出問題。

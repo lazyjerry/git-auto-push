@@ -625,8 +625,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 ### 參考資源
 
-- [CHANGELOG.md](CHANGELOG.md) - 完整版本歷史與功能變更記錄 🆕
-- [CHANGELOGS.md](CHANGELOGS.md) - 按月份彙整的更新總覽 🆕
+- [CHANGELOG.md](CHANGELOG.md) - 完整版本歷史與功能變更記錄
 - [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理開發指導
 - [docs/github-flow.md](docs/github-flow.md) - GitHub Flow 說明
 - [docs/pr-cancel-feature.md](docs/pr-cancel-feature.md) - PR 撤銷功能詳細說明

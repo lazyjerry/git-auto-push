@@ -1,3 +1,7 @@
+🌐 [English](README_EN.md) | [简体中文](README_CN.md) | 繁體中文 | [日本語](README_JP.md) | [한국어](README_KR.md)
+
+---
+
 # Git 工作流程自動化工具集
 
 兩支 Bash 腳本，分別處理傳統 Git 操作（add/commit/push）和 GitHub Flow PR 流程。支援多種 AI CLI 工具產生 commit 訊息與 PR 內容，也提供 Conventional Commits 前綴、訊息品質檢查、任務編號自動帶入等功能。

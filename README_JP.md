@@ -82,11 +82,14 @@
 ### ワンクリックインストール
 
 ```bash
-# インタラクティブインストール（ローカルまたはグローバルを選択）
+# インタラクティブインストール（デフォルトで ~/.local/bin にインストール）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# グローバルインストール（sudo が必要）
+# グローバルインストール（/usr/local/bin にインストール、sudo が必要）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
+
+# アンインストール
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --uninstall
 ```
 
 ### クイックインストール
@@ -176,6 +179,10 @@ IS_DEBUG=false
 ./git-auto-push.sh 1    # 完全フロー (add → commit → push)
 ./git-auto-push.sh 4    # 全自動モード (AI がコンテンツを生成)
 ./git-auto-push.sh 7    # 最後の commit メッセージを修正
+
+# その他のオプション
+./git-auto-push.sh --version   # バージョンを表示
+./git-auto-push.sh --auto      # 全自動モード
 ```
 
 #### git-auto-pr.sh
@@ -563,7 +570,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "テスト $tool"; done
 - 最新バージョン：v2.8.0 (2026-02-01)
 - 総バージョン数：16 のメジャーバージョン
 - 開発期間：2025-08-21 から現在
-- コード行数：`git-auto-push.sh` 2,552 行、`git-auto-pr.sh` 2,769 行、`install.sh` 689 行
+- コード行数：`git-auto-push.sh` 2,552 行、`git-auto-pr.sh` 2,769 行、`install.sh` 773 行
 
 ### 参考リソース
 

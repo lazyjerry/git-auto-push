@@ -82,11 +82,14 @@ Version: v2.8.0
 ### One-Click Install
 
 ```bash
-# Interactive install (choose local or global)
+# Interactive install (defaults to ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# Direct global install (requires sudo)
+# Direct global install (installs to /usr/local/bin, requires sudo)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
+
+# Uninstall
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --uninstall
 ```
 
 ### Quick Install
@@ -176,6 +179,10 @@ IS_DEBUG=false
 ./git-auto-push.sh 1    # Full flow (add → commit → push)
 ./git-auto-push.sh 4    # Full auto mode (AI-generated content)
 ./git-auto-push.sh 7    # Amend last commit message
+
+# Other options
+./git-auto-push.sh --version   # Show version
+./git-auto-push.sh --auto      # Full auto mode
 ```
 
 #### git-auto-pr.sh
@@ -563,7 +570,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "Testing $tool"; done
 - Latest version: v2.8.0 (2026-02-01)
 - Total versions: 16 major versions
 - Development period: 2025-08-21 to present
-- Lines of code: `git-auto-push.sh` 2,552 lines, `git-auto-pr.sh` 2,769 lines, `install.sh` 689 lines
+- Lines of code: `git-auto-push.sh` 2,552 lines, `git-auto-pr.sh` 2,769 lines, `install.sh` 773 lines
 
 ### References
 

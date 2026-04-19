@@ -82,11 +82,14 @@
 ### 원클릭 설치
 
 ```bash
-# 대화형 설치 (로컬 또는 글로벌 선택)
+# 대화형 설치 (기본적으로 ~/.local/bin에 설치)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# 글로벌 직접 설치 (sudo 필요)
+# 글로벌 직접 설치 (/usr/local/bin에 설치, sudo 필요)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
+
+# 제거
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --uninstall
 ```
 
 ### 빠른 설치
@@ -176,6 +179,10 @@ IS_DEBUG=false
 ./git-auto-push.sh 1    # 전체 흐름 (add → commit → push)
 ./git-auto-push.sh 4    # 완전 자동 모드 (AI 콘텐츠 생성)
 ./git-auto-push.sh 7    # 마지막 commit 메시지 수정
+
+# 기타 옵션
+./git-auto-push.sh --version   # 버전 표시
+./git-auto-push.sh --auto      # 완전 자동 모드
 ```
 
 #### git-auto-pr.sh
@@ -563,7 +570,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "테스트 $tool"; done
 - 최신 버전: v2.8.0 (2026-02-01)
 - 총 버전 수: 16개 주요 버전
 - 개발 기간: 2025-08-21부터 현재까지
-- 코드 행 수: `git-auto-push.sh` 2,552행, `git-auto-pr.sh` 2,769행, `install.sh` 689행
+- 코드 행 수: `git-auto-push.sh` 2,552행, `git-auto-pr.sh` 2,769행, `install.sh` 773행
 
 ### 참조 자료
 

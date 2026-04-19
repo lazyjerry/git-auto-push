@@ -82,11 +82,14 @@
 ### 一键安装
 
 ```bash
-# 交互式安装（选择本地或全局）
+# 交互式安装（默认安装到 ~/.local/bin）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# 直接全局安装（需要 sudo）
+# 直接全局安装（安装到 /usr/local/bin，需要 sudo）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
+
+# 卸载
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --uninstall
 ```
 
 ### 快速安装
@@ -176,6 +179,10 @@ IS_DEBUG=false
 ./git-auto-push.sh 1    # 完整流程 (add → commit → push)
 ./git-auto-push.sh 4    # 全自动模式 (AI 生成内容)
 ./git-auto-push.sh 7    # 修改最后一次 commit 消息
+
+# 其他选项
+./git-auto-push.sh --version   # 显示版本号
+./git-auto-push.sh --auto      # 全自动模式
 ```
 
 #### git-auto-pr.sh
@@ -563,7 +570,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "测试 $tool"; done
 - 最新版本：v2.8.0 (2026-02-01)
 - 总版本数：16 个主要版本
 - 开发期间：2025-08-21 至今
-- 代码行数：`git-auto-push.sh` 2,552 行、`git-auto-pr.sh` 2,769 行、`install.sh` 689 行
+- 代码行数：`git-auto-push.sh` 2,552 行、`git-auto-pr.sh` 2,769 行、`install.sh` 773 行
 
 ### 参考资源
 

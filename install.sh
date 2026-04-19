@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Git 工作流程自動化工具集 - 安裝腳本
+# Git 工作流程自動化工具集 - 安裝或更新腳本
 # 
 # 使用方式：
 #   curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
@@ -31,7 +31,7 @@ SCRIPTS="git-auto-push.sh git-auto-pr.sh"
 CONFIG_DIR=".git-auto-push-config"
 CONFIG_FILE=".env"
 GLOBAL_INSTALL_DIR="/usr/local/bin"
-LOCAL_INSTALL_DIR="${PWD}"
+LOCAL_INSTALL_DIR="${HOME}/.local/bin"
 
 # ========== 輸出函數 ==========
 info() {
@@ -227,15 +227,17 @@ install_scripts() {
         sudo_cmd="sudo"
     fi
     
+    # 確保安裝目錄存在
+    if [ "$use_sudo" = "true" ]; then
+        $sudo_cmd mkdir -p "$install_dir"
+    else
+        mkdir -p "$install_dir"
+    fi
+    
     for script in $SCRIPTS; do
         url="${REPO_BASE_URL}/${script}"
         script_name=$(echo "$script" | sed 's/\.sh$//')
-        
-        if [ "$use_sudo" = "true" ]; then
-            target_path="${install_dir}/${script_name}"
-        else
-            target_path="${install_dir}/${script}"
-        fi
+        target_path="${install_dir}/${script_name}"
         
         info "下載 ${script}..."
         
@@ -285,12 +287,7 @@ verify_installation() {
     all_ok=true
     for script in $SCRIPTS; do
         script_name=$(echo "$script" | sed 's/\.sh$//')
-        
-        if [ "$is_global" = "true" ]; then
-            target_path="${install_dir}/${script_name}"
-        else
-            target_path="${install_dir}/${script}"
-        fi
+        target_path="${install_dir}/${script_name}"
         
         if [ -x "$target_path" ]; then
             success "${target_path} 已安裝且可執行"
@@ -315,27 +312,26 @@ show_usage() {
     echo ""
     header "安裝完成！"
     
-    if [ "$is_global" = "true" ]; then
-        echo "📌 已安裝到系統路徑，可在任意目錄使用："
-        echo ""
-        echo "   git-auto-push          # 傳統 Git 自動化"
-        echo "   git-auto-push --auto   # 全自動模式"
-        echo "   git-auto-push 1-7      # 直接執行指定選項"
-        echo ""
-        echo "   git-auto-pr            # GitHub Flow PR 自動化"
-    else
-        echo "📌 已安裝到當前目錄，使用方式："
-        echo ""
-        echo "   ./git-auto-push.sh          # 傳統 Git 自動化"
-        echo "   ./git-auto-push.sh --auto   # 全自動模式"
-        echo "   ./git-auto-push.sh 1-7      # 直接執行指定選項"
-        echo ""
-        echo "   ./git-auto-pr.sh            # GitHub Flow PR 自動化"
-        echo ""
-        echo "💡 如需全域安裝，請執行："
-        echo "   sudo install -m 755 git-auto-push.sh /usr/local/bin/git-auto-push"
-        echo "   sudo install -m 755 git-auto-pr.sh /usr/local/bin/git-auto-pr"
-    fi
+    echo "📌 已安裝到 ${install_dir}，可在任意目錄使用："
+    echo ""
+    echo "   git-auto-push          # 傳統 Git 自動化"
+    echo "   git-auto-push --auto   # 全自動模式"
+    echo "   git-auto-push 1-7      # 直接執行指定選項"
+    echo ""
+    echo "   git-auto-pr            # GitHub Flow PR 自動化"
+    
+    # 檢查安裝目錄是否在 PATH 中
+    case ":$PATH:" in
+        *":${install_dir}:"*) ;;
+        *)
+            echo ""
+            warning "${install_dir} 不在您的 PATH 中"
+            echo "   請將以下內容加入 ~/.bashrc 或 ~/.zshrc："
+            echo "   export PATH=\"${install_dir}:\$PATH\""
+            echo ""
+            echo "   然後執行：source ~/.bashrc  或  source ~/.zshrc"
+            ;;
+    esac
     
     echo ""
     echo "📚 更多資訊："
@@ -592,6 +588,53 @@ ask_config_setup() {
     done
 }
 
+# ========== 解除安裝 ==========
+uninstall_scripts() {
+    echo ""
+    header "解除安裝 Git 工作流程自動化工具集"
+    
+    removed_any=false
+    
+    # 移除使用者安裝
+    for script in $SCRIPTS; do
+        script_name=$(echo "$script" | sed 's/\.sh$//')
+        target_path="${LOCAL_INSTALL_DIR}/${script_name}"
+        if [ -f "$target_path" ]; then
+            rm -f "$target_path"
+            success "已移除 ${target_path}"
+            removed_any=true
+        fi
+    done
+    
+    # 移除全域安裝
+    for script in $SCRIPTS; do
+        script_name=$(echo "$script" | sed 's/\.sh$//')
+        target_path="${GLOBAL_INSTALL_DIR}/${script_name}"
+        if [ -f "$target_path" ]; then
+            info "移除 ${target_path}（需要 sudo）..."
+            if sudo rm -f "$target_path"; then
+                success "已移除 ${target_path}"
+                removed_any=true
+            else
+                error "移除 ${target_path} 失敗"
+            fi
+        fi
+    done
+    
+    if [ "$removed_any" = "true" ]; then
+        success "解除安裝完成"
+    else
+        warning "未找到任何已安裝的檔案"
+    fi
+    
+    # 提示設定檔
+    echo ""
+    warning "請記得手動移除配置文件（如有需要）："
+    echo "   rm -rf ~/${CONFIG_DIR}"
+    echo "   rm -rf ${GLOBAL_INSTALL_DIR}/${CONFIG_DIR}"
+    echo ""
+}
+
 # ========== 主程式 ==========
 main() {
     install_mode=""
@@ -615,6 +658,11 @@ main() {
                 skip_config=true
                 shift
                 ;;
+            --uninstall)
+                install_mode="uninstall"
+                skip_prompt=true
+                shift
+                ;;
             --help|-h)
                 echo "Git 工作流程自動化工具集 - 安裝腳本"
                 echo ""
@@ -622,10 +670,11 @@ main() {
                 echo "  ./install.sh [選項]"
                 echo ""
                 echo "選項："
-                echo "  --local, -l    安裝到當前目錄"
-                echo "  --global, -g   安裝到 /usr/local/bin（需要 sudo）"
-                echo "  --no-config    跳過配置文件設定"
-                echo "  --help, -h     顯示此說明"
+                echo "  --local, -l      安裝到 ~/.local/bin"
+                echo "  --global, -g     安裝到 /usr/local/bin（需要 sudo）"
+                echo "  --uninstall      解除安裝"
+                echo "  --no-config      跳過配置文件設定"
+                echo "  --help, -h       顯示此說明"
                 echo ""
                 echo "若不帶參數執行，將會互動式詢問安裝位置和配置設定。"
                 exit 0
@@ -654,12 +703,13 @@ main() {
         echo ""
         echo "請選擇安裝方式："
         echo ""
-        printf "  ${CYAN}1)${NC} 本地安裝 - 安裝到當前目錄 (${LOCAL_INSTALL_DIR})\n"
-        printf "  ${CYAN}2)${NC} 全域安裝 - 安裝到系統路徑 (${GLOBAL_INSTALL_DIR}) [需要 sudo]\n"
+        printf "  ${CYAN}1)${NC} 使用者安裝 - 安裝到 ${LOCAL_INSTALL_DIR} [推薦]\n"
+        printf "  ${CYAN}2)${NC} 全域安裝 - 安裝到 ${GLOBAL_INSTALL_DIR} [需要 sudo]\n"
+        printf "  ${CYAN}3)${NC} 解除安裝 - 移除所有已安裝的腳本\n"
         echo ""
         
         while true; do
-            printf "請輸入選項 [1/2] (預設: 1): "
+            printf "請輸入選項 [1/2/3] (預設: 1): "
             read choice < /dev/tty
             choice="${choice:-1}"
             
@@ -672,15 +722,22 @@ main() {
                     install_mode="global"
                     break
                     ;;
+                3|uninstall|u)
+                    install_mode="uninstall"
+                    break
+                    ;;
                 *)
-                    warning "無效選項，請輸入 1 或 2"
+                    warning "無效選項，請輸入 1、2 或 3"
                     ;;
             esac
         done
         echo ""
     fi
     
-    if [ "$install_mode" = "global" ]; then
+    if [ "$install_mode" = "uninstall" ]; then
+        uninstall_scripts
+        exit 0
+    elif [ "$install_mode" = "global" ]; then
         info "安裝模式：全域安裝 (${GLOBAL_INSTALL_DIR})"
         
         # 檢查是否有 sudo 權限
@@ -699,7 +756,7 @@ main() {
         
         show_usage "$GLOBAL_INSTALL_DIR" "true"
     else
-        info "安裝模式：本地安裝 (${LOCAL_INSTALL_DIR})"
+        info "安裝模式：使用者安裝 (${LOCAL_INSTALL_DIR})"
         install_scripts "$LOCAL_INSTALL_DIR" "false"
         verify_installation "$LOCAL_INSTALL_DIR" "false"
         

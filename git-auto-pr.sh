@@ -5,6 +5,8 @@
 # 使用方式：./git-auto-pr.sh 或 ./git-auto-pr.sh --help
 # 作者：Lazy Jerry | 版本：v2.8.0 | 授權：MIT License
 
+readonly VERSION="v2.8.0"
+
 # ==============================================
 # 配置文件加載區域
 # ==============================================
@@ -1527,6 +1529,12 @@ main() {
     
     # 設置中斷信號處理
     trap global_cleanup INT TERM
+
+    # 處理 version 參數
+    if [ "$1" = "-v" ] || [ "$1" = "--version" ]; then
+        echo "git-auto-pr ${VERSION}"
+        exit 0
+    fi
 
     # 檢查命令行參數
     if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then

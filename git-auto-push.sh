@@ -5,6 +5,8 @@
 # 使用方式：./git-auto-push.sh 或 ./git-auto-push.sh --help 或 ./git-auto-push.sh -a
 # 作者：Lazy Jerry | 版本：v2.8.0 | 授權：MIT License
 
+readonly VERSION="v2.8.0"
+
 # ==============================================
 # 配置文件加載區域
 # ==============================================
@@ -2134,6 +2136,12 @@ main() {
         exit 130  # SIGINT 標準退出碼
     }
     trap global_cleanup INT TERM
+
+    # 處理 version 參數
+    if [ "$1" = "-v" ] || [ "$1" = "--version" ]; then
+        echo "git-auto-push ${VERSION}"
+        exit 0
+    fi
 
     # 處理 help 參數
     if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then

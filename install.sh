@@ -24,7 +24,9 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # ========== 配置 ==========
-REPO_BASE_URL="https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master"
+REPO_OWNER="lazyjerry"
+REPO_NAME="git-auto-push"
+REPO_BASE_URL=""  # 動態設定，見 resolve_latest_tag()
 SCRIPTS="git-auto-push.sh git-auto-pr.sh"
 CONFIG_DIR=".git-auto-push-config"
 CONFIG_FILE=".env"
@@ -70,6 +72,28 @@ check_download_tool() {
         exit 1
     fi
     info "使用 ${DOWNLOAD_TOOL} 進行下載"
+}
+
+# ========== 解析最新 Tag ==========
+resolve_latest_tag() {
+    info "正在查詢最新版本..."
+    
+    api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
+    latest_tag=""
+    
+    if [ "$DOWNLOAD_TOOL" = "curl" ]; then
+        latest_tag=$(curl -fsSL "$api_url" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    else
+        latest_tag=$(wget -qO- "$api_url" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    fi
+    
+    if [ -n "$latest_tag" ]; then
+        REPO_BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/refs/tags/${latest_tag}"
+        success "使用最新 Release Tag：${latest_tag}"
+    else
+        REPO_BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/refs/heads/master"
+        warning "無法取得最新 Tag，改用 master 分支"
+    fi
 }
 
 # ========== 必要套件檢測 ==========
@@ -618,6 +642,9 @@ main() {
     
     # 檢測下載工具
     check_download_tool
+    
+    # 解析最新版本 Tag
+    resolve_latest_tag
     
     # 檢查必要套件
     check_dependencies

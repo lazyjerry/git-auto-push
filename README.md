@@ -34,7 +34,7 @@
 ├── git-auto-push.sh         # 傳統 Git 操作自動化（2552 行）
 ├── git-auto-pr.sh           # GitHub Flow PR 流程自動化（2769 行）
 ├── Conventional Commits      # 前綴支援：手動選擇、AI 判斷、跳過
-├── AI 工具模組               # copilot / gemini / codex / claude
+├── AI 工具模組               # opencode / copilot / gemini / codex / claude
 │   ├── 容錯機制             # 工具失敗自動切換
 │   ├── 輸出清理             # 過濾 AI 中繼資料
 │   └── 品質檢查             # 分析 commit 訊息品質
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI 內容產生
 
-支援 copilot、gemini、codex、claude 四種 AI CLI 工具，一個失敗自動嘗試下一個。輸出會自動清理 AI 工具的中繼資料。開啟 `IS_DEBUG=true` 可以看到提示詞、diff 內容、輸出結果，方便除錯。
+支援 opencode、copilot、gemini、codex、claude 五種 AI CLI 工具，一個失敗自動嘗試下一個。輸出會自動清理 AI 工具的中繼資料。開啟 `IS_DEBUG=true` 可以看到提示詞、diff 內容、輸出結果，方便除錯。
 
 **產生的內容**
 
@@ -400,7 +400,7 @@ git-auto-pr                    # 選擇選項 3（建立 PR）
 
 - **AI_TOOLS 變數**：統一的 AI 工具優先順序陣列
 - **條件賦值**：使用 `: "${VAR:=default}"` 語法，配置文件優先於預設值
-- **預設調用順序**：copilot → gemini → codex → claude（可透過配置文件覆蓋）
+- **預設調用順序**：opencode → copilot → gemini → codex → claude（可透過配置文件覆蓋）
 
 ### 程式碼文檔標準
 

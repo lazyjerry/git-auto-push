@@ -34,7 +34,7 @@ Version: v2.8.0
 ├── git-auto-push.sh         # Traditional Git operations automation (2552 lines)
 ├── git-auto-pr.sh           # GitHub Flow PR workflow automation (2769 lines)
 ├── Conventional Commits      # Prefix support: manual selection, AI detection, skip
-├── AI Tool Module            # copilot / gemini / codex / claude
+├── AI Tool Module            # opencode / copilot / gemini / codex / claude
 │   ├── Failover             # Auto-switch on tool failure
 │   ├── Output Cleaning      # Filter AI metadata
 │   └── Quality Check        # Analyze commit message quality
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI Content Generation
 
-Supports four AI CLI tools: copilot, gemini, codex, and claude. If one fails, it automatically tries the next. Output is automatically cleaned of AI tool metadata. Enable `IS_DEBUG=true` to see prompts, diff content, and output for debugging.
+Supports five AI CLI tools: opencode, copilot, gemini, codex, and claude. If one fails, it automatically tries the next. Output is automatically cleaned of AI tool metadata. Enable `IS_DEBUG=true` to see prompts, diff content, and output for debugging.
 
 **Generated Content**
 
@@ -400,7 +400,7 @@ The project uses a modular design with these main components:
 
 - **AI_TOOLS variable**: Unified AI tool priority array
 - **Conditional assignment**: Uses `: "${VAR:=default}"` syntax; config files take precedence over defaults
-- **Default call order**: copilot → gemini → codex → claude (overridable via config file)
+- **Default call order**: opencode → copilot → gemini → codex → claude (overridable via config file)
 
 ### Code Documentation Standard
 

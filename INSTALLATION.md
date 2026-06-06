@@ -128,7 +128,8 @@ IS_DEBUG=false
 ```bash
 # AI 工具優先順序（預設值區塊）
 AI_TOOLS=(
-    "copilot"   # GitHub Copilot CLI（推薦）
+    "opencode"  # OpenCode CLI（推薦）
+    "copilot"   # GitHub Copilot CLI
     "gemini"    # Google Gemini CLI
     "codex"     # GitHub Copilot CLI (codex)
     "claude"    # Anthropic Claude CLI
@@ -143,7 +144,7 @@ AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 
 ```bash
 # AI 工具優先順序（預設值區塊）
-AI_TOOLS=("copilot" "gemini" "codex" "claude")
+AI_TOOLS=("opencode" "copilot" "gemini" "codex" "claude")
 
 # 主分支偵測順序
 DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
@@ -250,10 +251,22 @@ gh copilot --version
 # https://console.anthropic.com/
 ```
 
+##### OpenCode CLI
+
+```bash
+# 安裝方式請參考官方文件
+# https://opencode.ai/docs/zh-tw/
+
+# 建議同時安裝 jq 以啟用精確 JSON 解析
+brew install jq      # macOS
+# apt install jq     # Ubuntu/Debian
+```
+
 **注意事項**：
 - AI 工具需要相應的 API 金鑰或訂閱服務
 - 如未安裝任何 AI 工具，腳本仍可正常使用，僅會跳過 AI 輔助功能
 - 工具會自動偵測可用的 AI 命令並依優先順序使用
+- opencode 工具建議同時安裝 jq 以精確解析輸出；未安裝時會自動 fallback 至內建文字解析
 
 ---
 
@@ -274,7 +287,7 @@ bash -n git-auto-pr.sh && echo "✅ git-auto-pr.sh 語法正確"
 ./git-auto-pr.sh --help
 
 # 檢查 AI 工具可用性
-for tool in copilot codex gemini claude; do 
+for tool in opencode copilot codex gemini claude; do 
     command -v "$tool" >/dev/null 2>&1 && echo "✅ $tool 可用" || echo "⚠️ $tool 未安裝"
 done
 

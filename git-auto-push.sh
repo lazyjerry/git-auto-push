@@ -110,6 +110,7 @@ load_config
 : "${AI_TOOLS:=}"
 if [ ${#AI_TOOLS[@]} -eq 0 ]; then
     AI_TOOLS=(
+        "opencode"
         "copilot"
         "gemini"
         "codex"
@@ -404,11 +405,14 @@ run_ai_with_fallback() {
                 "codex")
                     info_msg "💡 提醒: Codex 如果無法連線，請確認登入或 API 參數設定"
                     ;;
+                "opencode")
+                    info_msg "💡 提醒: opencode 需要登入，請執行 opencode auth login"
+                    ;;
             esac
         fi
-        
+
         debug_msg "🔄 正在使用 AI 工具: $tool_name"
-        
+
         case "$tool_name" in
             "copilot")
                 if result=$(run_copilot_command "$prompt"); then
@@ -426,6 +430,13 @@ run_ai_with_fallback() {
                 ;;
             "gemini"|"claude")
                 if result=$(run_stdin_ai_command "$tool_name" "$prompt"); then
+                    LAST_AI_TOOL="$tool_name"
+                    echo "$result"
+                    return 0
+                fi
+                ;;
+            "opencode")
+                if result=$(run_opencode_command "$prompt"); then
                     LAST_AI_TOOL="$tool_name"
                     echo "$result"
                     return 0
@@ -1150,6 +1161,93 @@ run_codex_command() {
             ;;
     esac
     
+    return 1
+}
+
+# ============================================
+# run_opencode_command
+# 功能：調用 opencode CLI 生成 commit 訊息
+# 參數：$1 - prompt 提示詞
+# 返回：0=成功並輸出結果，1=失敗
+# 使用：result=$(run_opencode_command "$prompt")
+# 注意：使用 --format json 解析 part.text 欄位，避免 clean_ai_message 清理依賴
+# ============================================
+run_opencode_command() {
+    local prompt="$1"
+    local timeout=60
+
+    info_msg "正在調用 opencode..."
+
+    if ! command -v opencode >/dev/null 2>&1; then
+        warning_msg "opencode 工具未安裝"
+        return 1
+    fi
+
+    # 檢查 jq 是否可用（建議安裝，可獲得更精確的 JSON 解析）
+    if ! command -v jq >/dev/null 2>&1; then
+        warning_msg "⚠️  建議安裝 jq 以獲得更精確的 opencode 輸出解析（brew install jq）"
+    fi
+
+    local diff_size
+    diff_size=$(git diff --cached 2>/dev/null | wc -l)
+    if [ "$diff_size" -gt 500 ]; then
+        timeout=90
+        info_msg "檢測到大型變更（$diff_size 行），增加處理時間到 ${timeout} 秒..."
+    fi
+
+    local git_diff
+    git_diff=$(git diff --cached 2>/dev/null || git diff 2>/dev/null)
+    if [ -z "$git_diff" ]; then
+        warning_msg "沒有檢測到任何變更內容"
+        return 1
+    fi
+
+    local temp_input
+    temp_input=$(mktemp)
+    printf '%s\n\nGit 變更內容:\n%s' "$prompt" "$git_diff" > "$temp_input"
+
+    debug_msg "🔍 調試: run_opencode_command() 輸入統計: $(wc -l < "$temp_input") 行"
+
+    local output exit_code
+    if command -v timeout >/dev/null 2>&1; then
+        output=$(run_command_with_loading "timeout ${timeout}s opencode run --format json 'Follow the instructions in the attached file.' --file '$temp_input' 2>&1" "正在等待 opencode 分析變更" "$timeout")
+        exit_code=$?
+    else
+        output=$(run_command_with_loading "opencode run --format json 'Follow the instructions in the attached file.' --file '$temp_input' 2>&1" "正在等待 opencode 分析變更" "$timeout")
+        exit_code=$?
+    fi
+
+    rm -f "$temp_input"
+
+    case $exit_code in
+        0)
+            # 從 nd-JSON 事件中提取 type=="text" 的 part.text 欄位
+            # 優先使用 jq（精確），fallback 至 grep/sed
+            local text_output
+            if command -v jq >/dev/null 2>&1; then
+                text_output=$(echo "$output" | jq -r 'select(.type == "text") | .part.text' 2>/dev/null | tr -d '\n')
+            else
+                text_output=$(echo "$output" | grep '"type":"text"' | grep -o '"text":"[^"]*"' | sed 's/^"text":"//;s/"$//' | tr -d '\n')
+            fi
+            debug_msg "🔍 調試: opencode 提取文字: '$text_output'"
+            if [ -n "$text_output" ] && [ ${#text_output} -gt 3 ]; then
+                success_msg "opencode 回應完成"
+                echo "$text_output"
+                return 0
+            fi
+            warning_msg "opencode 沒有返回有效內容"
+            debug_msg "🔍 調試: opencode 原始輸出: $(echo "$output" | head -c 300)"
+            ;;
+        124)
+            error_msg "❌ opencode 執行超時（${timeout}秒）"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
+            ;;
+        *)
+            warning_msg "opencode 執行失敗（退出碼: $exit_code）"
+            debug_msg "🔍 調試: opencode 輸出: $output"
+            ;;
+    esac
+
     return 1
 }
 

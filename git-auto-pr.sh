@@ -145,6 +145,7 @@ EOF
 : "${AI_TOOLS:=}"
 if [ ${#AI_TOOLS[@]} -eq 0 ]; then
     AI_TOOLS=(
+        "opencode"
         "copilot"
         "gemini"
         "codex"
@@ -729,6 +730,81 @@ run_codex_command() {
     return 1
 }
 
+# ============================================
+# run_opencode_command
+# 功能：調用 opencode CLI 生成分支名稱或 PR 內容
+# 參數：$1 - prompt，$2 - content，$3 - timeout（預設 60）
+# 返回：0=成功並輸出結果，1=失敗
+# 注意：使用 --format json 解析 part.text 欄位
+# ============================================
+run_opencode_command() {
+    local prompt="$1"
+    local content="$2"
+    local timeout="${3:-60}"
+
+    info_msg "正在調用 opencode..."
+
+    if ! command -v opencode >/dev/null 2>&1; then
+        warning_msg "opencode 工具未安裝"
+        return 1
+    fi
+
+    if ! command -v jq >/dev/null 2>&1; then
+        warning_msg "⚠️  建議安裝 jq 以獲得更精確的 opencode 輸出解析（brew install jq）"
+    fi
+
+    if [ -z "$content" ]; then
+        warning_msg "沒有內容可供 opencode 分析"
+        return 1
+    fi
+
+    local temp_input
+    temp_input=$(mktemp)
+    printf '%s\n\n%s' "$prompt" "$content" > "$temp_input"
+
+    debug_msg "🔍 調試: run_opencode_command() 輸入統計: $(wc -l < "$temp_input") 行"
+
+    local output exit_code
+    if command -v timeout >/dev/null 2>&1; then
+        output=$(run_command_with_loading "timeout ${timeout}s opencode run --format json 'Follow the instructions in the attached file.' --file '$temp_input' 2>&1" "正在等待 opencode 回應" "$timeout")
+        exit_code=$?
+    else
+        output=$(run_command_with_loading "opencode run --format json 'Follow the instructions in the attached file.' --file '$temp_input' 2>&1" "正在等待 opencode 回應" "$timeout")
+        exit_code=$?
+    fi
+
+    rm -f "$temp_input"
+
+    case $exit_code in
+        0)
+            local text_output
+            if command -v jq >/dev/null 2>&1; then
+                text_output=$(echo "$output" | jq -r 'select(.type == "text") | .part.text' 2>/dev/null | tr -d '\n')
+            else
+                text_output=$(echo "$output" | grep '"type":"text"' | grep -o '"text":"[^"]*"' | sed 's/^"text":"//;s/"$//' | tr -d '\n')
+            fi
+            debug_msg "🔍 調試: opencode 提取文字: '$text_output'"
+            if [ -n "$text_output" ] && [ ${#text_output} -gt 3 ]; then
+                success_msg "opencode 回應完成"
+                echo "$text_output"
+                return 0
+            fi
+            warning_msg "opencode 沒有返回有效內容"
+            debug_msg "🔍 調試: opencode 原始輸出: $(echo "$output" | head -c 300)"
+            ;;
+        124)
+            error_msg "❌ opencode 執行超時（${timeout}秒）"
+            warning_msg "💡 建議：檢查網路連接或稍後重試"
+            ;;
+        *)
+            warning_msg "opencode 執行失敗（退出碼: $exit_code）"
+            debug_msg "🔍 調試: opencode 輸出: $output"
+            ;;
+    esac
+
+    return 1
+}
+
 # 執行基於 stdin 的 AI 命令
 # 參數：
 #   $1 - tool_name AI 工具名稱 (gemini/claude)
@@ -1132,11 +1208,27 @@ Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lo
                     warning_msg "⚠️  run_stdin_ai_command 執行失敗或返回空結果"
                 fi
                 ;;
+            "opencode")
+                if result=$(run_opencode_command "$prompt" "$content" 30); then
+                    debug_msg "🔍 調試: opencode 原始輸出 result='$result'"
+                    result=$(clean_branch_name "$result")
+                    debug_msg "🔍 調試: 清理後的 result='$result'"
+                    if [ -n "$result" ]; then
+                        success_msg "✅ $tool 生成分支名稱成功: $result"
+                        echo "$result"
+                        return 0
+                    else
+                        warning_msg "⚠️  clean_branch_name 清理後結果為空"
+                    fi
+                else
+                    warning_msg "⚠️  run_opencode_command 執行失敗或返回空結果"
+                fi
+                ;;
         esac
-        
+
         warning_msg "⚠️  $tool 無法生成分支名稱，嘗試下一個工具..."
     done
-    
+
     warning_msg "所有 AI 工具都無法生成分支名稱"
     return 1
 }
@@ -1266,8 +1358,25 @@ generate_pr_content_with_ai() {
                     warning_msg "$tool 無法生成 PR 內容"
                 fi
                 ;;
+            "opencode")
+                if ! command -v opencode >/dev/null 2>&1; then
+                    warning_msg "opencode 工具未安裝"
+                    continue
+                fi
+                local content_text
+                content_text=$(cat "$temp_content")
+                if result=$(run_opencode_command "$prompt" "$content_text" "$timeout"); then
+                    debug_msg "🔍 調試: opencode PR 內容原始輸出 result='$result'"
+                    success_msg "✅ $tool 生成 PR 內容成功"
+                    rm -f "$temp_content"
+                    echo "$result"
+                    return 0
+                else
+                    warning_msg "$tool 無法生成 PR 內容"
+                fi
+                ;;
         esac
-        
+
         warning_msg "⚠️  $tool 無法生成 PR 內容，嘗試下一個工具..."
     done
     

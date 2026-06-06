@@ -6,7 +6,7 @@
 
 Two Bash scripts that handle traditional Git operations (add/commit/push) and GitHub Flow PR workflows respectively. Supports multiple AI CLI tools for generating commit messages and PR content, along with Conventional Commits prefixes, message quality checks, issue key auto-insertion, and more.
 
-Version: v2.8.0
+Version: v2.9.0
 
 ## Project Overview
 
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "Testing $tool"; done
 
 > For the complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
-- Latest version: v2.8.0 (2026-02-01)
-- Total versions: 16 major versions
+- Latest version: v2.9.0 (2026-06-06)
+- Total versions: 17 major versions
 - Development period: 2025-08-21 to present
-- Lines of code: `git-auto-push.sh` 2,552 lines, `git-auto-pr.sh` 2,769 lines, `install.sh` 773 lines
+- Lines of code: `git-auto-push.sh` 2,658 lines, `git-auto-pr.sh` 2,886 lines, `install.sh` 773 lines
 
 ### References
 

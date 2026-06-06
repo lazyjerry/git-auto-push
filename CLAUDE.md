@@ -10,8 +10,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **git-auto-pr.sh** (2,769 行) - GitHub Flow PR 流程自動化（分支/PR/審查/合併）
 - **install.sh** (689 行) - POSIX Shell 相容安裝腳本
 
-版本：v2.8.0
-
 ## 核心架構設計
 
 ### 1. 配置驅動架構

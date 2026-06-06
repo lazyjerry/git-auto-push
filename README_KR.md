@@ -6,7 +6,7 @@
 
 두 개의 Bash 스크립트로, 각각 전통적인 Git 작업(add/commit/push)과 GitHub Flow PR 흐름을 처리합니다. 여러 AI CLI 도구를 통한 commit 메시지 및 PR 콘텐츠 생성을 지원하며, Conventional Commits 접두사, 메시지 품질 검사, 작업 번호 자동 입력 등의 기능도 제공합니다.
 
-버전: v2.8.0
+버전: v2.9.0
 
 ## 프로젝트 소개
 
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "테스트 $tool"; done
 
 > 전체 버전 이력은 [CHANGELOG.md](CHANGELOG.md)를 참조하세요
 
-- 최신 버전: v2.8.0 (2026-02-01)
+- 최신 버전: v2.9.0 (2026-06-06)
 - 총 버전 수: 16개 주요 버전
 - 개발 기간: 2025-08-21부터 현재까지
-- 코드 행 수: `git-auto-push.sh` 2,552행, `git-auto-pr.sh` 2,769행, `install.sh` 773행
+- 코드 행 수: `git-auto-push.sh` 2,658행, `git-auto-pr.sh` 2,886행, `install.sh` 773행
 
 ### 참조 자료
 

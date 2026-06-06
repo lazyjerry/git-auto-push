@@ -6,7 +6,7 @@
 
 两支 Bash 脚本，分别处理传统 Git 操作（add/commit/push）和 GitHub Flow PR 流程。支持多种 AI CLI 工具生成 commit 消息与 PR 内容，也提供 Conventional Commits 前缀、消息品质检查、任务编号自动带入等功能。
 
-版本：v2.8.0
+版本：v2.9.0
 
 ## 项目简介
 
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "测试 $tool"; done
 
 > 完整版本历史请查看 [CHANGELOG.md](CHANGELOG.md)
 
-- 最新版本：v2.8.0 (2026-02-01)
-- 总版本数：16 个主要版本
+- 最新版本：v2.9.0 (2026-06-06)
+- 总版本数：17 个主要版本
 - 开发期间：2025-08-21 至今
-- 代码行数：`git-auto-push.sh` 2,552 行、`git-auto-pr.sh` 2,769 行、`install.sh` 773 行
+- 代码行数：`git-auto-push.sh` 2,658 行、`git-auto-pr.sh` 2,886 行、`install.sh` 773 行
 
 ### 参考资源
 

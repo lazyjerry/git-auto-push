@@ -4,6 +4,25 @@
 
 ## 版本歷史
 
+### v2.10.0 - 改用 Antigravity (agy)，停用 gemini (2026-06-19)
+
+**🆕 新功能**
+
+- **Antigravity CLI 整合** 🆕：以 `agy` 取代已停用的 gemini 作為 AI 工具
+  - **預設順序**：opencode → copilot → agy → codex → claude
+  - **指令一致**：agy 與舊版 gemini 用法一致，僅指令名稱不同（stdin 輸入）
+  - **雙腳本同步**：git-auto-push.sh 和 git-auto-pr.sh 同時支援
+
+**🔧 改進**
+
+- **gemini 向下相容（alias）** ♻️：新增 `resolve_ai_command()`，將工具名稱映射為實際指令
+  - 舊配置（含環境變數、`.env`）中的 `gemini` 會自動解析為 `agy` 執行
+  - 套用於工具可用性檢查（`command -v`）與實際指令調用
+- **文檔同步更新** 📝：README.md、README_EN/CN/JP/KR.md、INSTALLATION.md、install.sh、CLAUDE.md、.github/copilot-instructions.md 同步更新
+- **行數統計**：git-auto-push.sh 2,673 行、git-auto-pr.sh 2,902 行、install.sh 772 行
+
+---
+
 ### v2.9.0 - 新增 opencode AI 工具支援 (2026-06-06)
 
 **🆕 新功能**
@@ -626,8 +645,8 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
 
 ## 版本統計
 
-- **最新版本**：v2.9.0 (2026-06-06)
-- **總版本數**：17 個主要版本
+- **最新版本**：v2.10.0 (2026-06-19)
+- **總版本數**：18 個主要版本
 - **開發期間**：2025-08-21 至今
 - **功能里程碑**：
   - v1.x：基礎功能和 PR 管理
@@ -639,6 +658,7 @@ readonly AUTO_DELETE_BRANCH_AFTER_MERGE=true
   - v2.7.0：外部配置文件系統與 POSIX Shell 相容性
   - v2.8.0：GitHub Copilot CLI 整合與安裝腳本強化
   - v2.9.0：新增 opencode AI 工具支援
+  - v2.10.0：改用 Antigravity (agy)，停用 gemini（保留為 alias）
 
 ## 相關文檔
 

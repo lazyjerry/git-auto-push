@@ -3,9 +3,9 @@
 
 # Git 自動化 PR 工具 - 提供完整的 GitHub Flow 工作流程自動化
 # 使用方式：./git-auto-pr.sh 或 ./git-auto-pr.sh --help
-# 作者：Lazy Jerry | 版本：v2.9.0 | 授權：MIT License
+# 作者：Lazy Jerry | 版本：v2.10.0 | 授權：MIT License
 
-readonly VERSION="v2.9.0"
+readonly VERSION="v2.10.0"
 
 # ==============================================
 # 配置文件加載區域
@@ -75,6 +75,9 @@ load_config() {
         fi
     fi
     
+    # 記錄實際載入的設定檔路徑（供提示使用；空字串代表使用內建預設值）
+    LOADED_CONFIG_FILE="$loaded_from"
+
     # 如果有加載配置文件，在調試模式下顯示訊息
     if [ "$config_loaded" = true ]; then
         # 注意：此時 IS_DEBUG 可能已被配置文件覆蓋
@@ -147,7 +150,7 @@ if [ ${#AI_TOOLS[@]} -eq 0 ]; then
     AI_TOOLS=(
         "opencode"
         "copilot"
-        "gemini"
+        "agy"
         "codex"
         "claude"
     )
@@ -805,9 +808,21 @@ run_opencode_command() {
     return 1
 }
 
+# 解析 AI 工具名稱對應的實際執行指令
+# 說明：gemini 已停用，視為 antigravity（agy）的 alias，
+#       舊配置中保留的 "gemini" 名稱會在此映射為實際的 agy 指令。
+# 參數：$1 - tool_name: AI 工具名稱
+# 輸出：實際可執行的指令名稱
+resolve_ai_command() {
+    case "$1" in
+        "gemini") echo "agy" ;;
+        *) echo "$1" ;;
+    esac
+}
+
 # 執行基於 stdin 的 AI 命令
 # 參數：
-#   $1 - tool_name AI 工具名稱 (gemini/claude)
+#   $1 - tool_name AI 工具名稱 (agy/claude)
 #   $2 - prompt 提示詞
 #   $3 - content 要分析的內容（透過臨時文件傳遞）
 #   $4 - timeout 超時時間（可選，預設 45 秒）
@@ -816,11 +831,25 @@ run_stdin_ai_command() {
     local prompt="$2"
     local content="$3"
     local timeout="${4:-45}"
-    
+
+    # gemini 已停用，視為 agy 的 alias，解析出實際執行指令
+    local ai_cmd
+    ai_cmd=$(resolve_ai_command "$tool_name")
+
+    # 提示 gemini 停用（舊配置仍寫 gemini 時）
+    if [ "$tool_name" = "gemini" ]; then
+        warning_msg "⚠️  gemini 已於 2026-06-18 停用，已自動改用 antigravity（agy）執行"
+        if [ -n "${LOADED_CONFIG_FILE:-}" ]; then
+            warning_msg "    建議將設定檔中的 \"gemini\" 改為 \"agy\"：${LOADED_CONFIG_FILE}"
+        else
+            warning_msg "    建議在設定檔將 \"gemini\" 改為 \"agy\"（目前使用內建預設值，未載入設定檔）"
+        fi
+    fi
+
     info_msg "正在調用 $tool_name..."
-    
+
     # 首先檢查工具是否可用
-    if ! command -v "$tool_name" >/dev/null 2>&1; then
+    if ! command -v "$ai_cmd" >/dev/null 2>&1; then
         warning_msg "$tool_name 工具未安裝"
         return 1
     fi
@@ -848,10 +877,10 @@ run_stdin_ai_command() {
     # 注意：使用 NODE_OPTIONS='--no-deprecation' 隱藏 Node.js 棄用警告
     # 這比 2>/dev/null 更安全，因為它只隱藏棄用警告，不會隱藏其他重要錯誤
     if command -v timeout >/dev/null 2>&1; then
-        output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' timeout $timeout $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content'" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' timeout $timeout $ai_cmd -p \"\$(cat '$temp_prompt')\" < '$temp_content'" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     else
-        output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' $tool_name -p \"\$(cat '$temp_prompt')\" < '$temp_content'" "正在等待 $tool_name 回應" "$timeout")
+        output=$(run_command_with_loading "NODE_OPTIONS='--no-deprecation' $ai_cmd -p \"\$(cat '$temp_prompt')\" < '$temp_content'" "正在等待 $tool_name 回應" "$timeout")
         exit_code=$?
     fi
     
@@ -1191,7 +1220,7 @@ Requirements: Use format ${username}/${branch_type}/${issue_key}-description, lo
                     warning_msg "⚠️  run_codex_command 執行失敗或返回空結果"
                 fi
                 ;;
-            "gemini"|"claude")
+            "agy"|"gemini"|"claude")
                 # 為分支名稱生成使用較短的超時時間（30秒）
                 if result=$(run_stdin_ai_command "$tool" "$prompt" "$content" 30); then
                     debug_msg "🔍 調試: $tool 原始輸出 result='$result'"
@@ -1342,7 +1371,7 @@ generate_pr_content_with_ai() {
                     warning_msg "$tool 無法生成 PR 內容"
                 fi
                 ;;
-            "gemini"|"claude")
+            "agy"|"gemini"|"claude")
                 # 讀取臨時文件內容
                 local content_text
                 content_text=$(cat "$temp_content")
@@ -1550,7 +1579,7 @@ show_help() {
     
     cyan_msg "  支援 AI 工具（可設定選項）："
     white_msg "    • codex             OpenAI Codex CLI"
-    white_msg "    • gemini            Google Gemini CLI"
+    white_msg "    • agy               Antigravity CLI（gemini 已停用，視為其 alias）"
     white_msg "    • claude            Anthropic Claude CLI"
     echo >&2
     

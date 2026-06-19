@@ -130,7 +130,7 @@ IS_DEBUG=false
 AI_TOOLS=(
     "opencode"  # OpenCode CLI（推薦）
     "copilot"   # GitHub Copilot CLI
-    "gemini"    # Google Gemini CLI
+    "agy"       # Antigravity CLI（gemini 已停用，視為其 alias）
     "codex"     # GitHub Copilot CLI (codex)
     "claude"    # Anthropic Claude CLI
 )
@@ -144,7 +144,7 @@ AUTO_CHECK_COMMIT_QUALITY=true          # 自動檢查（建議）
 
 ```bash
 # AI 工具優先順序（預設值區塊）
-AI_TOOLS=("opencode" "copilot" "gemini" "codex" "claude")
+AI_TOOLS=("opencode" "copilot" "agy" "codex" "claude")
 
 # 主分支偵測順序
 DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
@@ -235,12 +235,12 @@ gh extension install github/gh-copilot
 gh copilot --version
 ```
 
-##### Google Gemini CLI
+##### Antigravity CLI（agy）
 
 ```bash
-# 需要 Google AI Studio API Key
-# 安裝方式請參考 Google AI Studio 官方文件
-# https://ai.google.dev/
+# gemini 已停用，改用 Antigravity CLI（指令為 agy）
+# 舊配置中的 "gemini" 會自動視為 agy 的 alias
+# 安裝方式請參考 Antigravity 官方文件
 ```
 
 ##### Anthropic Claude CLI
@@ -287,7 +287,7 @@ bash -n git-auto-pr.sh && echo "✅ git-auto-pr.sh 語法正確"
 ./git-auto-pr.sh --help
 
 # 檢查 AI 工具可用性
-for tool in opencode copilot codex gemini claude; do 
+for tool in opencode copilot codex agy claude; do 
     command -v "$tool" >/dev/null 2>&1 && echo "✅ $tool 可用" || echo "⚠️ $tool 未安裝"
 done
 

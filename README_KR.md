@@ -6,7 +6,7 @@
 
 두 개의 Bash 스크립트로, 각각 전통적인 Git 작업(add/commit/push)과 GitHub Flow PR 흐름을 처리합니다. 여러 AI CLI 도구를 통한 commit 메시지 및 PR 콘텐츠 생성을 지원하며, Conventional Commits 접두사, 메시지 품질 검사, 작업 번호 자동 입력 등의 기능도 제공합니다.
 
-버전: v2.9.0
+버전: v2.10.0
 
 ## 프로젝트 소개
 
@@ -31,10 +31,10 @@
 ### 핵심 구성요소
 
 ```
-├── git-auto-push.sh         # 전통적인 Git 작업 자동화 (2552 행)
-├── git-auto-pr.sh           # GitHub Flow PR 흐름 자동화 (2769 행)
+├── git-auto-push.sh         # 전통적인 Git 작업 자동화 (2673 행)
+├── git-auto-pr.sh           # GitHub Flow PR 흐름 자동화 (2902 행)
 ├── Conventional Commits      # 접두사 지원: 수동 선택, AI 판단, 건너뛰기
-├── AI 도구 모듈              # copilot / gemini / codex / claude
+├── AI 도구 모듈              # opencode / copilot / agy / codex / claude
 │   ├── 폴백 메커니즘        # 도구 실패 시 자동 전환
 │   ├── 출력 정리            # AI 메타데이터 필터링
 │   └── 품질 검사            # commit 메시지 품질 분석
@@ -145,7 +145,7 @@ nano ~/.git-auto-push-config/.env
 
 ```bash
 # AI 도구 우선순위
-AI_TOOLS=("copilot" "claude" "gemini" "codex")
+AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # 기본 사용자 이름
 DEFAULT_USERNAME="your-name"
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI 콘텐츠 생성
 
-copilot, gemini, codex, claude 4가지 AI CLI 도구를 지원하며, 하나가 실패하면 자동으로 다음 도구를 시도합니다. 출력은 AI 도구의 메타데이터를 자동으로 정리합니다. `IS_DEBUG=true`를 활성화하면 프롬프트, diff 내용, 출력 결과를 확인할 수 있어 디버그에 편리합니다.
+opencode, copilot, agy, codex, claude 5가지 AI CLI 도구를 지원하며, 하나가 실패하면 자동으로 다음 도구를 시도합니다. 출력은 AI 도구의 메타데이터를 자동으로 정리합니다. `IS_DEBUG=true`를 활성화하면 프롬프트, diff 내용, 출력 결과를 확인할 수 있어 디버그에 편리합니다. (gemini는 중단되어 agy의 alias로 처리되며, 기존 설정의 `gemini`는 자동으로 agy로 실행됩니다.)
 
 **생성되는 콘텐츠**
 
@@ -323,7 +323,7 @@ PR 취소의 자주 발생하는 상황:
 ```bash
 # AI CLI 도구가 설치되어 있고 실행 가능한지 확인
 which codex
-which gemini
+which agy
 which claude
 ```
 
@@ -400,7 +400,7 @@ git-auto-pr                    # 옵션 3 선택 (PR 생성)
 
 - **AI_TOOLS 변수**: 통합된 AI 도구 우선순위 배열
 - **조건부 할당**: `: "${VAR:=default}"` 구문 사용, 설정 파일이 기본값보다 우선
-- **기본 호출 순서**: copilot → gemini → codex → claude (설정 파일로 덮어쓰기 가능)
+- **기본 호출 순서**: opencode → copilot → agy → codex → claude (설정 파일로 덮어쓰기 가능)
 
 ### 코드 문서 표준
 
@@ -441,14 +441,14 @@ generate_ai_pr_prompt() {
 ```bash
 # 방법 1: 설정 파일로 덮어쓰기 (권장)
 # ~/.git-auto-push-config/.env
-AI_TOOLS=("copilot" "codex" "gemini" "claude")
+AI_TOOLS=("copilot" "codex" "agy" "claude")
 
 # 방법 2: 스크립트 기본값 수정 (고급)
 # AI_TOOLS 기본값 블록을 찾아 배열 내용 수정
 AI_TOOLS=(
     "copilot"   # 1순위
     "codex"     # 2순위
-    "gemini"    # 3순위
+    "agy"    # 3순위
     "claude"    # 4순위
 )
 ```
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "테스트 $tool"; done
 
 > 전체 버전 이력은 [CHANGELOG.md](CHANGELOG.md)를 참조하세요
 
-- 최신 버전: v2.9.0 (2026-06-06)
-- 총 버전 수: 16개 주요 버전
+- 최신 버전: v2.10.0 (2026-06-19)
+- 총 버전 수: 18개 주요 버전
 - 개발 기간: 2025-08-21부터 현재까지
-- 코드 행 수: `git-auto-push.sh` 2,658행, `git-auto-pr.sh` 2,886행, `install.sh` 773행
+- 코드 행 수: `git-auto-push.sh` 2,673행, `git-auto-pr.sh` 2,902행, `install.sh` 772행
 
 ### 참조 자료
 

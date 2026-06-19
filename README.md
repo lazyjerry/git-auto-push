@@ -6,7 +6,7 @@
 
 兩支 Bash 腳本，分別處理傳統 Git 操作（add/commit/push）和 GitHub Flow PR 流程。支援多種 AI CLI 工具產生 commit 訊息與 PR 內容，也提供 Conventional Commits 前綴、訊息品質檢查、任務編號自動帶入等功能。
 
-版本：v2.9.0
+版本：v2.10.0
 
 ## 專案簡介
 
@@ -31,10 +31,10 @@
 ### 核心元件
 
 ```
-├── git-auto-push.sh         # 傳統 Git 操作自動化（2552 行）
-├── git-auto-pr.sh           # GitHub Flow PR 流程自動化（2769 行）
+├── git-auto-push.sh         # 傳統 Git 操作自動化（2673 行）
+├── git-auto-pr.sh           # GitHub Flow PR 流程自動化（2902 行）
 ├── Conventional Commits      # 前綴支援：手動選擇、AI 判斷、跳過
-├── AI 工具模組               # opencode / copilot / gemini / codex / claude
+├── AI 工具模組               # opencode / copilot / agy / codex / claude
 │   ├── 容錯機制             # 工具失敗自動切換
 │   ├── 輸出清理             # 過濾 AI 中繼資料
 │   └── 品質檢查             # 分析 commit 訊息品質
@@ -144,8 +144,8 @@ nano ~/.git-auto-push-config/.env
 常用配置選項：
 
 ```bash
-# AI 工具優先順序
-AI_TOOLS=("copilot" "claude" "gemini" "codex")
+# AI 工具優先順序（gemini 已停用，請改用 agy）
+AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # 預設使用者名稱
 DEFAULT_USERNAME="your-name"
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI 內容產生
 
-支援 opencode、copilot、gemini、codex、claude 五種 AI CLI 工具，一個失敗自動嘗試下一個。輸出會自動清理 AI 工具的中繼資料。開啟 `IS_DEBUG=true` 可以看到提示詞、diff 內容、輸出結果，方便除錯。
+支援 opencode、copilot、agy、codex、claude 五種 AI CLI 工具，一個失敗自動嘗試下一個。輸出會自動清理 AI 工具的中繼資料。開啟 `IS_DEBUG=true` 可以看到提示詞、diff 內容、輸出結果，方便除錯。（gemini 已停用，視為 agy 的 alias，舊配置中的 `gemini` 會自動改用 agy 執行。）
 
 **產生的內容**
 
@@ -323,7 +323,7 @@ PR 撤銷的常見情況：
 ```bash
 # 檢查 AI CLI 工具是否已安裝並可執行
 which codex
-which gemini
+which agy
 which claude
 ```
 
@@ -400,7 +400,7 @@ git-auto-pr                    # 選擇選項 3（建立 PR）
 
 - **AI_TOOLS 變數**：統一的 AI 工具優先順序陣列
 - **條件賦值**：使用 `: "${VAR:=default}"` 語法，配置文件優先於預設值
-- **預設調用順序**：opencode → copilot → gemini → codex → claude（可透過配置文件覆蓋）
+- **預設調用順序**：opencode → copilot → agy → codex → claude（可透過配置文件覆蓋）
 
 ### 程式碼文檔標準
 
@@ -441,14 +441,14 @@ generate_ai_pr_prompt() {
 ```bash
 # 方式一：透過配置文件覆蓋（推薦）
 # ~/.git-auto-push-config/.env
-AI_TOOLS=("copilot" "codex" "gemini" "claude")
+AI_TOOLS=("copilot" "codex" "agy" "claude")
 
 # 方式二：修改腳本預設值（進階）
 # 找到 AI_TOOLS 預設值區塊，修改陣列內容
 AI_TOOLS=(
     "copilot"   # 第一優先
     "codex"     # 第二優先
-    "gemini"    # 第三優先
+    "agy"       # 第三優先（Antigravity；gemini 已停用，視為其 alias）
     "claude"    # 第四優先
 )
 ```
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 
 > 完整版本歷史請查看 [CHANGELOG.md](CHANGELOG.md)
 
-- 最新版本：v2.9.0 (2026-06-06)
-- 總版本數：17 個主要版本
+- 最新版本：v2.10.0 (2026-06-19)
+- 總版本數：18 個主要版本
 - 開發期間：2025-08-21 至今
-- 程式碼行數：`git-auto-push.sh` 2,658 行、`git-auto-pr.sh` 2,886 行、`install.sh` 773 行
+- 程式碼行數：`git-auto-push.sh` 2,673 行、`git-auto-pr.sh` 2,902 行、`install.sh` 772 行
 
 ### 參考資源
 

@@ -6,7 +6,7 @@
 
 Two Bash scripts that handle traditional Git operations (add/commit/push) and GitHub Flow PR workflows respectively. Supports multiple AI CLI tools for generating commit messages and PR content, along with Conventional Commits prefixes, message quality checks, issue key auto-insertion, and more.
 
-Version: v2.9.0
+Version: v2.10.0
 
 ## Project Overview
 
@@ -31,10 +31,10 @@ Version: v2.9.0
 ### Core Components
 
 ```
-├── git-auto-push.sh         # Traditional Git operations automation (2552 lines)
-├── git-auto-pr.sh           # GitHub Flow PR workflow automation (2769 lines)
+├── git-auto-push.sh         # Traditional Git operations automation (2673 lines)
+├── git-auto-pr.sh           # GitHub Flow PR workflow automation (2902 lines)
 ├── Conventional Commits      # Prefix support: manual selection, AI detection, skip
-├── AI Tool Module            # opencode / copilot / gemini / codex / claude
+├── AI Tool Module            # opencode / copilot / agy / codex / claude
 │   ├── Failover             # Auto-switch on tool failure
 │   ├── Output Cleaning      # Filter AI metadata
 │   └── Quality Check        # Analyze commit message quality
@@ -145,7 +145,7 @@ Common configuration options:
 
 ```bash
 # AI tool priority order
-AI_TOOLS=("copilot" "claude" "gemini" "codex")
+AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # Default username
 DEFAULT_USERNAME="your-name"
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI Content Generation
 
-Supports five AI CLI tools: opencode, copilot, gemini, codex, and claude. If one fails, it automatically tries the next. Output is automatically cleaned of AI tool metadata. Enable `IS_DEBUG=true` to see prompts, diff content, and output for debugging.
+Supports five AI CLI tools: opencode, copilot, agy, codex, and claude. If one fails, it automatically tries the next. Output is automatically cleaned of AI tool metadata. Enable `IS_DEBUG=true` to see prompts, diff content, and output for debugging.
 
 **Generated Content**
 
@@ -323,7 +323,7 @@ Network issues are automatically detected with suggestions provided.
 ```bash
 # Check if AI CLI tools are installed and executable
 which codex
-which gemini
+which agy
 which claude
 ```
 
@@ -400,7 +400,7 @@ The project uses a modular design with these main components:
 
 - **AI_TOOLS variable**: Unified AI tool priority array
 - **Conditional assignment**: Uses `: "${VAR:=default}"` syntax; config files take precedence over defaults
-- **Default call order**: opencode → copilot → gemini → codex → claude (overridable via config file)
+- **Default call order**: opencode → copilot → agy → codex → claude (overridable via config file)
 
 ### Code Documentation Standard
 
@@ -441,14 +441,14 @@ generate_ai_pr_prompt() {
 ```bash
 # Method 1: Override via config file (recommended)
 # ~/.git-auto-push-config/.env
-AI_TOOLS=("copilot" "codex" "gemini" "claude")
+AI_TOOLS=("copilot" "codex" "agy" "claude")
 
 # Method 2: Modify script defaults (advanced)
 # Find the AI_TOOLS default value block and modify the array
 AI_TOOLS=(
     "copilot"   # 1st priority
     "codex"     # 2nd priority
-    "gemini"    # 3rd priority
+    "agy"    # 3rd priority
     "claude"    # 4th priority
 )
 ```
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "Testing $tool"; done
 
 > For the complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
-- Latest version: v2.9.0 (2026-06-06)
-- Total versions: 17 major versions
+- Latest version: v2.10.0 (2026-06-19)
+- Total versions: 18 major versions
 - Development period: 2025-08-21 to present
-- Lines of code: `git-auto-push.sh` 2,658 lines, `git-auto-pr.sh` 2,886 lines, `install.sh` 773 lines
+- Lines of code: `git-auto-push.sh` 2,673 lines, `git-auto-pr.sh` 2,902 lines, `install.sh` 772 lines
 
 ### References
 

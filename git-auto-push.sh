@@ -3,9 +3,9 @@
 
 # Git 自動化推送工具 - 提供完整的 Git 傳統工作流程自動化（add/commit/push）
 # 使用方式：./git-auto-push.sh 或 ./git-auto-push.sh --help 或 ./git-auto-push.sh -a
-# 作者：Lazy Jerry | 版本：v2.9.0 | 授權：MIT License
+# 作者：Lazy Jerry | 版本：v2.10.0 | 授權：MIT License
 
-readonly VERSION="v2.9.0"
+readonly VERSION="v2.10.0"
 
 # ==============================================
 # 配置文件加載區域
@@ -75,6 +75,9 @@ load_config() {
         fi
     fi
     
+    # 記錄實際載入的設定檔路徑（供提示使用；空字串代表使用內建預設值）
+    LOADED_CONFIG_FILE="$loaded_from"
+
     # 如果有加載配置文件，在調試模式下顯示訊息
     if [ "$config_loaded" = true ]; then
         # 注意：此時 IS_DEBUG 可能已被配置文件覆蓋
@@ -102,17 +105,18 @@ load_config
 # 工具特性：
 #   - copilot：GitHub Copilot CLI，需要 Copilot 訂閱，支援 programmatic mode
 #   - codex：通常較穩定，建議優先使用
-#   - gemini：可能有網路或認證問題，需配置 API key
+#   - agy：Antigravity CLI，可能有網路或認證問題，需配置 API key
+#         （gemini 已停用，視為 agy 的 alias，舊配置中的 "gemini" 會自動改用 agy 執行）
 #   - claude：需要登入認證或 API 設定
 # 範例：
-#   AI_TOOLS=("codex")                    # 僅使用 codex
-#   AI_TOOLS=("copilot" "gemini" "codex") # 調整優先順序
+#   AI_TOOLS=("codex")                 # 僅使用 codex
+#   AI_TOOLS=("copilot" "agy" "codex") # 調整優先順序
 : "${AI_TOOLS:=}"
 if [ ${#AI_TOOLS[@]} -eq 0 ]; then
     AI_TOOLS=(
         "opencode"
         "copilot"
-        "gemini"
+        "agy"
         "codex"
         "claude"
     )
@@ -383,7 +387,7 @@ run_ai_with_fallback() {
     LAST_AI_TOOL=""
     
     for tool_name in "${AI_TOOLS[@]}"; do
-        if ! command -v "$tool_name" >/dev/null 2>&1; then
+        if ! command -v "$(resolve_ai_command "$tool_name")" >/dev/null 2>&1; then
             debug_msg "AI 工具 $tool_name 未安裝，跳過..."
             continue
         fi
@@ -396,8 +400,16 @@ run_ai_with_fallback() {
                 "copilot")
                     info_msg "💡 提醒: Copilot CLI 需要 GitHub Copilot 訂閱，使用 programmatic mode"
                     ;;
-                "gemini")
-                    warning_msg "💡 提醒: Gemini 除了登入之外，如遇到頻率限制請稍後再試"
+                "agy"|"gemini")
+                    if [ "$tool_name" = "gemini" ]; then
+                        warning_msg "⚠️  gemini 已於 2026-06-18 停用，已自動改用 antigravity（agy）執行"
+                        if [ -n "${LOADED_CONFIG_FILE:-}" ]; then
+                            warning_msg "    建議將設定檔中的 \"gemini\" 改為 \"agy\"：${LOADED_CONFIG_FILE}"
+                        else
+                            warning_msg "    建議在設定檔將 \"gemini\" 改為 \"agy\"（目前使用內建預設值，未載入設定檔）"
+                        fi
+                    fi
+                    warning_msg "💡 提醒: Antigravity（agy）除了登入之外，如遇到頻率限制請稍後再試"
                     ;;
                 "claude")
                     warning_msg "💡 提醒: Claude 需要登入付費帳號或 API 參數設定"
@@ -428,7 +440,7 @@ run_ai_with_fallback() {
                     return 0
                 fi
                 ;;
-            "gemini"|"claude")
+            "agy"|"gemini"|"claude")
                 if result=$(run_stdin_ai_command "$tool_name" "$prompt"); then
                     LAST_AI_TOOL="$tool_name"
                     echo "$result"
@@ -726,9 +738,21 @@ run_command_with_loading() {
 # AI 工具核心執行函數（統一底層邏輯）
 # ==============================================
 
+# 解析 AI 工具名稱對應的實際執行指令
+# 說明：gemini 已停用，視為 antigravity（agy）的 alias，
+#       舊配置中保留的 "gemini" 名稱會在此映射為實際的 agy 指令。
+# 參數：$1 - tool_name: AI 工具名稱
+# 輸出：實際可執行的指令名稱
+resolve_ai_command() {
+    case "$1" in
+        "gemini") echo "agy" ;;
+        *) echo "$1" ;;
+    esac
+}
+
 # 執行 AI 工具的核心函數（統一超時、錯誤處理、NODE_OPTIONS 設定）
 # 參數：
-#   $1 - tool_name: AI 工具名稱 (gemini/claude/codex)
+#   $1 - tool_name: AI 工具名稱 (agy/claude/codex)
 #   $2 - input_file: 輸入檔案路徑
 #   $3 - timeout: 超時秒數（預設 45）
 #   $4 - use_loading: 是否使用 loading 動畫 (true/false，預設 false)
@@ -790,23 +814,25 @@ _execute_ai_tool() {
                 fi
             fi
             ;;
-        "gemini"|"claude")
-            # gemini 和 claude 使用 stdin
+        "agy"|"gemini"|"claude")
+            # agy（gemini 已停用，視為 agy 的 alias）和 claude 使用 stdin
             # 使用 NODE_OPTIONS='--no-deprecation' 隱藏 Node.js 棄用警告
+            local ai_cmd
+            ai_cmd=$(resolve_ai_command "$tool_name")
             if [[ "$use_loading" == "true" ]]; then
                 if command -v timeout >/dev/null 2>&1; then
-                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' timeout ${timeout}s $tool_name < '$input_file'" "$loading_message" "$timeout")
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' timeout ${timeout}s $ai_cmd < '$input_file'" "$loading_message" "$timeout")
                     exit_code=$?
                 else
-                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' $tool_name < '$input_file'" "$loading_message" "$timeout")
+                    output=$(run_command_with_loading "LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' $ai_cmd < '$input_file'" "$loading_message" "$timeout")
                     exit_code=$?
                 fi
             else
                 if command -v timeout >/dev/null 2>&1; then
-                    output=$(LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' timeout ${timeout}s "$tool_name" < "$input_file" 2>&1)
+                    output=$(LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' timeout ${timeout}s "$ai_cmd" < "$input_file" 2>&1)
                     exit_code=$?
                 else
-                    output=$(LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' "$tool_name" < "$input_file" 2>&1)
+                    output=$(LC_ALL=en_US.UTF-8 NODE_OPTIONS='--no-deprecation' "$ai_cmd" < "$input_file" 2>&1)
                     exit_code=$?
                 fi
             fi
@@ -1253,7 +1279,7 @@ run_opencode_command() {
 
 # 執行基於 stdin 的 AI 命令（用於 commit 訊息生成，自動獲取 git diff）
 # 參數：
-#   $1 - tool_name: AI 工具名稱 (gemini/claude)
+#   $1 - tool_name: AI 工具名稱 (agy/claude)
 #   $2 - prompt: 提示詞內容
 # 返回：0=成功，1=失敗
 # 輸出：AI 生成的內容（成功時）
@@ -1263,9 +1289,9 @@ run_stdin_ai_command() {
     local timeout=45
     
     info_msg "正在調用 $tool_name..."
-    
+
     # 首先檢查工具是否可用
-    if ! command -v "$tool_name" >/dev/null 2>&1; then
+    if ! command -v "$(resolve_ai_command "$tool_name")" >/dev/null 2>&1; then
         warning_msg "$tool_name 工具未安裝"
         return 1
     fi
@@ -1578,7 +1604,7 @@ get_commit_message() {
 
 # 執行簡單的 AI 命令（不需要 git diff），用於品質檢查等場景
 # 參數：
-#   $1 - tool_name: AI 工具名稱 (gemini/claude/codex)
+#   $1 - tool_name: AI 工具名稱 (agy/claude/codex)
 #   $2 - prompt: 提示詞內容
 # 返回：0=成功，1=失敗
 # 輸出：AI 生成的內容（成功時，已清理）
@@ -1588,7 +1614,7 @@ run_simple_ai_command() {
     local timeout=45
     
     # 檢查工具是否可用
-    if ! command -v "$tool_name" &>/dev/null; then
+    if ! command -v "$(resolve_ai_command "$tool_name")" &>/dev/null; then
         debug_msg "$tool_name 工具未安裝"
         return 1
     fi
@@ -2103,7 +2129,7 @@ show_help() {
     
     cyan_msg "  支援 AI 工具（可設定選項）："
     white_msg "    • codex             OpenAI Codex CLI"
-    white_msg "    • gemini            Google Gemini CLI"
+    white_msg "    • agy               Antigravity CLI（gemini 已停用，視為其 alias）"
     white_msg "    • claude            Anthropic Claude CLI"
     echo >&2
     
@@ -2164,7 +2190,7 @@ show_help() {
         white_msg "      ✓ 詢問模式：提交前詢問是否使用 AI 檢查（預設 N）"
         white_msg "      ✓ 使用者可選擇檢查或跳過，不影響快速提交流程"
     fi
-    white_msg "    檢查工具：依 AI_TOOLS 順序使用（copilot/gemini/codex/claude）"
+    white_msg "    檢查工具：依 AI_TOOLS 順序使用（copilot/agy/codex/claude）"
     white_msg "    容錯機制：AI 失敗時不影響提交流程"
     white_msg "    適用場景：提升 commit 訊息品質、團隊規範執行"
     echo >&2

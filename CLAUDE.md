@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. `[script_dir]/.git-auto-push-config/.env` - 全域預設配置
 
 **關鍵配置變數**：
-- `AI_TOOLS` - AI 工具優先順序陣列（例：`("copilot" "gemini" "codex" "claude")`）
+- `AI_TOOLS` - AI 工具優先順序陣列（例：`("copilot" "agy" "codex" "claude")`；gemini 已停用，視為 agy 的 alias）
 - `DEFAULT_MAIN_BRANCHES` - 主分支偵測順序（git-auto-pr.sh，例：`("uat" "main" "master")`）
 - `DEFAULT_USERNAME` - 預設使用者名稱（git-auto-pr.sh）
 - `AUTO_CHECK_COMMIT_QUALITY` - Commit 品質自動檢查（git-auto-push.sh，true/false）
@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **核心函數**：
 - `run_codex_command()` - Codex/Copilot CLI 調用
-- `run_stdin_ai_command()` - 支援 stdin 的 AI 工具調用（gemini/claude）
+- `run_stdin_ai_command()` - 支援 stdin 的 AI 工具調用（agy/claude）
 - `clean_ai_message()` - 清理 AI 輸出（移除元數據和技術雜訊）
 - `generate_ai_commit_prompt()` - Commit 訊息提示詞生成（git-auto-push.sh）
 - `generate_ai_pr_prompt()` - PR 內容提示詞生成（git-auto-pr.sh）

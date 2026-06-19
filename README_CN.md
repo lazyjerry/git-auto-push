@@ -6,7 +6,7 @@
 
 两支 Bash 脚本，分别处理传统 Git 操作（add/commit/push）和 GitHub Flow PR 流程。支持多种 AI CLI 工具生成 commit 消息与 PR 内容，也提供 Conventional Commits 前缀、消息品质检查、任务编号自动带入等功能。
 
-版本：v2.9.0
+版本：v2.10.0
 
 ## 项目简介
 
@@ -31,10 +31,10 @@
 ### 核心组件
 
 ```
-├── git-auto-push.sh         # 传统 Git 操作自动化（2552 行）
-├── git-auto-pr.sh           # GitHub Flow PR 流程自动化（2769 行）
+├── git-auto-push.sh         # 传统 Git 操作自动化（2673 行）
+├── git-auto-pr.sh           # GitHub Flow PR 流程自动化（2902 行）
 ├── Conventional Commits      # 前缀支持：手动选择、AI 判断、跳过
-├── AI 工具模块               # copilot / gemini / codex / claude
+├── AI 工具模块               # opencode / copilot / agy / codex / claude
 │   ├── 容错机制             # 工具失败自动切换
 │   ├── 输出清理             # 过滤 AI 中继数据
 │   └── 品质检查             # 分析 commit 消息品质
@@ -145,7 +145,7 @@ nano ~/.git-auto-push-config/.env
 
 ```bash
 # AI 工具优先顺序
-AI_TOOLS=("copilot" "claude" "gemini" "codex")
+AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # 默认用户名
 DEFAULT_USERNAME="your-name"
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI 内容生成
 
-支持 copilot、gemini、codex、claude 四种 AI CLI 工具，一个失败自动尝试下一个。输出会自动清理 AI 工具的中继数据。开启 `IS_DEBUG=true` 可以看到提示词、diff 内容、输出结果，方便调试。
+支持 opencode、copilot、agy、codex、claude 五种 AI CLI 工具，一个失败自动尝试下一个。输出会自动清理 AI 工具的中继数据。开启 `IS_DEBUG=true` 可以看到提示词、diff 内容、输出结果，方便调试。（gemini 已停用，视为 agy 的 alias，旧配置中的 `gemini` 会自动改用 agy 执行。）
 
 **生成的内容**
 
@@ -323,7 +323,7 @@ PR 撤销的常见情况：
 ```bash
 # 检查 AI CLI 工具是否已安装并可执行
 which codex
-which gemini
+which agy
 which claude
 ```
 
@@ -400,7 +400,7 @@ git-auto-pr                    # 选择选项 3（创建 PR）
 
 - **AI_TOOLS 变量**：统一的 AI 工具优先顺序数组
 - **条件赋值**：使用 `: "${VAR:=default}"` 语法，配置文件优先于默认值
-- **默认调用顺序**：copilot → gemini → codex → claude（可通过配置文件覆盖）
+- **默认调用顺序**：opencode → copilot → agy → codex → claude（可通过配置文件覆盖）
 
 ### 代码文档标准
 
@@ -441,14 +441,14 @@ generate_ai_pr_prompt() {
 ```bash
 # 方式一：通过配置文件覆盖（推荐）
 # ~/.git-auto-push-config/.env
-AI_TOOLS=("copilot" "codex" "gemini" "claude")
+AI_TOOLS=("copilot" "codex" "agy" "claude")
 
 # 方式二：修改脚本默认值（进阶）
 # 找到 AI_TOOLS 默认值区块，修改数组内容
 AI_TOOLS=(
     "copilot"   # 第一优先
     "codex"     # 第二优先
-    "gemini"    # 第三优先
+    "agy"    # 第三优先
     "claude"    # 第四优先
 )
 ```
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "测试 $tool"; done
 
 > 完整版本历史请查看 [CHANGELOG.md](CHANGELOG.md)
 
-- 最新版本：v2.9.0 (2026-06-06)
-- 总版本数：17 个主要版本
+- 最新版本：v2.10.0 (2026-06-19)
+- 总版本数：18 个主要版本
 - 开发期间：2025-08-21 至今
-- 代码行数：`git-auto-push.sh` 2,658 行、`git-auto-pr.sh` 2,886 行、`install.sh` 773 行
+- 代码行数：`git-auto-push.sh` 2,673 行、`git-auto-pr.sh` 2,902 行、`install.sh` 772 行
 
 ### 参考资源
 

@@ -152,9 +152,9 @@ check_dependencies() {
         ai_tools_found=$((ai_tools_found + 1))
     fi
     
-    # Gemini CLI
-    if command -v gemini > /dev/null 2>&1; then
-        success "gemini 可用"
+    # Antigravity CLI（gemini 已停用，視為 agy 的 alias）
+    if command -v agy > /dev/null 2>&1; then
+        success "agy 可用"
         ai_tools_found=$((ai_tools_found + 1))
     fi
     
@@ -180,9 +180,8 @@ check_dependencies() {
         echo "      gh extension install github/gh-copilot"
         echo "      https://github.com/github/copilot-cli"
         echo ""
-        echo "   📦 Google Gemini CLI"
-        echo "      npm install -g @anthropic-ai/claude-cli"
-        echo "      https://github.com/google-gemini/gemini-cli"
+        echo "   📦 Antigravity CLI（agy，gemini 已停用，視為其 alias）"
+        echo "      請參考 Antigravity 官方文件安裝 agy 指令"
         echo ""
         echo "   📦 OpenAI Codex CLI"
         echo "      npm install -g @openai/codex"
@@ -420,11 +419,11 @@ setup_config() {
     
     # AI 工具順序
     echo "🤖 AI 工具優先順序設定"
-    echo "   可用工具: copilot, gemini, codex, claude"
-    echo "   多個工具用空格分隔，例如: copilot gemini codex claude"
-    printf "   請輸入 AI 工具順序 [預設: copilot gemini codex claude]: "
+    echo "   可用工具: copilot, agy, codex, claude"
+    echo "   多個工具用空格分隔，例如: copilot agy codex claude"
+    printf "   請輸入 AI 工具順序 [預設: copilot agy codex claude]: "
     read ai_tools_input < /dev/tty
-    ai_tools="${ai_tools_input:-copilot gemini codex claude}"
+    ai_tools="${ai_tools_input:-copilot agy codex claude}"
     echo ""
     
     # 預設使用者名稱

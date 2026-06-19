@@ -6,7 +6,7 @@
 
 2つの Bash スクリプトで、従来の Git 操作（add/commit/push）と GitHub Flow PR フローをそれぞれ処理します。複数の AI CLI ツールによる commit メッセージと PR コンテンツの生成をサポートし、Conventional Commits プレフィックス、メッセージ品質チェック、タスク番号の自動挿入などの機能も提供します。
 
-バージョン：v2.9.0
+バージョン：v2.10.0
 
 ## プロジェクト概要
 
@@ -31,10 +31,10 @@
 ### コアコンポーネント
 
 ```
-├── git-auto-push.sh         # 従来の Git 操作自動化（2552 行）
-├── git-auto-pr.sh           # GitHub Flow PR フロー自動化（2769 行）
+├── git-auto-push.sh         # 従来の Git 操作自動化（2673 行）
+├── git-auto-pr.sh           # GitHub Flow PR フロー自動化（2902 行）
 ├── Conventional Commits      # プレフィックスサポート：手動選択、AI 判定、スキップ
-├── AI ツールモジュール        # copilot / gemini / codex / claude
+├── AI ツールモジュール        # opencode / copilot / agy / codex / claude
 │   ├── フォールバック機能    # ツール失敗時の自動切り替え
 │   ├── 出力クリーニング      # AI メタデータのフィルタリング
 │   └── 品質チェック          # commit メッセージの品質分析
@@ -145,7 +145,7 @@ nano ~/.git-auto-push-config/.env
 
 ```bash
 # AI ツールの優先順序
-AI_TOOLS=("copilot" "claude" "gemini" "codex")
+AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # デフォルトユーザー名
 DEFAULT_USERNAME="your-name"
@@ -203,7 +203,7 @@ IS_DEBUG=false
 
 ### AI コンテンツ生成
 
-copilot、gemini、codex、claude の 4 種類の AI CLI ツールをサポートし、1つ失敗すると自動的に次のツールを試行します。出力は AI ツールのメタデータを自動的にクリーニングします。`IS_DEBUG=true` を有効にすると、プロンプト、diff 内容、出力結果を確認でき、デバッグに便利です。
+opencode、copilot、agy、codex、claude の 5 種類の AI CLI ツールをサポートし、1つ失敗すると自動的に次のツールを試行します。出力は AI ツールのメタデータを自動的にクリーニングします。`IS_DEBUG=true` を有効にすると、プロンプト、diff 内容、出力結果を確認でき、デバッグに便利です。（gemini は廃止され、agy の alias として扱われます。旧設定の `gemini` は自動的に agy で実行されます。）
 
 **生成されるコンテンツ**
 
@@ -323,7 +323,7 @@ PR 取り消しのよくあるケース：
 ```bash
 # AI CLI ツールがインストールされ、実行可能か確認
 which codex
-which gemini
+which agy
 which claude
 ```
 
@@ -400,7 +400,7 @@ git-auto-pr                    # オプション 3 を選択（PR 作成）
 
 - **AI_TOOLS 変数**：統一された AI ツール優先順序配列
 - **条件付き代入**：`: "${VAR:=default}"` 構文を使用し、設定ファイルがデフォルト値より優先
-- **デフォルト呼び出し順序**：copilot → gemini → codex → claude（設定ファイルで上書き可能）
+- **デフォルト呼び出し順序**：opencode → copilot → agy → codex → claude（設定ファイルで上書き可能）
 
 ### コードドキュメント標準
 
@@ -441,14 +441,14 @@ generate_ai_pr_prompt() {
 ```bash
 # 方法 1：設定ファイルで上書き（推奨）
 # ~/.git-auto-push-config/.env
-AI_TOOLS=("copilot" "codex" "gemini" "claude")
+AI_TOOLS=("copilot" "codex" "agy" "claude")
 
 # 方法 2：スクリプトのデフォルト値を修正（上級）
 # AI_TOOLS デフォルト値ブロックを見つけ、配列内容を修正
 AI_TOOLS=(
     "copilot"   # 第 1 優先
     "codex"     # 第 2 優先
-    "gemini"    # 第 3 優先
+    "agy"    # 第 3 優先
     "claude"    # 第 4 優先
 )
 ```
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "テスト $tool"; done
 
 > 完全なバージョン履歴は [CHANGELOG.md](CHANGELOG.md) をご覧ください
 
-- 最新バージョン：v2.9.0 (2026-06-06)
-- 総バージョン数：16 のメジャーバージョン
+- 最新バージョン：v2.10.0 (2026-06-19)
+- 総バージョン数：18 のメジャーバージョン
 - 開発期間：2025-08-21 から現在
-- コード行数：`git-auto-push.sh` 2,658 行、`git-auto-pr.sh` 2,886 行、`install.sh` 773 行
+- コード行数：`git-auto-push.sh` 2,673 行、`git-auto-pr.sh` 2,902 行、`install.sh` 772 行
 
 ### 参考リソース
 

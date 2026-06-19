@@ -11,7 +11,7 @@
 
 ### 核心設計模式
 - **模組化函數設計**：所有主要功能都封裝為獨立函數（如 `error_msg()`, `run_command()`）
-- **AI 工具容錯鏈**：支援多個 AI CLI 工具 (`codex` → `gemini` → `claude`) 的自動容錯機制
+- **AI 工具容錯鏈**：支援多個 AI CLI 工具 (`codex` → `agy` → `claude`) 的自動容錯機制（gemini 已停用，視為 agy 的 alias）
 - **配置驅動**：所有可配置項集中在檔案頂部（AI 工具順序、分支設定等）
 
 ## ⚙️ 關鍵配置系統
@@ -21,7 +21,7 @@
 # 位置：檔案頂部預設值區域，使用條件賦值
 # 配置文件優先載入，若未設定則使用預設值
 if [ ${#AI_TOOLS[@]} -eq 0 ]; then
-    AI_TOOLS=("gemini" "codex" "claude")  # 預設優先順序
+    AI_TOOLS=("agy" "codex" "claude")  # 預設優先順序
 fi
 ```
 
@@ -105,7 +105,7 @@ bash -n git-auto-push.sh && bash -n git-auto-pr.sh
 ./git-auto-pr.sh --help
 
 # AI 工具連線測試
-for tool in codex gemini claude; do command -v "$tool" && echo "$tool 可用"; done
+for tool in codex agy claude; do command -v "$tool" && echo "$tool 可用"; done
 ```
 
 ## 🔄 版本管理慣例

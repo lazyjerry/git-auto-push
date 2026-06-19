@@ -145,7 +145,13 @@ check_dependencies() {
     echo ""
     info "檢查 AI CLI 工具（選擇性）..."
     ai_tools_found=0
-    
+
+    # opencode CLI
+    if command -v opencode > /dev/null 2>&1; then
+        success "opencode 可用"
+        ai_tools_found=$((ai_tools_found + 1))
+    fi
+
     # Copilot CLI
     if command -v gh > /dev/null 2>&1 && gh copilot --version > /dev/null 2>&1; then
         success "copilot 可用（gh copilot extension）"
@@ -175,6 +181,10 @@ check_dependencies() {
         echo "   AI 功能將無法使用，但腳本仍可正常運作"
         echo ""
         echo "   💡 建議至少安裝一個 AI 工具以啟用自動內容產生功能："
+        echo ""
+        echo "   📦 opencode CLI"
+        echo "      npm install -g opencode-ai"
+        echo "      https://github.com/sst/opencode"
         echo ""
         echo "   📦 GitHub Copilot CLI（推薦，需要 Copilot 訂閱）"
         echo "      gh extension install github/gh-copilot"
@@ -419,11 +429,11 @@ setup_config() {
     
     # AI 工具順序
     echo "🤖 AI 工具優先順序設定"
-    echo "   可用工具: copilot, agy, codex, claude"
-    echo "   多個工具用空格分隔，例如: copilot agy codex claude"
-    printf "   請輸入 AI 工具順序 [預設: copilot agy codex claude]: "
+    echo "   可用工具: opencode, copilot, agy, codex, claude"
+    echo "   多個工具用空格分隔，例如: opencode copilot agy codex claude"
+    printf "   請輸入 AI 工具順序 [預設: opencode copilot agy codex claude]: "
     read ai_tools_input < /dev/tty
-    ai_tools="${ai_tools_input:-copilot agy codex claude}"
+    ai_tools="${ai_tools_input:-opencode copilot agy codex claude}"
     echo ""
     
     # 預設使用者名稱

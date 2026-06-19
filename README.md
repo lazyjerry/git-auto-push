@@ -82,10 +82,10 @@
 ### 一鍵安裝
 
 ```bash
-# 互動式安裝（預設安裝到 ~/.local/bin）
+# 互動式安裝/更新（預設安裝到 ~/.local/bin）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# 直接全域安裝（安裝到 /usr/local/bin，需要 sudo）
+# 直接全域安裝/更新（安裝到 /usr/local/bin，需要 sudo）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 
 # 解除安裝

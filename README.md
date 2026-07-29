@@ -570,7 +570,7 @@ for tool in "${AI_TOOLS[@]}"; do echo "測試 $tool"; done
 - 最新版本：v2.10.0 (2026-06-19)
 - 總版本數：18 個主要版本
 - 開發期間：2025-08-21 至今
-- 程式碼行數：`git-auto-push.sh` 2,673 行、`git-auto-pr.sh` 2,902 行、`install.sh` 772 行
+- 程式碼行數：`git-auto-push.sh` 2,700 行、`git-auto-pr.sh` 2,915 行、`install.sh` 782 行
 
 ### 參考資源
 

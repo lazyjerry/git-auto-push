@@ -1802,6 +1802,17 @@ commit_changes() {
     fi
 }
 
+# 取得 origin 的可瀏覽網址（SSH 格式自動轉為 https，無 origin 則回傳 1）
+get_remote_web_url() {
+    local url
+    url=$(git remote get-url origin 2>/dev/null) || return 1
+    [ -z "$url" ] && return 1
+
+    # git@host:path.git 與 ssh://git@host/path.git 皆轉為 https://host/path
+    printf '%s' "$url" | sed -e 's#^git@\([^:]*\):#https://\1/#' -e 's#^ssh://git@#https://#' -e 's#\.git$##'
+    return 0
+}
+
 # 將本地變更推送到遠端倉庫（回傳 0=成功，1=失敗）
 push_to_remote() {
     info_msg "正在推送到遠端倉庫..."
@@ -1818,6 +1829,11 @@ push_to_remote() {
     # 推送到遠端
     if git push origin "$branch" 2>/dev/null; then
         success_msg "成功推送到遠端分支: $branch"
+
+        local remote_url
+        if remote_url=$(get_remote_web_url); then
+            cyan_label_msg "🔗 遠端倉庫:" "$remote_url"
+        fi
         return 0
     else
         error_msg "推送失敗"

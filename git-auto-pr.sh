@@ -3,9 +3,9 @@
 
 # Git 自動化 PR 工具 - 提供完整的 GitHub Flow 工作流程自動化
 # 使用方式：./git-auto-pr.sh 或 ./git-auto-pr.sh --help
-# 作者：Lazy Jerry | 版本：v2.10.0 | 授權：MIT License
+# 作者：Lazy Jerry | 版本：v2.11.0 | 授權：MIT License
 
-readonly VERSION="v2.10.0"
+readonly VERSION="v2.11.0"
 
 # ==============================================
 # 配置文件加載區域
@@ -145,8 +145,9 @@ EOF
 # ==============================================
 
 # AI 工具優先順序配置（依陣列順序調用，失敗時自動嘗試下一個）
-: "${AI_TOOLS:=}"
-if [ ${#AI_TOOLS[@]} -eq 0 ]; then
+# 注意：不可用 : "${AI_TOOLS:=}" 預先賦值，否則會產生單一空字串元素，
+#       使下方的預設值填充永遠不執行（元素數為 1 而非 0）
+if [ -z "${AI_TOOLS[*]:-}" ]; then
     AI_TOOLS=(
         "opencode"
         "copilot"
@@ -164,8 +165,8 @@ fi
 # ==============================================
 
 # 主分支候選清單（依陣列順序檢測第一個存在的遠端分支）
-: "${DEFAULT_MAIN_BRANCHES:=}"
-if [ ${#DEFAULT_MAIN_BRANCHES[@]} -eq 0 ]; then
+# 注意：同上，不可用 : "${DEFAULT_MAIN_BRANCHES:=}" 預先賦值
+if [ -z "${DEFAULT_MAIN_BRANCHES[*]:-}" ]; then
     DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
 fi
 

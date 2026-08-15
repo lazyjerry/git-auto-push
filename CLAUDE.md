@@ -4,183 +4,117 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 專案概述
 
-這是一個 **Git 工作流程自動化工具集**，包含兩個核心 Bash 腳本，整合 AI 驅動的內容產生系統，提供傳統 Git 操作和 GitHub Flow PR 流程的完整自動化。
+Git 工作流程自動化工具集（目前版本 v2.11.0），包含兩個核心 Bash 腳本，整合 AI 驅動的內容產生系統，提供傳統 Git 操作和 GitHub Flow PR 流程的完整自動化。
 
-- **git-auto-push.sh** (2,552 行) - 傳統 Git 操作自動化（add/commit/push）
-- **git-auto-pr.sh** (2,769 行) - GitHub Flow PR 流程自動化（分支/PR/審查/合併）
-- **install.sh** (689 行) - POSIX Shell 相容安裝腳本
+- **git-auto-push.sh**（2,838 行）- 傳統 Git 操作自動化（add/commit/push）
+- **git-auto-pr.sh**（2,916 行）- GitHub Flow PR 流程自動化（分支/PR/審查/合併）
+- **install.sh**（782 行）- POSIX Shell 相容安裝腳本
+
+本專案無建置系統，開發驗證以 `bash -n` 語法檢查與 `tests/` 自動化測試為主。
+
+## 常用開發命令
+
+```bash
+# 語法檢查（修改後必跑）
+bash -n git-auto-push.sh
+bash -n git-auto-pr.sh
+bash -n install.sh
+
+# 自動化測試（對應腳本修改後必跑；隔離環境、離線、不觸發 AI 與 GitHub）
+./tests/test-git-auto-push.sh
+./tests/test-git-auto-pr.sh
+
+# 功能測試
+./git-auto-push.sh --help
+./git-auto-pr.sh --help
+./git-auto-push.sh --version
+
+# 行數統計（更新 README.md 統計時需要）
+wc -l git-auto-push.sh git-auto-pr.sh install.sh
+
+# 調試模式（查看 AI 工具執行詳情，輸出可能含敏感資訊）
+export IS_DEBUG=true
+./git-auto-push.sh 4
+```
 
 ## 核心架構設計
 
 ### 1. 配置驅動架構
 
-**三級配置優先級系統**（由高到低）：
+**三級配置優先級系統**（由高到低，載入第一個存在的即停止）：
 1. `$PWD/.git-auto-push-config/.env` - 專案級配置
 2. `$HOME/.git-auto-push-config/.env` - 使用者級配置
 3. `[script_dir]/.git-auto-push-config/.env` - 全域預設配置
 
-**關鍵配置變數**：
-- `AI_TOOLS` - AI 工具優先順序陣列（例：`("copilot" "agy" "codex" "claude")`；gemini 已停用，視為 agy 的 alias）
-- `DEFAULT_MAIN_BRANCHES` - 主分支偵測順序（git-auto-pr.sh，例：`("uat" "main" "master")`）
-- `DEFAULT_USERNAME` - 預設使用者名稱（git-auto-pr.sh）
-- `AUTO_CHECK_COMMIT_QUALITY` - Commit 品質自動檢查（git-auto-push.sh，true/false）
-- `AUTO_DELETE_BRANCH_AFTER_MERGE` - PR 合併後分支刪除策略（git-auto-pr.sh，true/false）
-- `IS_DEBUG` - 調試模式（true/false）
+配置載入邏輯位於兩個腳本開頭的 `load_config()`。腳本內部使用 `: "${VAR:=default}"` 條件賦值，讓配置文件的值優先於內建預設。範本檔為倉庫內的 `.git-auto-push-config/.env.example`。
 
-配置載入邏輯位於兩個腳本的開頭（`load_config()` 函數）。
+**關鍵配置變數**：
+- `AI_TOOLS` - AI 工具優先順序陣列，預設 `("opencode" "copilot" "agy" "codex" "claude")`
+- `IS_DEBUG` - 調試模式（true/false）
+- `AUTO_INCLUDE_TICKET` - 任務編號自動帶入 commit 訊息（git-auto-push.sh）
+- `AUTO_CHECK_COMMIT_QUALITY` - Commit 品質自動檢查（git-auto-push.sh）
+- `AI_COMMIT_PROMPT`、`AI_PREFIX_PROMPT` - AI 提示詞（git-auto-push.sh，可覆蓋）
+- `DEFAULT_MAIN_BRANCHES` - 主分支偵測順序，預設 `("uat" "main" "master")`（git-auto-pr.sh）
+- `DEFAULT_USERNAME` - 分支命名前綴用使用者名稱（git-auto-pr.sh）
+- `AUTO_DELETE_BRANCH_AFTER_MERGE` - PR 合併後分支刪除策略（git-auto-pr.sh）
 
 ### 2. AI 工具整合系統
 
-**容錯鏈設計**：AI 工具按 `AI_TOOLS` 陣列順序依次調用，當一個工具失敗時自動嘗試下一個。
+**容錯鏈設計**：`run_ai_with_fallback()` 按 `AI_TOOLS` 陣列順序依次調用，一個工具失敗（未安裝、超時、錯誤）時自動嘗試下一個；全部失敗時降級至手動輸入。成功時全域變數 `LAST_AI_TOOL` 記錄實際使用的工具。
 
-**核心函數**：
-- `run_codex_command()` - Codex/Copilot CLI 調用
-- `run_stdin_ai_command()` - 支援 stdin 的 AI 工具調用（agy/claude）
-- `clean_ai_message()` - 清理 AI 輸出（移除元數據和技術雜訊）
-- `generate_ai_commit_prompt()` - Commit 訊息提示詞生成（git-auto-push.sh）
-- `generate_ai_pr_prompt()` - PR 內容提示詞生成（git-auto-pr.sh）
+**各工具的調用函數**（兩個腳本各有一套）：
+- `run_copilot_command()` - GitHub Copilot CLI（`copilot -s -p`，programmatic mode）
+- `run_codex_command()` - Codex CLI（`codex exec --output-last-message` 取乾淨輸出）
+- `run_opencode_command()` - opencode CLI（`--format json` 輸出，優先用 jq 解析 `part.text`）
+- `run_stdin_ai_command()` - stdin 型工具（agy/claude）
+- `resolve_ai_command()` - 工具名稱映射；**gemini 已停用**，視為 agy（Antigravity）的 alias，舊配置中的 `"gemini"` 會自動映射為 `agy` 執行
 
-**超時機制**：45 秒超時，防止 AI 工具卡死。
+**共用底層**（git-auto-push.sh）：`_execute_ai_tool()` 統一超時與調用方式、`_handle_ai_result()` 統一錯誤處理與調試輸出、`clean_ai_message()` 清理輸出雜訊（Node.js 警告、認證訊息等）。
+
+**超時機制**：stdin 型工具 45 秒；copilot/codex/opencode 60 秒；偵測到大型 diff（>500 行）時延長至 90 秒。
+
+**提示詞位置**：
+- git-auto-push.sh：`AI_COMMIT_PROMPT`、`AI_PREFIX_PROMPT` 常數（檔案頂部配置區域）
+- git-auto-pr.sh：`generate_ai_branch_prompt()`、`generate_ai_pr_prompt()` 函數
 
 ### 3. Conventional Commits 支援
 
-**前綴類型清單**（`COMMIT_PREFIXES` 陣列）：
-- feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-
-**實作方式**：
-- 手動選擇：互動式選單
-- AI 自動判斷：基於 git diff 分析
-- 跳過選項：不使用前綴
+`COMMIT_PREFIXES` 陣列定義前綴清單（feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert）。三種選擇方式：互動式選單手動選、AI 依 git diff 自動判斷（`generate_commit_prefix_by_ai()`）、跳過不使用。
 
 ### 4. 任務編號整合系統
 
-**自動偵測**：從分支名稱解析 issue key（支援 JIRA `PROJ-123`、GitHub Issue `feat-001` 等格式）
-
-**整合範圍**：所有 commit 操作（選項 1、2、4、5、7）
-
-**重複檢測**：避免重複加入任務編號
+`initialize_ticket_number()` 從分支名稱解析任務編號（支援 JIRA `PROJ-123`、`feat-001` 等格式），`append_ticket_number_to_message()` 依 `AUTO_INCLUDE_TICKET` 自動加入或詢問，並偵測重複避免重複加入。
 
 ### 5. 模組化函數設計
 
-**通用工具函數**：
-- `error_msg()`, `success_msg()`, `warning_msg()` - 彩色格式化輸出
-- `run_command()` - 統一的指令執行介面
-- `show_loading()` - Loading 動畫顯示
+**通用工具函數**：`error_msg()` / `success_msg()` / `warning_msg()` 等彩色輸出（皆輸出至 stderr，stdout 保留給函數回傳值）、`run_command()` 統一指令執行、`run_command_with_loading()` 背景執行＋loading 動畫＋超時控制。
 
-**Git 操作函數**：
-- `check_git_repository()` - Git 倉庫驗證
-- `get_git_status()` - Git 狀態檢查
-- `add_all_files()` - Git add 操作封裝
-- `get_main_branch()` - 主分支自動偵測（git-auto-pr.sh）
+**Git 操作函數**：`check_git_repository()`、`get_git_status()`、`add_all_files()`、`get_main_branch()`（git-auto-pr.sh 主分支自動偵測）。
 
-**錯誤處理**：
-- 自動偵測特定錯誤（`401 Unauthorized`, `token_expired`, `stream error`）
-- 提供具體修復命令和操作步驟
-- 優雅降級（AI 工具全部失效時切換至手動輸入模式）
-
-## 常用開發命令
-
-### 語法檢查與測試
-
-```bash
-# 語法檢查
-bash -n git-auto-push/git-auto-push.sh
-bash -n git-auto-push/git-auto-pr.sh
-bash -n git-auto-push/install.sh
-
-# 功能測試
-cd git-auto-push
-./git-auto-push.sh --help
-./git-auto-pr.sh --help
-
-# AI 工具可用性測試
-for tool in "${AI_TOOLS[@]}"; do
-    command -v "$tool" >/dev/null 2>&1 && echo "✅ $tool 可用" || echo "⚠️ $tool 未安裝"
-done
-```
-
-### 行數統計
-
-```bash
-# 統計腳本行數（更新 README.md 時需要）
-wc -l git-auto-push/git-auto-push.sh git-auto-push/git-auto-pr.sh git-auto-push/install.sh
-```
-
-### 調試模式
-
-```bash
-# 啟用調試模式（查看 AI 工具執行詳情）
-export IS_DEBUG=true
-./git-auto-push.sh 4
-
-# 或透過配置文件設定
-echo 'IS_DEBUG=true' >> ~/.git-auto-push-config/.env
-```
+**錯誤處理**：偵測特定錯誤模式（`401 Unauthorized`、`token_expired`、`stream error`、rate limit 等）並提供具體修復命令；擴充錯誤處理時保持「識別特徵 → 給出修復命令 → 彩色輸出」的一致格式。
 
 ## 開發修改指導
 
 ### 修改 AI 相關功能
 
-**注意**：修改 AI 工具時，必須同時更新兩個腳本檔案（git-auto-push.sh 和 git-auto-pr.sh）。
+**注意**：AI 相關修改必須同時更新兩個腳本檔案（git-auto-push.sh 和 git-auto-pr.sh），兩者各有一份獨立但結構對應的 AI 函數。
 
-1. **調整 AI 工具優先順序**：
-   - 修改 `AI_TOOLS` 陣列（位於檔案頂部預設值區域，約第 120-130 行）
-   - 或透過配置文件覆蓋
+新增 AI 工具支援的步驟：
+1. 在 `AI_TOOLS` 陣列預設值中添加工具名稱
+2. 實作對應的 `run_*_command()` 函數
+3. 在 `run_ai_with_fallback()` 的 case 分支中接上
+4. 新增錯誤偵測與工具提示（`show_hints` 區塊）
+5. 更新 `.git-auto-push-config/.env.example` 的說明
 
-2. **修改 AI 提示詞**：
-   - git-auto-push.sh：`AI_COMMIT_PROMPT` 常數、`generate_ai_prefix_prompt()` 函數
-   - git-auto-pr.sh：`generate_ai_pr_prompt()` 函數
+### 重要慣例
 
-3. **新增 AI 工具支援**：
-   - 在 `AI_TOOLS` 陣列中添加工具名稱
-   - 實作對應的 `run_*_command()` 函數
-   - 新增錯誤偵測和處理邏輯
-
-### 修改分支管理配置（git-auto-pr.sh）
-
-位於檔案頂部預設值區域（約第 140-180 行）：
-
-```bash
-# 主分支偵測順序
-DEFAULT_MAIN_BRANCHES=("uat" "main" "master")
-
-# 預設使用者名稱
-DEFAULT_USERNAME="jerry"
-
-# PR 合併後分支刪除策略
-AUTO_DELETE_BRANCH_AFTER_MERGE=false
-```
-
-**或透過配置文件覆蓋**：
-```bash
-# ~/.git-auto-push-config/.env
-DEFAULT_MAIN_BRANCHES=("develop" "main" "master")
-DEFAULT_USERNAME="your-name"
-AUTO_DELETE_BRANCH_AFTER_MERGE=true
-```
-
-### 修改 Commit 品質檢查（git-auto-push.sh）
-
-位於檔案頂部配置區域（約第 149 行）：
-
-```bash
-# 自動檢查模式（預設，每次 commit 前自動檢查）
-AUTO_CHECK_COMMIT_QUALITY=true
-
-# 詢問模式（提交前詢問是否檢查）
-AUTO_CHECK_COMMIT_QUALITY=false
-```
-
-### 錯誤處理擴展
-
-在現有錯誤偵測函數中添加新的錯誤模式，保持一致的錯誤輸出格式：
-- 識別錯誤特徵
-- 提供具體修復命令
-- 使用彩色格式化輸出
+- 互動輸出一律走 stderr，函數以 stdout echo 回傳值——新增輸出時不可污染 stdout
+- 使用者輸入以 `xargs` 清理前後空白，確認類輸入轉小寫比對
+- 臨時檔用 `mktemp` 建立並在所有路徑上清理（含中斷 trap）
 
 ## 程式碼文檔標準
 
-所有主要函數都採用統一的註解格式：
+主要函數採用統一的註解格式：
 
 ```bash
 # ============================================
@@ -197,64 +131,37 @@ AUTO_CHECK_COMMIT_QUALITY=false
 
 ### Commit 訊息規範
 
-遵循 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
-- 使用標準前綴（feat, fix, docs, refactor 等）
-- 簡潔描述變更內容和目的
-- 避免技術細節
+遵循 [Conventional Commits](https://www.conventionalcommits.org/)：標準前綴＋簡潔描述變更目的，避免技術細節。
 
-### 行數統計維護
+### 版本發布檢核清單
 
-修改程式碼後必須更新 README.md 中的行數統計（約第 623 行）：
-- git-auto-push.sh：當前 2,552 行
-- git-auto-pr.sh：當前 2,769 行
-- install.sh：當前 689 行
+1. 更新兩個腳本頂部的 `VERSION` 常數（`readonly VERSION="vX.Y.Z"`）
+2. 更新 [CHANGELOG.md](CHANGELOG.md) - 詳細版本記錄（倒序排列，使用 🆕 新功能／🔧 改進／🐛 修復 分類）
+3. 更新 [README.md](README.md) - 版本號、發布日期、「版本歷史摘要」段落的行數統計
+4. 驗證各文件版本號一致、文檔連結有效
 
-### 文檔同步更新
-
-**版本發布時的檢核清單**：
-1. 更新 [CHANGELOG.md](git-auto-push/CHANGELOG.md) - 詳細版本記錄
-2. 更新 [README.md](git-auto-push/README.md) - 版本號、發布日期、行數統計
-3. 驗證兩個文件中的版本號一致
-4. 檢查所有文檔連結的有效性
-
-**README.md 撰寫原則**：
-- 僅包含版本摘要統計（最新版本號、總版本數、開發期間、行數統計）
-- 詳細變更記錄放在 CHANGELOG.md
-- 保持結構清晰、簡潔
-
-**CHANGELOG.md 撰寫原則**：
-- 按時間倒序排列（最新在上）
-- 使用標準分類（🆕 新功能、🔧 改進、🐛 修復）
-- 包含精確的行數變化統計
-- 提供具體的使用範例和配置說明
+README.md 僅放版本摘要統計，詳細變更記錄放 CHANGELOG.md。多語版 README（README_EN/CN/JP/KR.md）如有同步需求另行確認。
 
 ## 安全考量
 
-### 操作安全
-- 主分支保護：絕對禁止刪除 `DEFAULT_MAIN_BRANCHES` 中定義的分支
-- 多重確認機制：刪除未合併分支需要二次確認
-- 中斷處理：支援 Ctrl+C 優雅退出，自動清理暫存資源
-
-### 資料保護
-- 所有使用者輸入都會經過清理和驗證
+- 主分支保護：禁止刪除 `DEFAULT_MAIN_BRANCHES` 中定義的分支；刪除未合併分支需二次確認
+- 中斷處理：Ctrl+C 優雅退出（trap INT TERM），自動清理臨時檔與終端狀態
 - 調試模式輸出可能包含敏感資訊（git diff、API 回應），僅在必要時啟用
-
-### 權限管理
-- 腳本不需要 root 權限
-- 全域安裝時需要 sudo（僅複製檔案到 /usr/local/bin）
+- 腳本不需要 root 權限；全域安裝僅在複製到 /usr/local/bin 時需要 sudo
 
 ## 相依工具
 
-| 工具 | 用途 | 必要性 | 安裝命令 |
-|-----|------|--------|---------|
-| **GitHub CLI (gh)** | PR 流程操作 | git-auto-pr.sh 必需 | `brew install gh && gh auth login` |
-| **AI CLI 工具** | 內容自動產生 | 選擇性（建議安裝） | 參考 [INSTALLATION.md](git-auto-push/INSTALLATION.md) |
+| 工具 | 用途 | 必要性 |
+|-----|------|--------|
+| GitHub CLI (gh) | PR 流程操作 | git-auto-pr.sh 必需（`brew install gh && gh auth login`） |
+| AI CLI 工具（opencode/copilot/agy/codex/claude） | 內容自動產生 | 選擇性，未安裝時降級手動輸入 |
+| jq | opencode JSON 輸出解析 | 建議安裝（無則 fallback 至 grep/sed） |
 
 ## 參考文檔
 
-- [README.md](git-auto-push/README.md) - 專案說明與使用方法
-- [CHANGELOG.md](git-auto-push/CHANGELOG.md) - 完整版本歷史
-- [INSTALLATION.md](git-auto-push/INSTALLATION.md) - 詳細安裝指南
-- [USAGE.md](git-auto-push/USAGE.md) - 詳細使用指南
-- [.github/copilot-instructions.md](git-auto-push/.github/copilot-instructions.md) - AI 代理開發指導
-- [docs/reports/](git-auto-push/docs/reports/) - 功能詳細說明文件
+- [README.md](README.md) - 專案說明與使用方法
+- [CHANGELOG.md](CHANGELOG.md) - 完整版本歷史
+- [INSTALLATION.md](INSTALLATION.md) - 詳細安裝指南
+- [USAGE.md](USAGE.md) - 詳細使用指南
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI 代理開發指導
+- [docs/reports/](docs/reports/) - 功能詳細說明文件（含 opencode 整合、commit 品質檢查等）

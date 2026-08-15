@@ -4,6 +4,34 @@
 
 ## 版本歷史
 
+### v2.11.0 - 指定檔案添加與全覆蓋自動化測試 (2026-08-15)
+
+**🆕 新功能**
+
+- **`-f` / `--files` 參數** 🆕：git-auto-push.sh 可指定多個檔案或資料夾添加，不再一律 `git add .`
+  - **用法**：`./git-auto-push.sh -f src/ README.md`，可與模式編號或 `-a` 併用（如 `1 -f src/`、`-a -f src/`）
+  - **規則**：`-f` 之後直到下一個 `-` 開頭參數為止都視為路徑，模式編號需放在 `-f` 之前
+  - **適用範圍**：所有操作模式（含全自動模式）
+- **互動式檔案選單** 🆕：未帶 `-f` 的互動情境會列出所有變更檔案（`select_files_to_add()`）
+  - **選擇方式**：輸入編號（空白分隔，如 `1 3 5`）選擇要添加的項目
+  - **相容舊行為**：直接按 Enter 添加全部；全自動模式（`-a`／模式 4）不進選單、維持添加全部
+- **全覆蓋自動化測試** 🆕：新增 `tests/` 測試套件（不依賴測試框架、全程離線）
+  - **test-git-auto-push.sh**（478 行，76 項案例）：單元層 source 腳本直接驗證 `resolve_ai_command`、`clean_ai_message`、`append_ticket_number_to_message`、`initialize_ticket_number`、`get_remote_web_url`、`select_files_to_add`、`add_all_files` 等函數；整合層實測 7 種操作模式、`-a`、`-f`、任務編號與配置載入優先級
+  - **test-git-auto-pr.sh**（554 行，84 項案例）：單元層驗證 `validate_and_standardize_issue_key`、`clean_branch_name`、`format_pr_content`／`format_pr_body`、`get_main_branch`、`check_gh_cli` 等函數；整合層以**假 gh shim**（記錄呼叫、依環境變數回應）實測建立分支、刪除分支（含遠端）、建立 PR、撤銷 PR、審查合併等流程
+  - **環境隔離**：獨立 HOME、臨時倉庫、本地 bare origin；AI 工具以不存在指令名稱隔離；互動流程以 stdin 管線模擬
+
+**🐛 修復**
+
+- **陣列預設值初始化失效**：`: "${VAR:=}"` 會產生單一空字串元素，使 `[ ${#VAR[@]} -eq 0 ]` 的預設值填充永遠不執行。未透過配置文件設定時，`AI_TOOLS`（兩腳本）與 `DEFAULT_MAIN_BRANCHES`（git-auto-pr.sh）會變成空值——導致 AI 工具完全不被嘗試、主分支偵測失敗。改用 `[ -z "${VAR[*]:-}" ]` 判斷（由自動化測試發現）
+
+**🔧 改進**
+
+- **`add_all_files()` 支援指定路徑**：帶參數時僅 `git add -- <路徑>...`，不帶參數維持原有添加全部
+- **參數解析強化**：未知參數與 `-f` 未帶路徑時顯示明確錯誤並退出；`-h`／`-v` 可在任意參數位置使用
+- **行數統計**：git-auto-push.sh 2,838 行、git-auto-pr.sh 2,916 行、install.sh 782 行
+
+---
+
 ### v2.10.0 - 改用 Antigravity (agy)，停用 gemini (2026-06-19)
 
 **🆕 新功能**

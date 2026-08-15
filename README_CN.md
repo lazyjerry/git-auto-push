@@ -6,7 +6,7 @@
 
 两支 Bash 脚本，分别处理传统 Git 操作（add/commit/push）和 GitHub Flow PR 流程。支持多种 AI CLI 工具生成 commit 消息与 PR 内容，也提供 Conventional Commits 前缀、消息品质检查、任务编号自动带入等功能。
 
-版本：v2.10.0
+版本：v2.11.0
 
 ## 项目简介
 
@@ -82,10 +82,10 @@
 ### 一键安装
 
 ```bash
-# 交互式安装（默认安装到 ~/.local/bin）
+# 交互式安装/更新（默认安装到 ~/.local/bin）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# 直接全局安装（安装到 /usr/local/bin，需要 sudo）
+# 直接全局安装/更新（安装到 /usr/local/bin，需要 sudo）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 
 # 卸载
@@ -144,7 +144,7 @@ nano ~/.git-auto-push-config/.env
 常用配置选项：
 
 ```bash
-# AI 工具优先顺序
+# AI 工具优先顺序（gemini 已停用，请改用 agy）
 AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # 默认用户名
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "测试 $tool"; done
 
 > 完整版本历史请查看 [CHANGELOG.md](CHANGELOG.md)
 
-- 最新版本：v2.10.0 (2026-06-19)
-- 总版本数：18 个主要版本
+- 最新版本：v2.11.0 (2026-08-15)
+- 总版本数：19 个主要版本
 - 开发期间：2025-08-21 至今
-- 代码行数：`git-auto-push.sh` 2,673 行、`git-auto-pr.sh` 2,902 行、`install.sh` 772 行
+- 代码行数：`git-auto-push.sh` 2,837 行、`git-auto-pr.sh` 2,915 行、`install.sh` 782 行
 
 ### 参考资源
 

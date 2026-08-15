@@ -6,7 +6,7 @@
 
 2つの Bash スクリプトで、従来の Git 操作（add/commit/push）と GitHub Flow PR フローをそれぞれ処理します。複数の AI CLI ツールによる commit メッセージと PR コンテンツの生成をサポートし、Conventional Commits プレフィックス、メッセージ品質チェック、タスク番号の自動挿入などの機能も提供します。
 
-バージョン：v2.10.0
+バージョン：v2.11.0
 
 ## プロジェクト概要
 
@@ -82,10 +82,10 @@
 ### ワンクリックインストール
 
 ```bash
-# インタラクティブインストール（デフォルトで ~/.local/bin にインストール）
+# インタラクティブインストール／更新（デフォルトで ~/.local/bin にインストール）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# グローバルインストール（/usr/local/bin にインストール、sudo が必要）
+# グローバルインストール／更新（/usr/local/bin にインストール、sudo が必要）
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 
 # アンインストール
@@ -144,7 +144,7 @@ nano ~/.git-auto-push-config/.env
 よく使う設定オプション：
 
 ```bash
-# AI ツールの優先順序
+# AI ツールの優先順序（gemini は無効です。agy を使用してください）
 AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # デフォルトユーザー名
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "テスト $tool"; done
 
 > 完全なバージョン履歴は [CHANGELOG.md](CHANGELOG.md) をご覧ください
 
-- 最新バージョン：v2.10.0 (2026-06-19)
-- 総バージョン数：18 のメジャーバージョン
+- 最新バージョン：v2.11.0 (2026-08-15)
+- 総バージョン数：19 のメジャーバージョン
 - 開発期間：2025-08-21 から現在
-- コード行数：`git-auto-push.sh` 2,673 行、`git-auto-pr.sh` 2,902 行、`install.sh` 772 行
+- コード行数：`git-auto-push.sh` 2,837 行、`git-auto-pr.sh` 2,915 行、`install.sh` 782 行
 
 ### 参考リソース
 

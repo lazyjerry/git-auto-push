@@ -6,7 +6,7 @@
 
 Two Bash scripts that handle traditional Git operations (add/commit/push) and GitHub Flow PR workflows respectively. Supports multiple AI CLI tools for generating commit messages and PR content, along with Conventional Commits prefixes, message quality checks, issue key auto-insertion, and more.
 
-Version: v2.10.0
+Version: v2.11.0
 
 ## Project Overview
 
@@ -82,10 +82,10 @@ Version: v2.10.0
 ### One-Click Install
 
 ```bash
-# Interactive install (defaults to ~/.local/bin)
+# Interactive install/update (defaults to ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# Direct global install (installs to /usr/local/bin, requires sudo)
+# Direct global install/update (installs to /usr/local/bin, requires sudo)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 
 # Uninstall
@@ -144,7 +144,7 @@ nano ~/.git-auto-push-config/.env
 Common configuration options:
 
 ```bash
-# AI tool priority order
+# AI tool priority order (gemini is disabled; use agy instead)
 AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # Default username
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "Testing $tool"; done
 
 > For the complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
-- Latest version: v2.10.0 (2026-06-19)
-- Total versions: 18 major versions
+- Latest version: v2.11.0 (2026-08-15)
+- Total versions: 19 major versions
 - Development period: 2025-08-21 to present
-- Lines of code: `git-auto-push.sh` 2,673 lines, `git-auto-pr.sh` 2,902 lines, `install.sh` 772 lines
+- Lines of code: `git-auto-push.sh` 2,837 lines, `git-auto-pr.sh` 2,915 lines, `install.sh` 782 lines
 
 ### References
 

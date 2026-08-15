@@ -6,7 +6,7 @@
 
 두 개의 Bash 스크립트로, 각각 전통적인 Git 작업(add/commit/push)과 GitHub Flow PR 흐름을 처리합니다. 여러 AI CLI 도구를 통한 commit 메시지 및 PR 콘텐츠 생성을 지원하며, Conventional Commits 접두사, 메시지 품질 검사, 작업 번호 자동 입력 등의 기능도 제공합니다.
 
-버전: v2.10.0
+버전: v2.11.0
 
 ## 프로젝트 소개
 
@@ -82,10 +82,10 @@
 ### 원클릭 설치
 
 ```bash
-# 대화형 설치 (기본적으로 ~/.local/bin에 설치)
+# 대화형 설치/업데이트 (기본적으로 ~/.local/bin에 설치)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh
 
-# 글로벌 직접 설치 (/usr/local/bin에 설치, sudo 필요)
+# 글로벌 직접 설치/업데이트 (/usr/local/bin에 설치, sudo 필요)
 curl -fsSL https://raw.githubusercontent.com/lazyjerry/git-auto-push/refs/heads/master/install.sh | sh -s -- --global
 
 # 제거
@@ -144,7 +144,7 @@ nano ~/.git-auto-push-config/.env
 자주 사용하는 설정 옵션:
 
 ```bash
-# AI 도구 우선순위
+# AI 도구 우선순위 (gemini는 비활성화되었으므로 agy를 사용하세요)
 AI_TOOLS=("copilot" "claude" "agy" "codex")
 
 # 기본 사용자 이름
@@ -567,10 +567,10 @@ for tool in "${AI_TOOLS[@]}"; do echo "테스트 $tool"; done
 
 > 전체 버전 이력은 [CHANGELOG.md](CHANGELOG.md)를 참조하세요
 
-- 최신 버전: v2.10.0 (2026-06-19)
-- 총 버전 수: 18개 주요 버전
+- 최신 버전: v2.11.0 (2026-08-15)
+- 총 버전 수: 19개 주요 버전
 - 개발 기간: 2025-08-21부터 현재까지
-- 코드 행 수: `git-auto-push.sh` 2,673행, `git-auto-pr.sh` 2,902행, `install.sh` 772행
+- 코드 행 수: `git-auto-push.sh` 2,837행, `git-auto-pr.sh` 2,915행, `install.sh` 782행
 
 ### 참조 자료
 

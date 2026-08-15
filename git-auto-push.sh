@@ -3,9 +3,10 @@
 
 # Git 自動化推送工具 - 提供完整的 Git 傳統工作流程自動化（add/commit/push）
 # 使用方式：./git-auto-push.sh 或 ./git-auto-push.sh --help 或 ./git-auto-push.sh -a
-# 作者：Lazy Jerry | 版本：v2.10.0 | 授權：MIT License
+#           指定檔案：./git-auto-push.sh [模式] -f <路徑> [路徑...]
+# 作者：Lazy Jerry | 版本：v2.11.0 | 授權：MIT License
 
-readonly VERSION="v2.10.0"
+readonly VERSION="v2.11.0"
 
 # ==============================================
 # 配置文件加載區域
@@ -111,8 +112,9 @@ load_config
 # 範例：
 #   AI_TOOLS=("codex")                 # 僅使用 codex
 #   AI_TOOLS=("copilot" "agy" "codex") # 調整優先順序
-: "${AI_TOOLS:=}"
-if [ ${#AI_TOOLS[@]} -eq 0 ]; then
+# 注意：不可用 : "${AI_TOOLS:=}" 預先賦值，否則會產生單一空字串元素，
+#       使下方的預設值填充永遠不執行（元素數為 1 而非 0）
+if [ -z "${AI_TOOLS[*]:-}" ]; then
     AI_TOOLS=(
         "opencode"
         "copilot"
@@ -521,10 +523,9 @@ ${diff_content}"
     return 1
 }
 
-# 添加所有變更的檔案到 Git 暫存區（回傳 0=成功，1=失敗）
+# 添加變更的檔案到 Git 暫存區（回傳 0=成功，1=失敗）
+# 參數：$@ - 可選，指定要添加的檔案/資料夾路徑；未指定時添加全部變更
 add_all_files() {
-    info_msg "正在添加變更的檔案..."
-    
     # 檢查是否有變更
     local git_status_output
     git_status_output=$(get_git_status)
@@ -532,7 +533,21 @@ add_all_files() {
         warning_msg "沒有變更的檔案需要添加"
         return 1
     fi
-    
+
+    # 有指定路徑時僅添加指定的檔案/資料夾
+    if [ $# -gt 0 ]; then
+        info_msg "正在添加指定的檔案/資料夾: $*"
+        if git add -- "$@"; then
+            success_msg "✅ 成功添加指定的檔案/資料夾"
+            return 0
+        else
+            error_msg "❌ 添加指定檔案時發生錯誤 (請確認路徑是否正確)"
+            return 1
+        fi
+    fi
+
+    info_msg "正在添加變更的檔案..."
+
     # 執行 git add
     if git add .; then
         success_msg "✅ 成功添加所有變更檔案"
@@ -541,6 +556,81 @@ add_all_files() {
         error_msg "❌ 添加檔案時發生錯誤"
         return 1
     fi
+}
+
+# 全域變數：互動式檔案選單的選擇結果（空陣列代表添加全部）
+SELECTED_ADD_PATHS=()
+
+# ============================================
+# select_files_to_add
+# 功能：列出所有變更檔案供使用者以編號選擇要添加的項目
+# 參數：無（讀取 git status --porcelain）
+# 返回：0=完成選擇，結果寫入全域陣列 SELECTED_ADD_PATHS（空陣列=添加全部）
+# 使用：select_files_to_add（需在主流程直接呼叫，避免 subshell 導致全域變數失效）
+# 注意：互動輸出一律走 stderr；rename 行取 " -> " 之後的新路徑
+# ============================================
+select_files_to_add() {
+    SELECTED_ADD_PATHS=()
+
+    local -a status_lines=()
+    local -a file_paths=()
+    local line path
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        status_lines+=("$line")
+        path="${line:3}"
+        # rename/copy 行格式為 "old -> new"，取新路徑
+        [[ "$path" == *" -> "* ]] && path="${path##* -> }"
+        # 去除 git 對含特殊字元路徑加上的雙引號
+        path="${path#\"}"
+        path="${path%\"}"
+        file_paths+=("$path")
+    done < <(get_git_status)
+
+    # 沒有變更檔案則直接返回（視為添加全部）
+    [ ${#file_paths[@]} -eq 0 ] && return 0
+
+    echo >&2
+    echo "==================================================" >&2
+    highlight_success_msg "📂 請選擇要添加的檔案/資料夾"
+    echo "==================================================" >&2
+    local index=1
+    for line in "${status_lines[@]}"; do
+        printf "  %2d. %s\n" "$index" "$line" >&2
+        ((index++))
+    done
+    echo >&2
+    cyan_msg "💡 輸入編號 (空白分隔，例如: 1 3 5)，直接按 Enter = 添加全部"
+
+    local choice num
+    while true; do
+        printf "請輸入要添加的編號 [1-%d] 或直接 Enter: " "${#file_paths[@]}" >&2
+        read -r choice
+        choice=$(echo "$choice" | xargs)
+
+        # 直接按 Enter：添加全部（維持原有行為）
+        if [ -z "$choice" ]; then
+            info_msg "✅ 將添加全部變更檔案"
+            return 0
+        fi
+
+        local -a selected=()
+        local valid=true
+        for num in $choice; do
+            if [[ ! "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt ${#file_paths[@]} ]; then
+                warning_msg "❌ 無效的編號: $num (請輸入 1-${#file_paths[@]} 之間的數字)"
+                valid=false
+                break
+            fi
+            selected+=("${file_paths[$((num-1))]}")
+        done
+
+        if [ "$valid" = true ]; then
+            SELECTED_ADD_PATHS=("${selected[@]}")
+            info_msg "✅ 已選擇 ${#SELECTED_ADD_PATHS[@]} 個項目: ${SELECTED_ADD_PATHS[*]}"
+            return 0
+        fi
+    done
 }
 
 # 顯示 AI 工具的調試資訊（受 IS_DEBUG 控制）
@@ -2077,6 +2167,11 @@ show_help() {
     cyan_msg "  直接執行：    ./git-auto-push.sh <1-7>"
     cyan_msg "                例如：./git-auto-push.sh 1  # 直接執行完整流程"
     cyan_msg "                例如：./git-auto-push.sh 4  # 直接執行全自動模式"
+    cyan_msg "  指定檔案：    ./git-auto-push.sh -f <路徑> [路徑...]"
+    cyan_msg "                例如：./git-auto-push.sh 1 -f src/ README.md"
+    cyan_msg "                例如：./git-auto-push.sh -a -f src/"
+    white_msg "                (僅添加指定的檔案/資料夾；模式編號需放在 -f 之前)"
+    cyan_msg "  互動選檔：    未帶 -f 時會列出變更檔案供編號選擇，直接 Enter = 添加全部"
     cyan_msg "  顯示說明：    ./git-auto-push.sh -h 或 --help"
     cyan_msg "  全域使用：    git-auto-push"
     echo >&2
@@ -2292,19 +2387,50 @@ main() {
     warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
     # 解析命令行參數
+    # 規則：-f/--files 之後直到下一個 "-" 開頭參數為止都視為路徑，
+    #       因此模式編號需放在 -f 之前（如 ./git-auto-push.sh 1 -f src/）
     local auto_mode=false
     local direct_option=""
-    
-    case "$1" in
-        --auto|-a)
-            auto_mode=true
-            info_msg "🤖 命令行啟用全自動模式"
-            ;;
-        1|2|3|4|5|6|7)
-            direct_option="$1"
-            info_msg "🎯 命令行直接執行選項 $1"
-            ;;
-    esac
+    local paths_before_f=0
+    local -a SPECIFIED_PATHS=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --auto|-a)
+                auto_mode=true
+                info_msg "🤖 命令行啟用全自動模式"
+                ;;
+            1|2|3|4|5|6|7)
+                direct_option="$1"
+                info_msg "🎯 命令行直接執行選項 $1"
+                ;;
+            -f|--files)
+                paths_before_f=${#SPECIFIED_PATHS[@]}
+                shift
+                while [ $# -gt 0 ] && [[ "$1" != -* ]]; do
+                    SPECIFIED_PATHS+=("$1")
+                    shift
+                done
+                if [ ${#SPECIFIED_PATHS[@]} -eq "$paths_before_f" ]; then
+                    handle_error "-f/--files 需要至少一個檔案或資料夾路徑"
+                fi
+                info_msg "📌 命令行指定添加路徑: ${SPECIFIED_PATHS[*]}"
+                continue
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "git-auto-push ${VERSION}"
+                exit 0
+                ;;
+            *)
+                handle_error "未知參數: $1 (使用 --help 查看說明)"
+                ;;
+        esac
+        shift
+    done
     
     info_msg "Git 自動添加推送到遠端倉庫工具"
     echo "=================================================="
@@ -2359,9 +2485,21 @@ main() {
     # 顯示檢測到的變更
     info_msg "檢測到以下變更:"
     echo "$status"
-    
-    # 添加所有變更到暫存區
-    add_all_files || exit 1
+
+    # 添加變更到暫存區（優先序：-f 指定路徑 > 全自動模式添加全部 > 互動式檔案選單）
+    if [ ${#SPECIFIED_PATHS[@]} -gt 0 ]; then
+        add_all_files "${SPECIFIED_PATHS[@]}" || exit 1
+    elif [ "$auto_mode" = true ] || [ "$direct_option" = "4" ]; then
+        # 全自動模式維持添加全部、不進入互動選單
+        add_all_files || exit 1
+    else
+        select_files_to_add
+        if [ ${#SELECTED_ADD_PATHS[@]} -gt 0 ]; then
+            add_all_files "${SELECTED_ADD_PATHS[@]}" || exit 1
+        else
+            add_all_files || exit 1
+        fi
+    fi
     
     # 自動模式：直接執行全自動工作流程
     if [ "$auto_mode" = true ]; then

@@ -23,6 +23,10 @@
       - [情境 2：開發完成建立 PR](#情境-2開發完成建立-pr)
       - [情境 3：專案擁有者審查 PR](#情境-3專案擁有者審查-pr)
       - [GitHub Flow 工作流程特色](#github-flow-工作流程特色)
+  - [自我更新（--upgrade）](#自我更新--upgrade)
+    - [更新來源](#更新來源)
+    - [安全機制](#安全機制)
+    - [常見情況](#常見情況)
 
 ---
 
@@ -48,6 +52,9 @@
 ./git-auto-push.sh 5    # 僅提交 (commit)
 ./git-auto-push.sh 6    # 顯示倉庫資訊
 ./git-auto-push.sh 7    # 變更最後一次 commit 訊息
+
+# 自我更新至最新版
+./git-auto-push.sh --upgrade
 ```
 
 > **提示**：如果是全域安裝，直接使用 `git-auto-push` 代替 `./git-auto-push.sh`。
@@ -152,6 +159,9 @@ AI 會分析你的程式碼變更，自動產生如 `[issue-123] feat: 新增使
 ```bash
 # 互動式選單模式
 ./git-auto-pr.sh
+
+# 自我更新至最新版
+./git-auto-pr.sh --upgrade
 ```
 
 ### git-auto-pr.sh 操作模式
@@ -212,3 +222,48 @@ AI 會讀取你的 Commits，自動生成一份包含標題、摘要、變更清
 -   **AI 輔助內容**：Commit Message、PR Title、PR Body 均可由 AI 生成。
 -   **安全性**：防止自我批准 PR，Revert 操作有多重確認。
 -   **自動分支管理**：自動偵測主分支（main/master/uat），合併後自動清理分支。
+
+---
+
+## 自我更新（--upgrade）
+
+兩個腳本都內建 `--upgrade`，從官方倉庫下載最新版並覆寫**目前執行中的那個檔案**，不需重跑 `install.sh`，也不需身處 Git 倉庫。
+
+```bash
+git-auto-push --upgrade
+git-auto-pr --upgrade          # 兩支腳本各自獨立更新
+```
+
+### 更新來源
+
+固定為官方倉庫 `lazyjerry/git-auto-push`，解析邏輯與 `install.sh` 相同：
+
+1. 先查 GitHub API 取得最新 Release Tag，下載 `refs/tags/{tag}/` 底下的腳本
+2. 查不到 Tag（無網路、API 限流）時退回 `refs/heads/master`
+
+### 安全機制
+
+| 階段 | 檢查 | 未通過時 |
+|-----|------|---------|
+| 下載後 | 檔案非空 | 中止，不動原檔 |
+| 下載後 | 首行為 shebang（擋掉 404 頁面） | 中止，不動原檔 |
+| 下載後 | `bash -n` 語法檢查 | 中止，不動原檔 |
+| 下載後 | 能讀出 `VERSION` 常數 | 中止，不動原檔 |
+| 覆寫前 | 版本比對 | 有新版 → 預設 `Y`；版本相同或較舊 → 預設 `N`，需明確回答 `y` |
+| 覆寫前 | 目標目錄可寫 | 提示改用 `sudo` |
+| 覆寫時 | 備份為 `<目標檔>.bak`，再以 `mv` 原子替換 | — |
+
+採「寫新檔 + `mv` 替換」而非就地覆寫，是因為 Bash 會邊執行邊讀腳本；改動同一個 inode 會讓執行中的流程讀到亂碼。
+
+### 常見情況
+
+```bash
+# 全域安裝於 /usr/local/bin，需要寫入權限
+sudo git-auto-push --upgrade
+
+# 還原上一版
+mv /usr/local/bin/git-auto-push.bak /usr/local/bin/git-auto-push
+
+# 強制重抓同一版本（覆寫損毀的檔案）：出現「版本相同」提示時回答 y
+git-auto-push --upgrade
+```

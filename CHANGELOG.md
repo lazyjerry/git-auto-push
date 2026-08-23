@@ -4,6 +4,22 @@
 
 ## 版本歷史
 
+### 未發布 - 自我更新指令
+
+**🆕 新功能**
+
+- **`--upgrade` 自我更新** 🆕：兩個腳本皆可從官方倉庫下載最新版並覆寫**目前執行中的那個檔案**，不需重跑 `install.sh`
+  - **用法**：`git-auto-push --upgrade`、`git-auto-pr --upgrade`（兩支腳本各自獨立更新）
+  - **執行時機**：早於 Git 倉庫與 gh CLI 檢查，任意目錄皆可執行
+  - **更新來源**：固定為官方倉庫，解析邏輯與 `install.sh` 相同——先查 GitHub API 取最新 Release Tag，查不到時退回 `master` 分支
+  - **下載驗證**：檔案非空 → 首行為 shebang（擋掉 404 頁面）→ `bash -n` 語法檢查 → 能讀出 `VERSION` 常數，任一項未過即中止且不動原檔
+  - **版本比對**：有新版直接確認即更新；版本相同或較舊時預設不覆寫，需明確回答 `y`
+  - **覆寫保護**：覆寫前備份為 `<目標檔>.bak`，再以「寫新檔 + `mv` 原子替換」寫入——不就地截斷寫入，避免 Bash 邊執行邊讀腳本時讀到亂碼；目標目錄不可寫時提示改用 `sudo`
+  - **新增函數**（兩腳本各一份）：`get_self_path()`、`detect_download_tool()`、`fetch_upgrade_url()`、`resolve_upgrade_base_url()`、`extract_script_version()`、`compare_versions()`、`validate_downloaded_script()`、`perform_upgrade()`
+- **測試涵蓋**：兩份測試套件各新增「F. `--upgrade` 自我更新」段落（全程離線），驗證版本比較、版本號讀取、下載內容驗證、符號連結解析、無 curl/wget 時的錯誤路徑，以及 `--upgrade` 不觸發倉庫／gh CLI 前置檢查
+
+---
+
 ### v2.11.0 - 指定檔案添加與全覆蓋自動化測試 (2026-08-15)
 
 **🆕 新功能**

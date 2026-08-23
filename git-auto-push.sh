@@ -2132,6 +2132,311 @@ get_operation_choice() {
     done
 }
 
+# ==============================================
+# 自我更新（upgrade）區域
+# ==============================================
+
+# 更新來源固定為官方倉庫，解析邏輯與 install.sh 一致：
+# 優先使用最新 Release Tag，查不到時退回 master 分支
+readonly UPGRADE_REPO_OWNER="lazyjerry"
+readonly UPGRADE_REPO_NAME="git-auto-push"
+readonly UPGRADE_SCRIPT_FILE="git-auto-push.sh"
+readonly UPGRADE_TIMEOUT=30
+
+# ============================================
+# get_self_path
+# 功能：取得目前執行中腳本的實體路徑（逐層解析符號連結）
+# 參數：無
+# 返回：0；stdout 輸出絕對路徑
+# 使用：target=$(get_self_path)
+# 注意：全域安裝後檔名為 git-auto-push（無 .sh），回傳的是實際被執行的檔案
+# ============================================
+get_self_path() {
+    local source="${BASH_SOURCE[0]}"
+    local dir
+    while [ -L "$source" ]; do
+        dir=$(cd -P "$(dirname "$source")" && pwd)
+        source=$(readlink "$source")
+        [[ "$source" != /* ]] && source="$dir/$source"
+    done
+    dir=$(cd -P "$(dirname "$source")" && pwd)
+    printf '%s/%s\n' "$dir" "$(basename "$source")"
+}
+
+# ============================================
+# detect_download_tool
+# 功能：偵測可用的下載工具
+# 參數：無
+# 返回：0=找到（stdout 輸出 curl 或 wget），1=兩者皆未安裝
+# 使用：tool=$(detect_download_tool) || handle_error "..."
+# ============================================
+detect_download_tool() {
+    if command -v curl >/dev/null 2>&1; then
+        printf 'curl\n'
+    elif command -v wget >/dev/null 2>&1; then
+        printf 'wget\n'
+    else
+        return 1
+    fi
+}
+
+# ============================================
+# fetch_upgrade_url
+# 功能：下載指定 URL 至檔案
+# 參數：$1 - URL，$2 - 輸出檔案路徑，$3 - 下載工具（curl/wget）
+# 返回：下載工具的退出碼
+# 使用：fetch_upgrade_url "$url" "$tmp" curl
+# ============================================
+fetch_upgrade_url() {
+    local url="$1"
+    local output="$2"
+    local tool="$3"
+
+    if [ "$tool" = "curl" ]; then
+        curl -fsSL --max-time "$UPGRADE_TIMEOUT" "$url" -o "$output"
+    else
+        wget -q --timeout="$UPGRADE_TIMEOUT" "$url" -O "$output"
+    fi
+}
+
+# ============================================
+# resolve_upgrade_base_url
+# 功能：查詢最新 Release Tag 並組出 raw 檔案的 base URL
+# 參數：$1 - 下載工具（curl/wget）
+# 返回：0；stdout 輸出 base URL（查不到 Tag 時退回 master 分支）
+# 使用：base_url=$(resolve_upgrade_base_url curl)
+# ============================================
+resolve_upgrade_base_url() {
+    local tool="$1"
+    local api_url="https://api.github.com/repos/${UPGRADE_REPO_OWNER}/${UPGRADE_REPO_NAME}/releases/latest"
+    local api_body
+    local latest_tag=""
+
+    api_body=$(mktemp) || return 1
+    if fetch_upgrade_url "$api_url" "$api_body" "$tool" 2>/dev/null; then
+        latest_tag=$(grep '"tag_name"' "$api_body" | head -1 | sed 's/.*"tag_name": *"//; s/".*//')
+    fi
+    rm -f "$api_body"
+
+    if [ -n "$latest_tag" ]; then
+        success_msg "✅ 最新 Release Tag: ${latest_tag}"
+        printf 'https://raw.githubusercontent.com/%s/%s/refs/tags/%s\n' \
+            "$UPGRADE_REPO_OWNER" "$UPGRADE_REPO_NAME" "$latest_tag"
+    else
+        warning_msg "⚠️  無法取得最新 Release Tag，改用 master 分支"
+        printf 'https://raw.githubusercontent.com/%s/%s/refs/heads/master\n' \
+            "$UPGRADE_REPO_OWNER" "$UPGRADE_REPO_NAME"
+    fi
+}
+
+# ============================================
+# extract_script_version
+# 功能：從腳本檔案讀出 VERSION 常數值
+# 參數：$1 - 腳本檔案路徑
+# 返回：0；stdout 輸出版本字串（讀不到時為空字串）
+# 使用：new_version=$(extract_script_version "$tmp_file")
+# ============================================
+extract_script_version() {
+    local file="$1"
+    grep -m1 '^readonly VERSION=' "$file" 2>/dev/null \
+        | sed 's/^readonly VERSION="//; s/".*$//'
+}
+
+# ============================================
+# compare_versions
+# 功能：比較兩個語意化版本號（可帶 v 前綴、位數不需相同）
+# 參數：$1 - 版本 A，$2 - 版本 B
+# 返回：0=A 等於 B，1=A 大於 B，2=A 小於 B
+# 使用：compare_versions "v2.12.0" "$VERSION"; cmp_result=$?
+# 注意：各段落非數字字元會被忽略（如 v2.12.0-rc1 的 rc1 視為 1）
+# ============================================
+compare_versions() {
+    local a="${1#v}"
+    local b="${2#v}"
+    [ "$a" = "$b" ] && return 0
+
+    local -a parts_a parts_b
+    IFS='.' read -r -a parts_a <<< "$a"
+    IFS='.' read -r -a parts_b <<< "$b"
+
+    local max=${#parts_a[@]}
+    [ "${#parts_b[@]}" -gt "$max" ] && max=${#parts_b[@]}
+
+    local i x y
+    for ((i = 0; i < max; i++)); do
+        x="${parts_a[i]:-0}"
+        y="${parts_b[i]:-0}"
+        # 前置 0 讓空字串視為 0，10# 避免被當成八進位
+        x=$((10#0${x//[!0-9]/}))
+        y=$((10#0${y//[!0-9]/}))
+        [ "$x" -gt "$y" ] && return 1
+        [ "$x" -lt "$y" ] && return 2
+    done
+    return 0
+}
+
+# ============================================
+# validate_downloaded_script
+# 功能：驗證下載回來的檔案確實是可執行的 Bash 腳本
+# 參數：$1 - 待驗證檔案路徑
+# 返回：0=通過，1=未通過（錯誤訊息已輸出至 stderr）
+# 使用：validate_downloaded_script "$tmp_file" || return 1
+# 注意：三道檢查為非空、shebang、bash -n 語法，避免把 404 頁面寫進執行檔
+# ============================================
+validate_downloaded_script() {
+    local file="$1"
+
+    if [ ! -s "$file" ]; then
+        error_msg "下載的檔案為空"
+        return 1
+    fi
+
+    if ! head -1 "$file" | grep -q '^#!/'; then
+        error_msg "下載的檔案不是有效的腳本（缺少 shebang）"
+        return 1
+    fi
+
+    if ! bash -n "$file" 2>/dev/null; then
+        error_msg "下載的腳本語法檢查失敗（bash -n）"
+        return 1
+    fi
+
+    return 0
+}
+
+# ============================================
+# perform_upgrade
+# 功能：從官方倉庫下載最新版腳本並覆寫目前執行中的檔案
+# 參數：無
+# 返回：0=更新完成或使用者取消，1=下載/驗證/寫入失敗
+# 使用：./git-auto-push.sh --upgrade
+# 注意：覆寫採「寫新檔 + mv 原子替換」，不可就地截斷寫入——
+#       Bash 會邊執行邊讀腳本，改動同一個 inode 會讓執行中的流程讀到亂碼。
+#       覆寫前一律備份為 <目標檔>.bak。
+# ============================================
+perform_upgrade() {
+    local target target_dir tool base_url url tmp_file staged backup
+    local new_version cmp_result prompt_default confirm
+
+    target=$(get_self_path)
+    target_dir=$(dirname "$target")
+
+    echo >&2
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    highlight_success_msg "  自我更新 (upgrade)"
+    cyan_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo >&2
+    white_msg "  目前版本: ${VERSION}"
+    white_msg "  目標檔案: ${target}"
+    echo >&2
+
+    if ! tool=$(detect_download_tool); then
+        error_msg "需要 curl 或 wget 才能下載更新"
+        white_msg "  安裝方式: brew install curl   或   apt install curl"
+        return 1
+    fi
+    info_msg "🔍 使用 ${tool} 查詢最新版本..."
+
+    base_url=$(resolve_upgrade_base_url "$tool") || {
+        error_msg "無法解析更新來源"
+        return 1
+    }
+    url="${base_url}/${UPGRADE_SCRIPT_FILE}"
+
+    tmp_file=$(mktemp) || {
+        error_msg "無法建立暫存檔"
+        return 1
+    }
+    # 更新流程中的 Ctrl+C 需清掉暫存檔，避免殘留在 /tmp
+    trap 'rm -f "$tmp_file"; printf "\r\033[K\033[?25h" >&2; exit 130' INT TERM
+
+    info_msg "📥 下載中: ${url}"
+    if ! fetch_upgrade_url "$url" "$tmp_file" "$tool"; then
+        error_msg "下載失敗: ${url}"
+        white_msg "  請檢查網路連線後再試一次"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    if ! validate_downloaded_script "$tmp_file"; then
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    new_version=$(extract_script_version "$tmp_file")
+    if [ -z "$new_version" ]; then
+        error_msg "無法從下載的腳本讀出版本號，為安全起見中止更新"
+        rm -f "$tmp_file"
+        return 1
+    fi
+    white_msg "  遠端版本: ${new_version}"
+    echo >&2
+
+    compare_versions "$new_version" "$VERSION"
+    cmp_result=$?
+    prompt_default="y"
+    case "$cmp_result" in
+        1)
+            success_msg "🆕 有新版本可用: ${VERSION} → ${new_version}"
+            ;;
+        0)
+            warning_msg "⚠️  遠端版本與目前版本相同: ${VERSION}"
+            prompt_default="n"
+            ;;
+        2)
+            warning_msg "⚠️  遠端版本較舊，繼續將會降版: ${VERSION} → ${new_version}"
+            prompt_default="n"
+            ;;
+    esac
+
+    echo >&2
+    if [ "$prompt_default" = "y" ]; then
+        printf "是否更新？[Y/n]: " >&2
+    else
+        printf "是否仍要覆寫？[y/N]: " >&2
+    fi
+    read -r confirm
+    confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]' | xargs)
+    [ -z "$confirm" ] && confirm="$prompt_default"
+
+    if [[ ! "$confirm" =~ ^(y|yes|是|確認)$ ]]; then
+        info_msg "已取消更新"
+        rm -f "$tmp_file"
+        return 0
+    fi
+
+    if [ ! -w "$target_dir" ]; then
+        error_msg "沒有寫入權限: ${target_dir}"
+        white_msg "  請改用 sudo 執行: sudo ${target} --upgrade"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    backup="${target}.bak"
+    if ! cp -p "$target" "$backup"; then
+        error_msg "備份失敗，已中止更新"
+        rm -f "$tmp_file"
+        return 1
+    fi
+    success_msg "💾 已備份原檔: ${backup}"
+
+    staged="${target_dir}/.$(basename "$target").upgrade.$$"
+    if ! cp "$tmp_file" "$staged" || ! chmod 755 "$staged" || ! mv -f "$staged" "$target"; then
+        error_msg "寫入失敗，原檔未受影響"
+        white_msg "  備份位置: ${backup}"
+        rm -f "$staged" "$tmp_file"
+        return 1
+    fi
+    rm -f "$tmp_file"
+
+    echo >&2
+    success_msg "🎉 更新完成: ${VERSION} → ${new_version}"
+    white_msg "  還原方式: mv \"${backup}\" \"${target}\""
+    white_msg "  另一支腳本請另外執行: git-auto-pr --upgrade"
+    echo >&2
+    return 0
+}
+
 # 顯示詳細的使用說明文檔
 show_help() {
     # 讀取當前配置值
@@ -2173,6 +2478,9 @@ show_help() {
     white_msg "                (僅添加指定的檔案/資料夾；模式編號需放在 -f 之前)"
     cyan_msg "  互動選檔：    未帶 -f 時會列出變更檔案供編號選擇，直接 Enter = 添加全部"
     cyan_msg "  顯示說明：    ./git-auto-push.sh -h 或 --help"
+    cyan_msg "  自我更新：    ./git-auto-push.sh --upgrade"
+    white_msg "                (從官方倉庫最新 Release 下載並覆寫目前執行中的腳本；"
+    white_msg "                 覆寫前自動備份為 <目標檔>.bak，版本相同或較舊時會先詢問)"
     cyan_msg "  全域使用：    git-auto-push"
     echo >&2
     
@@ -2384,6 +2692,12 @@ main() {
         exit 0
     fi
 
+    # 處理 upgrade 參數（早於 Git 倉庫檢查，任意目錄皆可執行）
+    if [ "$1" = "--upgrade" ]; then
+        perform_upgrade
+        exit $?
+    fi
+
     warning_msg "使用前請確認 git 指令與 AI CLI 工具能夠在您的命令提示視窗中執行。"
     
     # 解析命令行參數
@@ -2424,6 +2738,10 @@ main() {
             -v|--version)
                 echo "git-auto-push ${VERSION}"
                 exit 0
+                ;;
+            --upgrade)
+                perform_upgrade
+                exit $?
                 ;;
             *)
                 handle_error "未知參數: $1 (使用 --help 查看說明)"

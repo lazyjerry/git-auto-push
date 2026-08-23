@@ -465,6 +465,88 @@ assert_contains "配置載入: 專案級配置優先載入" "已加載配置文�
 rm -rf "$REPO/.git-auto-push-config"
 
 # ==============================================
+# F. --upgrade 自我更新（全程離線，不觸發網路）
+# ==============================================
+
+section "F. --upgrade 自我更新"
+
+# 版本比較：0=相同、1=前者較新、2=前者較舊
+rc=0; (source "$SCRIPT" && compare_versions "v2.12.0" "v2.11.0") || rc=$?
+assert_eq "compare_versions: 較新版本回傳 1" "1" "$rc"
+rc=0; (source "$SCRIPT" && compare_versions "v2.11.0" "v2.11.0") || rc=$?
+assert_eq "compare_versions: 版本相同回傳 0" "0" "$rc"
+rc=0; (source "$SCRIPT" && compare_versions "v2.10.9" "v2.11.0") || rc=$?
+assert_eq "compare_versions: 較舊版本回傳 2" "2" "$rc"
+rc=0; (source "$SCRIPT" && compare_versions "2.11" "v2.11.0") || rc=$?
+assert_eq "compare_versions: 位數不同且數值相等回傳 0" "0" "$rc"
+rc=0; (source "$SCRIPT" && compare_versions "v3.0.0" "v2.99.99") || rc=$?
+assert_eq "compare_versions: 主版本優先比較" "1" "$rc"
+
+# 版本號讀取
+actual=$(source "$SCRIPT" && extract_script_version "$SCRIPT")
+assert_eq "extract_script_version: 讀出腳本自身版本" "$(grep -m1 '^readonly VERSION=' "$SCRIPT" | sed 's/^readonly VERSION="//; s/".*$//')" "$actual"
+
+printf 'echo no version constant\n' > "$TEST_TMP/no-version.sh"
+actual=$(source "$SCRIPT" && extract_script_version "$TEST_TMP/no-version.sh")
+assert_eq "extract_script_version: 無版本常數時回傳空字串" "" "$actual"
+
+# 下載內容驗證：空檔 / 無 shebang / 語法錯誤 / 合法腳本
+: > "$TEST_TMP/dl-empty.sh"
+rc=0; (source "$SCRIPT" && validate_downloaded_script "$TEST_TMP/dl-empty.sh") 2>/dev/null || rc=$?
+assert_nonzero_exit "validate_downloaded_script: 空檔不通過" "$rc"
+
+printf '<html>404: Not Found</html>\n' > "$TEST_TMP/dl-html.sh"
+rc=0; (source "$SCRIPT" && validate_downloaded_script "$TEST_TMP/dl-html.sh") 2>/dev/null || rc=$?
+assert_nonzero_exit "validate_downloaded_script: 非腳本內容不通過" "$rc"
+
+printf '#!/bin/bash\nif [ 1\n' > "$TEST_TMP/dl-broken.sh"
+rc=0; (source "$SCRIPT" && validate_downloaded_script "$TEST_TMP/dl-broken.sh") 2>/dev/null || rc=$?
+assert_nonzero_exit "validate_downloaded_script: 語法錯誤不通過" "$rc"
+
+printf '#!/bin/bash\nreadonly VERSION="v9.9.9"\n' > "$TEST_TMP/dl-valid.sh"
+rc=0; (source "$SCRIPT" && validate_downloaded_script "$TEST_TMP/dl-valid.sh") 2>/dev/null || rc=$?
+assert_exit "validate_downloaded_script: 合法腳本通過" 0 "$rc"
+
+# 自身路徑解析（含符號連結）
+actual=$(source "$SCRIPT" && get_self_path)
+assert_eq "get_self_path: 回傳腳本實體路徑" "$(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")" "$actual"
+
+ln -sf "$SCRIPT" "$TEST_TMP/git-auto-push-link"
+actual=$(source "$TEST_TMP/git-auto-push-link" && get_self_path)
+assert_eq "get_self_path: 解析符號連結至實體檔案" "$(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")" "$actual"
+
+# 說明文件涵蓋 --upgrade
+run_push "" --help
+assert_contains "--help 顯示 --upgrade 用法" "--upgrade" "$OUT"
+assert_contains "--help 說明會自動備份" ".bak" "$OUT"
+
+# 無 curl/wget 時應報錯並非零退出（以僅含必要指令的 PATH 模擬）
+NO_NET_BIN="$TEST_TMP/no-net-bin"
+mkdir -p "$NO_NET_BIN"
+for cmd in dirname basename mktemp grep sed head cat tr xargs rm cp mv chmod date git; do
+    cmd_path=$(command -v "$cmd" 2>/dev/null) || continue
+    ln -sf "$cmd_path" "$NO_NET_BIN/$cmd"
+done
+BASH_BIN=$(command -v bash)
+
+rc=0
+(
+    cd "$NOT_GIT_DIR" || exit 99
+    printf '' | run_with_timeout 30 /usr/bin/env PATH="$NO_NET_BIN" "$BASH_BIN" "$SCRIPT" --upgrade
+) > "$OUT" 2>&1 || rc=$?
+assert_nonzero_exit "--upgrade 無 curl/wget 時以非零退出" "$rc"
+assert_contains "--upgrade 無下載工具顯示錯誤訊息" "需要 curl 或 wget" "$OUT"
+assert_contains "--upgrade 顯示目標檔案路徑" "$(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")" "$OUT"
+
+# --upgrade 不需身處 Git 倉庫（上一步已在非 git 目錄執行）
+TESTS_RUN=$((TESTS_RUN + 1))
+if grep -qF "不是 Git 倉庫" "$OUT"; then
+    fail "--upgrade 於非 git 目錄不做倉庫檢查" "輸出出現了 Git 倉庫檢查錯誤"
+else
+    pass "--upgrade 於非 git 目錄不做倉庫檢查"
+fi
+
+# ==============================================
 # 測試結果摘要
 # ==============================================
 

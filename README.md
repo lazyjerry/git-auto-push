@@ -183,6 +183,7 @@ IS_DEBUG=false
 # 其他選項
 ./git-auto-push.sh --version   # 顯示版本號
 ./git-auto-push.sh --auto      # 全自動模式
+./git-auto-push.sh --upgrade   # 自我更新至最新版
 ```
 
 #### git-auto-pr.sh
@@ -195,9 +196,30 @@ IS_DEBUG=false
 # 1. 建立功能分支 (jerry/feature/issue-123)
 # 2. 建立 Pull Request (AI 生成內容)
 # 4. 審查與合併 PR
+
+# 其他選項
+./git-auto-pr.sh --upgrade     # 自我更新至最新版
 ```
 
 > 支援 Conventional Commits 前綴、AI 內容產生、品質檢查、任務編號自動帶入等功能。詳細說明請見 [使用指南](USAGE.md)。
+
+### 自我更新
+
+兩個腳本都支援 `--upgrade`，從官方倉庫最新 Release 下載並覆寫**目前執行中的那個檔案**（不需身處 Git 倉庫，也不需重跑 install.sh）：
+
+```bash
+git-auto-push --upgrade
+git-auto-pr --upgrade          # 兩支腳本需各自更新
+```
+
+流程與安全機制：
+
+1. 查詢 GitHub 最新 Release Tag，查不到時退回 `master` 分支
+2. 下載至暫存檔並驗證：非空、具 shebang、`bash -n` 語法通過
+3. 比對版本號——有新版直接確認即更新；版本相同或較舊時預設不覆寫，需明確回答 `y`
+4. 覆寫前備份為 `<目標檔>.bak`，再以 `mv` 原子替換（不就地寫入，避免影響執行中的流程）
+
+還原上一版：`mv git-auto-push.bak git-auto-push`。全域安裝於 `/usr/local/bin` 時需 `sudo git-auto-push --upgrade`。
 
 ## 特色功能
 
